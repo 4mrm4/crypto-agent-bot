@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+*.egg-info/
+dist/
+build/
+
+# ChromaDB
+chroma_db/
+
+# Freqtrade
+ft_userdata/backtest_results/
+ft_userdata/strategies/DynamicStrategy.py
+ft_userdata/data/
+ft_userdata/*.json
+
+# Workspace registry (keep tracked, ignore is fine)
+#workspace_registry.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
