@@ -14,10 +14,20 @@ graph TD
     BOARD --> STRATEGIST[Strategist Agent]
     BOARD --> CURATOR[MemoryCurator Agent]
     BOARD --> RISK[RiskManager Agent]
+    BOARD --> RESEARCHER[Researcher Agent]
     ANALYST --> FETCHER[MarketDataFetcher / CCXT]
     STRATEGIST --> ENGINE[BacktestEngine / Freqtrade]
     CURATOR --> MEMORY[VectorStore / ChromaDB]
     RISK --> PAPER[PaperTrader]
+    RESEARCHER --> WEB[Web Search / Paper Fetch]
+    HERMES -.-> UI[Web UI / FastAPI + WebSocket]
+
+    subgraph "AutoResearch Outer Loop"
+        HYP[Generate Hypothesis] --> CRIT[Critique Results]
+        CRIT --> CONV{Converged?}
+        CONV -->|No| HYP
+        CONV -->|Yes| DONE[Finish]
+    end
 ```
 
 ## Components
@@ -28,13 +38,18 @@ graph TD
 | **BacktestEngine** | `backtesting/engine.py` | Strategy backtesting via Freqtrade |
 | **VectorStore** | `memory/vector_store.py` | Persistent RAG memory via ChromaDB |
 | **AnalystAgent** | `agents/analyst.py` | Market analysis with real data tools |
-| **StrategistAgent** | `agents/strategist.py` | Strategy generation + backtesting |
+| **StrategistAgent** | `agents/strategist.py` | Strategy gen + backtesting + 6 strategy types |
+| **ResearcherAgent** | `agents/researcher.py` | Web search, paper reading, custom strategy specs |
 | **RiskManagerAgent** | `agents/risk_manager.py` | Risk metrics + go/no-go verdict |
 | **MemoryCuratorAgent** | `agents/curator.py` | Cross-session memory retrieval |
-| **HermesOrchestrator** | `orchestration/hermes.py` | Multi-agent Kanban workflow |
+| **HermesOrchestrator** | `orchestration/hermes.py` | Multi-agent Kanban + outer research loop |
 | **LangGraph Graph** | `orchestration/graph.py` | State-machine orchestration loop |
+| **ResearchIteration** | `orchestration/research.py` | AutoResearch hypothesis/critique dataclass |
 | **VibeWorkspace** | `workspace/vibe.py` | Rich CLI research workspace |
 | **PaperTrader** | `execution/paper_trader.py` | Dry-run live simulation |
+| **FastAPI Server** | `api/server.py` | WebSocket streaming + REST endpoints |
+| **EventBus** | `api/event_bus.py` | Async event streaming for Web UI |
+| **Web UI** | `ui/index.html` | Single-file React dashboard |
 
 ## Setup
 
@@ -68,21 +83,29 @@ freqtrade download-data \
 ## Usage
 
 ```bash
+# Web UI dashboard
+python main.py --demo
+
 # Interactive workspace
 python main.py run
 
-# One-shot research goal
+# One-shot research goal (with AutoResearch loop)
 python main.py new-goal "Find optimal SMA crossover for BTC/USDT"
 
-# List goals
-python main.py list-goals
+# With outer loop (iterations)
+python main.py new-goal "Optimise MACD for ETH/USDT with max_iterations=5"
 
-# Review specific goal
-python main.py review goal_20260527_123456
+## Web UI
 
-# Full demo pipeline
+```bash
+# Start the server + open browser + kick off demo goal
 python main.py --demo
+
+# Or start the server independently
+python -m uvicorn api.server:app --host 127.0.0.1 --port 8765
 ```
+
+The dashboard features agent timeline, hypothesis display with iteration counter, live metric cards (Sharpe, WR, drawdown, trades), SVG line charts, auto-scrolling event log, and a Run New Goal modal.
 
 ## Running Tests
 
@@ -111,12 +134,31 @@ python test_e2e.py      # Full end-to-end
 
 ## How It Works
 
-1. **Define a research goal** via the workspace CLI
-2. **TaskBoard** creates TODO items (analysis, strategy, risk)
-3. **LangGraph** dispatches each task to the appropriate agent
-4. **Analyst** fetches live market data and produces analysis
-5. **Strategist** generates SMA crossover strategies, backtests via Freqtrade, and iterates
-6. **MemoryCurator** retrieves past insights from ChromaDB for context
-7. **RiskManager** evaluates the final strategy and issues go/no-go
-8. Results stored in `workspace_registry.json` and `chroma_db/`
-9. Approved strategies can be exported and deployed to the **PaperTrader**
+1. **Define a research goal** via the CLI or Web UI
+2. **Researcher Agent** (optional) searches the web for novel strategy ideas
+3. **TaskBoard** creates TODO items (analysis, strategy, risk)
+4. **LangGraph** dispatches each task to the appropriate agent
+5. **Analyst** fetches live market data and produces analysis
+6. **Strategist** generates strategies (SMA, MACD, RSI, Bollinger Bands, combined, or custom), backtests via Freqtrade, and iterates with keep/discard tracking
+7. **MemoryCurator** retrieves past insights from ChromaDB for context
+8. **RiskManager** evaluates the final strategy and issues go/no-go
+9. **AutoResearch outer loop** (optional): generates hypotheses, critiques results, and repeats until convergence (Sharpe >= 1.5, WR >= 45%, DD <= 10%)
+10. Results stored in `workspace_registry.json` and `chroma_db/`
+11. Approved strategies can be exported and deployed to the **PaperTrader**
+
+## Strategy Types
+
+The strategist supports 6 strategy types:
+
+| Type | Description | Indicators |
+|---|---|---|
+| `sma_crossover` | SMA fast/slow crossover | `ta.SMA` |
+| `macd_crossover` | MACD signal line crossover | `ta.MACD` |
+| `rsi_oversold` | RSI oversold/overbought | `ta.RSI` |
+| `bollinger_bands` | Bollinger Bands lower/upper touch | `ta.BBANDS` |
+| `combined_sma_rsi` | SMA crossover + RSI filter | `ta.SMA`, `ta.RSI` |
+| `custom` | User-defined TA code | Any `ta.*` expressions |
+
+## Strategist Tools
+
+11 tools available to the LLM: `generate_strategy`, `generate_sma_strategy` (alias), `set_backtest_config`, `run_backtest`, `download_data`, `compare_strategies`, `interpret_metrics`, `suggest_next_params`, `get_best_strategy`, `get_iteration_history`, `get_research_history`.
