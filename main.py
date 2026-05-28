@@ -45,36 +45,63 @@ def main():
 
 
 def _make_orchestrator():
-    from agents.analyst import AnalystAgent
-    from agents.strategist import StrategistAgent
-    from agents.risk_manager import RiskManagerAgent
-    from agents.curator import CuratorAgent
-    from orchestration.hermes import HermesOrchestrator
-    return HermesOrchestrator(agents={
-        "analyst": AnalystAgent(),
-        "strategist": StrategistAgent(),
-        "risk_manager": RiskManagerAgent(),
-        "curator": CuratorAgent(),
-    })
+    from orchestration.factory import make_orchestrator
+    return make_orchestrator()
 
 
 def _run_demo():
-    """Full end-to-end demonstration."""
+    """Start the FastAPI server + UI, then run a demo research goal."""
+    import subprocess
+    import time
+    import webbrowser
+
     console.print("[bold cyan]crypto_agent_bot — Demo Mode[/]\n")
+    console.print("[yellow]Starting Web UI server...[/]")
 
-    from orchestration.hermes import HermesOrchestrator
-    from workspace.vibe import VibeWorkspace
-
-    orchestrator = _make_orchestrator()
-    workspace = VibeWorkspace(orchestrator=orchestrator)
-
-    console.print("[yellow]Running research goal: Momentum strategy for BTC/USDT...[/]")
-    entry = workspace.create_goal(
-        "Find a momentum strategy with Sharpe > 1 for BTC/USDT",
-        max_cycles=3,
+    # Start uvicorn in background
+    server = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "api.server:app", "--host", "127.0.0.1", "--port", "8765", "--log-level", "warning"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
-    console.print("\n[green]Demo complete. See registry for results.[/]")
+    # Wait for server
+    import httpx
+    for _ in range(20):
+        try:
+            r = httpx.get("http://127.0.0.1:8765/api/health", timeout=2)
+            if r.status_code == 200:
+                break
+        except Exception:
+            pass
+        time.sleep(0.5)
+
+    url = "http://127.0.0.1:8765"
+    console.print(f"[green]UI running at {url}[/]")
+    webbrowser.open(url)
+
+    # Kick off a demo research goal
+    console.print("[yellow]Kicking off demo research goal...[/]")
+    try:
+        resp = httpx.post(f"{url}/api/run", json={
+            "goal": "Find a momentum strategy with Sharpe > 1 for BTC/USDT",
+            "max_cycles": 3,
+            "max_iterations": 1,
+        }, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            console.print(f"[green]Run started: {data['run_id']}[/]")
+        else:
+            console.print(f"[red]API error: {resp.status_code}[/]")
+    except Exception as exc:
+        console.print(f"[red]Failed to start run: {exc}[/]")
+
+    console.print("\n[green]Demo mode active. Press Ctrl+C to stop.[/]")
+    try:
+        server.wait()
+    except KeyboardInterrupt:
+        server.terminate()
+        server.wait()
 
 
 def _run_cli_command(cmd_list):

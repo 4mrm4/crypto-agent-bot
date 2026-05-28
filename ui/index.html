@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crypto Agent Bot</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>💰</text></svg>">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0f172a; color: #e2e8f0; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #1e293b; }
+  ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+  .card { background: #1e293b; border-radius: 12px; border: 1px solid #334155; padding: 16px; }
+  .metric-card { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; padding: 16px; text-align: center; }
+  .event-enter { animation: slideIn 0.3s ease-out; }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+  .spinner { animation: spin 1s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .pulse { animation: pulse 2s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .btn { background: #3b82f6; border: none; color: white; padding: 8px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
+  .btn:hover { background: #2563eb; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .input { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; color: #e2e8f0; width: 100%; }
+  .input:focus { outline: none; border-color: #3b82f6; }
+  select { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 8px; color: #e2e8f0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="error-banner" style="display:none; position:fixed; top:0; left:0; right:0; background:#ef4444; color:white; padding:12px 20px; font-family:monospace; font-size:13px; z-index:9999;"></div>
+<script>
+window.onerror = function(msg, url, line, col, err) {
+  var banner = document.getElementById('error-banner');
+  banner.textContent = msg + ' at line ' + line;
+  banner.style.display = 'block';
+};
+</script>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ── Color theme ──
+const COLORS = {
+  bg: '#0f172a',
+  card: '#1e293b',
+  border: '#334155',
+  text: '#e2e8f0',
+  muted: '#94a3b8',
+  blue: '#3b82f6',
+  green: '#22c55e',
+  red: '#ef4444',
+  yellow: '#eab308',
+  purple: '#a855f7',
+};
+
+// ── Agent icon mapping ──
+const AGENT_ICONS = {
+  analyst: '📊',
+  strategist: '🎯',
+  risk_manager: '🛡️',
+  curator: '🧠',
+  researcher: '🔬',
+};
+
+// ── App Component ──
+function App() {
+  const [runId, setRunId] = useState(null);
+  const [connected, setConnected] = useState(false);
+  const [events, setEvents] = useState([]);
+  const [hypothesis, setHypothesis] = useState('');
+  const [iteration, setIteration] = useState(0);
+  const [maxIterations, setMaxIterations] = useState(5);
+  const [metrics, setMetrics] = useState({ sharpe_ratio: 0, win_rate: 0, max_drawdown: 0, total_trades: 0 });
+  const [iterationChart, setIterationChart] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [goalInput, setGoalInput] = useState('Test SMA crossover for BTC/USDT');
+  const [cycleInput, setCycleInput] = useState(3);
+  const [iterInput, setIterInput] = useState(1);
+  const [running, setRunning] = useState(false);
+  const [agentTimeline, setAgentTimeline] = useState([]);
+  const [eventLog, setEventLog] = useState([]);
+  const eventLogRef = useRef(null);
+
+  // Connect WebSocket when runId changes
+  useEffect(() => {
+    if (!runId) return;
+    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/run/${runId}`;
+    const ws = new WebSocket(wsUrl);
+    ws.onopen = () => setConnected(true);
+    ws.onmessage = (msg) => {
+      try {
+        const event = JSON.parse(msg.data);
+        processEvent(event);
+      } catch(e) {}
+    };
+    ws.onclose = () => { setConnected(false); };
+    ws.onerror = () => { setConnected(false); };
+    return () => ws.close();
+  }, [runId]);
+
+  function processEvent(event) {
+    const { type, payload, timestamp } = event;
+    const ts = timestamp ? new Date(timestamp).toLocaleTimeString() : '';
+    const entry = { type, payload, timestamp: ts, id: Math.random().toString(36).slice(2, 8) };
+
+    setEvents(prev => [...prev.slice(-200), entry]);
+    setEventLog(prev => [...prev.slice(-49), entry]);
+
+    switch (type) {
+      case 'hypothesis':
+        setHypothesis(payload.hypothesis || '');
+        setIteration(payload.iteration || 0);
+        setMaxIterations(payload.max_iterations || 5);
+        break;
+
+      case 'critique':
+        setHypothesis(prev => prev + '\n\n--- Critique ---\n' + (payload.critique || ''));
+        break;
+
+      case 'iteration_result':
+        setIteration(payload.iteration || iteration);
+        break;
+
+      case 'task_done':
+        setAgentTimeline(prev => [...prev.slice(-49), {
+          agent: payload.agent,
+          task: payload.description?.slice(0, 100) || '',
+          time: ts,
+          status: 'done',
+          id: Math.random().toString(36).slice(2, 8),
+        }]);
+        break;
+
+      case 'run_start':
+        setRunning(true);
+        setHypothesis('');
+        setIteration(0);
+        setIterationChart([]);
+        setAgentTimeline([]);
+        setEventLog([]);
+        break;
+
+      case 'run_complete':
+        setRunning(false);
+        break;
+
+      case 'run_error':
+        setRunning(false);
+        break;
+
+      case 'heartbeat':
+        break;
+
+      case 'iteration_result':
+        // Update chart data with current metrics
+        setIterationChart(prev => [...prev, {
+          iter: iteration + 1,
+          sharpe: metrics.sharpe_ratio || 0,
+          wr: metrics.win_rate || 0,
+          dd: Math.abs(metrics.max_drawdown || 0),
+        }]);
+        break;
+    }
+  }
+
+  // Auto-scroll event log
+  useEffect(() => {
+    if (eventLogRef.current) {
+      eventLogRef.current.scrollTop = eventLogRef.current.scrollHeight;
+    }
+  }, [eventLog]);
+
+  function startRun() {
+    if (!goalInput.trim()) return;
+    setShowModal(false);
+    setRunning(true);
+    setHypothesis('');
+    setIteration(0);
+    setIterationChart([]);
+    setAgentTimeline([]);
+    setEventLog([]);
+    setMetrics({ sharpe_ratio: 0, win_rate: 0, max_drawdown: 0, total_trades: 0 });
+
+    fetch('/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ goal: goalInput, max_cycles: cycleInput, max_iterations: iterInput }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.run_id) setRunId(data.run_id);
+    })
+    .catch(err => {
+      console.error('Failed to start run', err);
+      setRunning(false);
+    });
+  }
+
+  return (
+    <div style={{ padding: '16px', maxWidth: '1600px', margin: '0 auto', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>
+          <span style={{ color: COLORS.blue }}>Crypto Agent Bot</span>
+          {running && <span className="pulse" style={{ color: COLORS.green, fontSize: '14px', marginLeft: '12px' }}>● Running</span>}
+          {connected && !running && <span style={{ color: COLORS.muted, fontSize: '14px', marginLeft: '12px' }}>● Connected</span>}
+          {!connected && runId && <span style={{ color: COLORS.red, fontSize: '14px', marginLeft: '12px' }}>● Disconnected</span>}
+        </h1>
+        <button className="btn" onClick={() => setShowModal(true)} disabled={running}>
+          {running ? 'Running...' : '+ Run New Goal'}
+        </button>
+      </div>
+
+      {/* Main grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '12px', flex: 1, minHeight: 0 }}>
+        {/* Left: Agent Timeline */}
+        <AgentTimelinePanel events={agentTimeline} />
+
+        {/* Centre: Hypothesis + Metrics */}
+        <CentrePanel
+          hypothesis={hypothesis}
+          iteration={iteration}
+          maxIterations={maxIterations}
+          metrics={metrics}
+          chartData={iterationChart}
+        />
+
+        {/* Right: Iteration chart + stats */}
+        <RightPanel chartData={iterationChart} />
+      </div>
+
+      {/* Bottom: Event Log */}
+      <EventLogPanel events={eventLog} ref={eventLogRef} />
+
+      {/* Modal */}
+      {showModal && (
+        <Modal
+          goal={goalInput}
+          setGoal={setGoalInput}
+          cycles={cycleInput}
+          setCycles={setCycleInput}
+          iters={iterInput}
+          setIters={setIterInput}
+          onStart={startRun}
+          onClose={() => setShowModal(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Agent Timeline Panel ──
+function AgentTimelinePanel({ events }) {
+  return (
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <h2 style={{ fontSize: '14px', fontWeight: 600, color: COLORS.muted, marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Agent Timeline</h2>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {events.length === 0 && (
+          <p style={{ color: COLORS.muted, fontSize: '13px', textAlign: 'center', marginTop: '40px' }}>No activity yet. Start a research goal.</p>
+        )}
+        {events.map(evt => (
+          <div key={evt.id} className="event-enter" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid #1e293b', fontSize: '13px' }}>
+            <span style={{ fontSize: '16px' }}>{AGENT_ICONS[evt.agent] || '🤖'}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ color: COLORS.text, fontWeight: 500 }}>{evt.agent}</div>
+              <div style={{ color: COLORS.muted, fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{evt.task}</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ color: COLORS.green, fontSize: '16px' }}>✓</span>
+              <span style={{ color: COLORS.muted, fontSize: '10px' }}>{evt.time}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Centre Panel ──
+function CentrePanel({ hypothesis, iteration, maxIterations, metrics, chartData }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflow: 'hidden' }}>
+      {/* Hypothesis */}
+      <div className="card" style={{ flex: '0 0 auto', maxHeight: '200px', overflowY: 'auto' }}>
+        <h2 style={{ fontSize: '14px', fontWeight: 600, color: COLORS.muted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+          Hypothesis {iteration > 0 && <span style={{ color: COLORS.blue }}>— Iteration {iteration}/{maxIterations}</span>}
+        </h2>
+        <pre style={{ fontSize: '12px', color: COLORS.text, whiteSpace: 'pre-wrap', fontFamily: 'monospace', lineHeight: 1.5 }}>
+          {hypothesis || 'Waiting for hypothesis...'}
+        </pre>
+      </div>
+
+      {/* Metric Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+        <MetricCard label="Sharpe Ratio" value={metrics.sharpe_ratio?.toFixed(2) || '—'} color={COLORS.blue} />
+        <MetricCard label="Win Rate" value={metrics.win_rate ? `${(metrics.win_rate * 100).toFixed(0)}%` : '—'} color={COLORS.green} />
+        <MetricCard label="Max Drawdown" value={metrics.max_drawdown ? `${(Math.abs(metrics.max_drawdown) * 100).toFixed(1)}%` : '—'} color={COLORS.red} />
+        <MetricCard label="Total Trades" value={metrics.total_trades || '—'} color={COLORS.purple} />
+      </div>
+
+      {/* Mini chart */}
+      <div className="card" style={{ flex: 1, minHeight: '150px' }}>
+        <h2 style={{ fontSize: '14px', fontWeight: 600, color: COLORS.muted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Sharpe Progress</h2>
+        {chartData.length === 0 ? (
+          <p style={{ color: COLORS.muted, fontSize: '13px', textAlign: 'center', marginTop: '30px' }}>No iterations yet</p>
+        ) : (
+          <SvgLineChart data={chartData} width={400} height={140} color={COLORS.blue} xKey="iter" yKey="sharpe" />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, color }) {
+  return (
+    <div className="metric-card">
+      <div style={{ fontSize: '11px', color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>{label}</div>
+      <div style={{ fontSize: '22px', fontWeight: 'bold', color }}>{value}</div>
+    </div>
+  );
+}
+
+// ── Simple SVG Line Chart (no external dependencies) ──
+function SvgLineChart({ data, width, height, color, xKey, yKey }) {
+  if (!data || data.length === 0) return null;
+  const pad = 30;
+  const chartW = width - pad * 2;
+  const chartH = height - pad * 2;
+  const xVals = data.map(d => d[xKey]);
+  const yVals = data.map(d => d[yKey] || 0);
+  const xMin = Math.min(...xVals);
+  const xMax = Math.max(...xVals);
+  const yMin = Math.min(...yVals);
+  const yMax = Math.max(...yVals);
+  const xRange = xMax - xMin || 1;
+  const yRange = yMax - yMin || 1;
+  const points = data.map((d, i) => {
+    const x = pad + ((d[xKey] - xMin) / xRange) * chartW;
+    const y = pad + chartH - (((d[yKey] || 0) - yMin) / yRange) * chartH;
+    return `${x},${y}`;
+  });
+  const polyline = points.join(' ');
+  const lastP = points[points.length - 1]?.split(',') || [];
+
+  // Y-axis labels
+  const yLabelPos = (v) => pad + chartH - ((v - yMin) / yRange) * chartH;
+
+  return (
+    <svg width={width} height={height} style={{ display: 'block' }}>
+      {/* Grid lines */}
+      <line x1={pad} y1={pad} x2={pad} y2={pad + chartH} stroke="#334155" strokeWidth={1} />
+      <line x1={pad} y1={pad + chartH} x2={pad + chartW} y2={pad + chartH} stroke="#334155" strokeWidth={1} />
+      {[0.25, 0.5, 0.75].map(f => (
+        <line key={f} x1={pad} y1={pad + chartH * f} x2={pad + chartW} y2={pad + chartH * f} stroke="#1e293b" strokeWidth={1} />
+      ))}
+      {/* Data line */}
+      <polyline points={polyline} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+      {/* Dots */}
+      {data.map((d, i) => {
+        const x = pad + ((d[xKey] - xMin) / xRange) * chartW;
+        const y = pad + chartH - (((d[yKey] || 0) - yMin) / yRange) * chartH;
+        return <circle key={i} cx={x} cy={y} r={3} fill={color} />;
+      })}
+      {/* Y-axis label */}
+      <text x={4} y={pad} fill="#64748b" fontSize={10}>{yMax.toFixed(2)}</text>
+      <text x={4} y={pad + chartH} fill="#64748b" fontSize={10}>{yMin.toFixed(2)}</text>
+      {/* X-axis labels */}
+      <text x={pad} y={pad + chartH + 14} fill="#64748b" fontSize={10}>{xMin}</text>
+      <text x={pad + chartW - 20} y={pad + chartH + 14} fill="#64748b" fontSize={10}>{xMax}</text>
+    </svg>
+  );
+}
+
+// ── Right Panel ──
+function RightPanel({ chartData }) {
+  // Convert data for iteration scatter
+  return (
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <h2 style={{ fontSize: '14px', fontWeight: 600, color: COLORS.muted, marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Iteration History</h2>
+      <div style={{ flex: 1, minHeight: 0 }}>
+        {chartData.length === 0 ? (
+          <p style={{ color: COLORS.muted, fontSize: '13px', textAlign: 'center', marginTop: '40px' }}>No iterations yet</p>
+        ) : (
+          <SvgLineChart data={chartData} width={260} height={280} color={COLORS.blue} xKey="iter" yKey="sharpe" />
+        )}
+      </div>
+      <div style={{ marginTop: 'auto', fontSize: '12px', color: COLORS.muted }}>
+        <div>Iterations: {chartData.length}</div>
+        {chartData.length > 0 && (
+          <div>Best Sharpe: {Math.max(...chartData.map(d => d.sharpe || 0)).toFixed(2)}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Event Log Panel ──
+const EventLogPanel = React.forwardRef(function EventLogPanel({ events }, ref) {
+  return (
+    <div className="card" style={{ marginTop: '12px', maxHeight: '120px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <h2 style={{ fontSize: '12px', fontWeight: 600, color: COLORS.muted, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '1px' }}>Event Log</h2>
+      <div ref={ref} style={{ flex: 1, overflowY: 'auto', fontSize: '11px', fontFamily: 'monospace', lineHeight: 1.6 }}>
+        {events.length === 0 && <span style={{ color: COLORS.muted }}>Waiting for events...</span>}
+        {events.map(evt => (
+          <div key={evt.id} style={{ display: 'flex', gap: '8px' }}>
+            <span style={{ color: COLORS.muted, flexShrink: 0 }}>{evt.timestamp}</span>
+            <span style={{ color: COLORS.blue, flexShrink: 0 }}>[{evt.type}]</span>
+            <span style={{ color: COLORS.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {JSON.stringify(evt.payload).slice(0, 120)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+});
+
+// ── Modal ──
+function Modal({ goal, setGoal, cycles, setCycles, iters, setIters, onStart, onClose }) {
+  const [inputGoal, setInputGoal] = useState(goal);
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000,
+    }} onClick={onClose}>
+      <div className="card" style={{ width: '500px', maxWidth: '90vw' }} onClick={e => e.stopPropagation()}>
+        <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Run New Research Goal</h2>
+
+        <label style={{ fontSize: '13px', color: COLORS.muted, marginBottom: '4px', display: 'block' }}>Goal Description</label>
+        <textarea className="input" rows={3} value={inputGoal} onChange={e => setInputGoal(e.target.value)} style={{ marginBottom: '16px', resize: 'vertical', fontFamily: 'inherit' }} />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+          <div>
+            <label style={{ fontSize: '13px', color: COLORS.muted, marginBottom: '4px', display: 'block' }}>Max Cycles</label>
+            <select value={cycles} onChange={e => setCycles(Number(e.target.value))} style={{ width: '100%' }}>
+              {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: '13px', color: COLORS.muted, marginBottom: '4px', display: 'block' }}>Max Iterations</label>
+            <select value={iters} onChange={e => setIters(Number(e.target.value))} style={{ width: '100%' }}>
+              {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+          <button className="btn" style={{ background: '#475569' }} onClick={onClose}>Cancel</button>
+          <button className="btn" onClick={() => { setGoal(inputGoal); onStart(); }}>Start Run</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Render ──
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

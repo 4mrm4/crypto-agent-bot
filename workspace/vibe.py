@@ -35,8 +35,11 @@ class VibeWorkspace:
     # Public API
     # ------------------------------------------------------------------
 
-    def create_goal(self, description: str, max_cycles: int = 5) -> Dict[str, Any]:
-        """Create a new research goal, run agents, and store results."""
+    def create_goal(self, description: str, max_cycles: int = 5, max_iterations: int = 1) -> Dict[str, Any]:
+        """Create a new research goal, run agents, and store results.
+
+        If max_iterations > 1, uses the AutoResearch outer loop with hypothesis
+        generation, critique, and convergence checking."""
         goal_id = uuid.uuid4().hex[:8]
 
         entry = {
@@ -66,9 +69,14 @@ class VibeWorkspace:
 
         with console.status("[yellow]Agents working...") as status:
             try:
-                result = self._orchestrator.run_research_goal(
-                    description, max_cycles=max_cycles
-                )
+                if max_iterations > 1:
+                    result = self._orchestrator.run_research_loop(
+                        description, max_cycles=max_cycles, max_iterations=max_iterations
+                    )
+                else:
+                    result = self._orchestrator.run_research_goal(
+                        description, max_cycles=max_cycles
+                    )
 
                 entry["status"] = "completed"
                 entry["result"] = result

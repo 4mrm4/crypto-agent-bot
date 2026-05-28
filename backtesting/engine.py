@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import shutil
+import string
 import subprocess
 import tempfile
 import time
@@ -24,36 +25,34 @@ logger = logging.getLogger(__name__)
 
 STRATEGY_TEMPLATE = '''"""
 Auto-generated strategy by crypto_agent_bot.
-Do not edit manually — generated on {timestamp}.
+Do not edit manually — generated on $timestamp.
 """
-from freqtrade.strategy import IStrategy, DecimalParameter, IntParameter
+from freqtrade.strategy import IStrategy, IntParameter
 import pandas as pd
 import talib.abstract as ta
 
 
 class DynamicStrategy(IStrategy):
     # --- User-defined parameters (set by agent) ---
-    timeframe = "{timeframe}"
-    minimal_roi = {minimal_roi}
-    stoploss = {stoploss}
-    trailing_stop = {trailing_stop}
-    startup_candle_count = {startup_candle_count}
+    timeframe = "$timeframe"
+    minimal_roi = $minimal_roi
+    stoploss = $stoploss
+    trailing_stop = $trailing_stop
+    startup_candle_count = $startup_candle_count
     process_only_new_candles = True
     use_exit_signal = True
     can_short = False
 
     # --- Indicator parameters ---
-    fast_ma = IntParameter(5, 50, default={fast_ma}, space="buy")
-    slow_ma = IntParameter(20, 200, default={slow_ma}, space="buy")
-
+$indicator_params_block
     def populate_indicators(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
-        {indicator_code}
+        $indicator_code
         return dataframe
 
     def populate_entry_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
         dataframe.loc[
             (
-                {entry_condition}
+                $entry_condition
             ),
             "enter_long"] = 1
         return dataframe
@@ -61,7 +60,7 @@ class DynamicStrategy(IStrategy):
     def populate_exit_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
         dataframe.loc[
             (
-                {exit_condition}
+                $exit_condition
             ),
             "exit_long"] = 1
         return dataframe
@@ -84,6 +83,121 @@ SMA_CROSSOVER_EXIT = """
         (dataframe['fast_ma'].shift(1) >= dataframe['slow_ma'].shift(1)) &
         (dataframe['fast_ma'] < dataframe['slow_ma'])
 """
+
+# ── MACD Crossover snippets ──
+
+MACD_CROSSOVER_INDICATOR = """
+        dataframe['macd'], dataframe['macdsignal'], dataframe['macdhist'] = ta.MACD(dataframe, fastperiod=12, slowperiod=26, signalperiod=9)
+        dataframe['macd'] = dataframe['macd'] - dataframe['macdsignal']
+"""
+
+MACD_CROSSOVER_ENTRY = """
+        (dataframe['macd'].shift(1) <= 0) & (dataframe['macd'] > 0)
+"""
+
+MACD_CROSSOVER_EXIT = """
+        (dataframe['macd'].shift(1) >= 0) & (dataframe['macd'] < 0)
+"""
+
+# ── RSI Oversold/Overbought snippets ──
+
+RSI_INDICATOR = """
+        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=14)
+"""
+
+RSI_OVERSOLD_ENTRY = """
+        (dataframe['rsi'] < 30) & (dataframe['rsi'].shift(1) >= 30)
+"""
+
+RSI_OVERSOLD_EXIT = """
+        (dataframe['rsi'] > 70) & (dataframe['rsi'].shift(1) <= 70)
+"""
+
+# ── Bollinger Bands snippets ──
+
+BB_INDICATOR = """
+        dataframe['bb_upper'], dataframe['bb_middle'], dataframe['bb_lower'] = ta.BBANDS(dataframe, timeperiod=20, nbdevup=2, nbdevdn=2)
+"""
+
+BB_ENTRY = """
+        (dataframe['close'] < dataframe['bb_lower']) & (dataframe['close'].shift(1) >= dataframe['bb_lower'].shift(1))
+"""
+
+BB_EXIT = """
+        (dataframe['close'] > dataframe['bb_upper']) & (dataframe['close'].shift(1) <= dataframe['bb_upper'].shift(1))
+"""
+
+# ── Combined SMA + RSI filter snippets ──
+
+SMA_RSI_INDICATOR = """
+        dataframe['fast_ma'] = ta.SMA(dataframe, timeperiod=self.fast_ma.value)
+        dataframe['slow_ma'] = ta.SMA(dataframe, timeperiod=self.slow_ma.value)
+        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=14)
+"""
+
+SMA_RSI_ENTRY = """
+        (dataframe['fast_ma'].shift(1) <= dataframe['slow_ma'].shift(1)) &
+        (dataframe['fast_ma'] > dataframe['slow_ma']) &
+        (dataframe['rsi'] > 30) & (dataframe['rsi'] < 70)
+"""
+
+SMA_RSI_EXIT = """
+        (dataframe['fast_ma'].shift(1) >= dataframe['slow_ma'].shift(1)) &
+        (dataframe['fast_ma'] < dataframe['slow_ma'])
+"""
+
+# ── Strategy registry: maps type to its snippets and defaults ──
+
+STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
+    "sma_crossover": {
+        "indicator_code": SMA_CROSSOVER_INDICATOR,
+        "entry_condition": SMA_CROSSOVER_ENTRY,
+        "exit_condition": SMA_CROSSOVER_EXIT,
+        "indicator_params_block": """
+    fast_ma = IntParameter(5, 50, default=$fast_ma, space="buy")
+    slow_ma = IntParameter(20, 200, default=$slow_ma, space="buy")
+""",
+        "default_params": {"fast_ma": 10, "slow_ma": 30, "startup_candle_count": 30},
+    },
+    "macd_crossover": {
+        "indicator_code": MACD_CROSSOVER_INDICATOR,
+        "entry_condition": MACD_CROSSOVER_ENTRY,
+        "exit_condition": MACD_CROSSOVER_EXIT,
+        "indicator_params_block": "",
+        "default_params": {"startup_candle_count": 33},
+    },
+    "rsi_oversold": {
+        "indicator_code": RSI_INDICATOR,
+        "entry_condition": RSI_OVERSOLD_ENTRY,
+        "exit_condition": RSI_OVERSOLD_EXIT,
+        "indicator_params_block": "",
+        "default_params": {"startup_candle_count": 20},
+    },
+    "bollinger_bands": {
+        "indicator_code": BB_INDICATOR,
+        "entry_condition": BB_ENTRY,
+        "exit_condition": BB_EXIT,
+        "indicator_params_block": "",
+        "default_params": {"startup_candle_count": 26},
+    },
+    "combined_sma_rsi": {
+        "indicator_code": SMA_RSI_INDICATOR,
+        "entry_condition": SMA_RSI_ENTRY,
+        "exit_condition": SMA_RSI_EXIT,
+        "indicator_params_block": """
+    fast_ma = IntParameter(5, 50, default=$fast_ma, space="buy")
+    slow_ma = IntParameter(20, 200, default=$slow_ma, space="buy")
+""",
+        "default_params": {"fast_ma": 10, "slow_ma": 30, "startup_candle_count": 30},
+    },
+    "custom": {
+        "indicator_code": "",
+        "entry_condition": "",
+        "exit_condition": "",
+        "indicator_params_block": "",
+        "default_params": {"startup_candle_count": 20},
+    },
+}
 
 
 class BacktestEngine:
@@ -120,13 +234,16 @@ class BacktestEngine:
     def run_backtest(
         self,
         strategy_params: Optional[Dict[str, Any]] = None,
+        strategy_type: str = "sma_crossover",
         timerange: str = "20260101-",
         pairs: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Generate a strategy from *params*, run a Freqtrade backtest,
-        and return parsed results."""
-        params = self._default_strategy_params()
+        and return parsed results. timerange defaults to "20260101-" (year-to-date)
+        but can be overridden to any format freqtrade accepts (e.g. "20250101-20251231")."""
+        params = self._default_strategy_params(strategy_type)
         if strategy_params:
+            # Pop timerange and pairs if they were stored in strategy params
             params.update(strategy_params)
         params.setdefault("timeframe", settings.TIMEFRAME)
 
@@ -207,24 +324,28 @@ class BacktestEngine:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _default_strategy_params(self) -> Dict[str, Any]:
-        return {
-            "fast_ma": 10,
-            "slow_ma": 30,
+    def _default_strategy_params(self, strategy_type: str = "sma_crossover") -> Dict[str, Any]:
+        registry_entry = STRATEGY_REGISTRY.get(strategy_type, STRATEGY_REGISTRY["sma_crossover"])
+        params = {
+            "indicator_code": registry_entry["indicator_code"],
+            "entry_condition": registry_entry["entry_condition"],
+            "exit_condition": registry_entry["exit_condition"],
+            "indicator_params_block": registry_entry["indicator_params_block"],
             "stoploss": -0.05,
             "trailing_stop": False,
             "minimal_roi": '{"0": 0.01}',
-            "startup_candle_count": 30,
-            "indicator_code": SMA_CROSSOVER_INDICATOR,
-            "entry_condition": SMA_CROSSOVER_ENTRY,
-            "exit_condition": SMA_CROSSOVER_EXIT,
             "timeframe": settings.TIMEFRAME,
         }
+        params.update(registry_entry["default_params"])
+        return params
 
     def _render_strategy(self, params: Dict[str, Any]) -> str:
         import datetime
         params["timestamp"] = datetime.datetime.utcnow().isoformat()
-        return STRATEGY_TEMPLATE.format(**params)
+        # Nested substitution for indicator_params_block which may contain $fast_ma/$slow_ma
+        if "indicator_params_block" in params and "$" in params.get("indicator_params_block", ""):
+            params["indicator_params_block"] = string.Template(params["indicator_params_block"]).safe_substitute(**params)
+        return string.Template(STRATEGY_TEMPLATE).safe_substitute(**params)
 
     def _build_config(self, pairs: List[str], timerange: str) -> Dict[str, Any]:
         config_path = self.ft_userdata_dir / "config.json"

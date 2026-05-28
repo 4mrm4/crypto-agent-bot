@@ -23,6 +23,7 @@ class OrchestratorState(TypedDict):
     final_output: Optional[Dict[str, Any]]
     messages: List[str]
     curator_context: str
+    research_specs: Optional[List[Dict[str, Any]]]
 
 
 # ── Graph node functions ──
