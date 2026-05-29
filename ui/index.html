@@ -122,7 +122,16 @@ function App() {
         break;
 
       case 'iteration_result':
-        setIteration(payload.iteration || iteration);
+        setIteration(payload.iteration || 0);
+        setMetrics(payload.metrics || {});
+        if (payload.metrics) {
+          setIterationChart(prev => [...prev, {
+            iter: payload.iteration,
+            sharpe: payload.metrics.sharpe_ratio || 0,
+            wr: payload.metrics.win_rate || 0,
+            dd: Math.abs(payload.metrics.max_drawdown || 0),
+          }]);
+        }
         break;
 
       case 'task_done':
@@ -138,6 +147,7 @@ function App() {
       case 'run_start':
         setRunning(true);
         setHypothesis('');
+        setMetrics({});
         setIteration(0);
         setIterationChart([]);
         setAgentTimeline([]);
@@ -155,14 +165,7 @@ function App() {
       case 'heartbeat':
         break;
 
-      case 'iteration_result':
-        // Update chart data with current metrics
-        setIterationChart(prev => [...prev, {
-          iter: iteration + 1,
-          sharpe: metrics.sharpe_ratio || 0,
-          wr: metrics.win_rate || 0,
-          dd: Math.abs(metrics.max_drawdown || 0),
-        }]);
+      default:
         break;
     }
   }
@@ -174,8 +177,9 @@ function App() {
     }
   }, [eventLog]);
 
-  function startRun() {
-    if (!goalInput.trim()) return;
+  function startRun(overrideGoal) {
+    const goal = overrideGoal || goalInput;
+    if (!goal.trim()) return;
     setShowModal(false);
     setRunning(true);
     setHypothesis('');
@@ -188,7 +192,7 @@ function App() {
     fetch('/api/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ goal: goalInput, max_cycles: cycleInput, max_iterations: iterInput }),
+      body: JSON.stringify({ goal: goal, max_cycles: cycleInput, max_iterations: iterInput }),
     })
     .then(r => r.json())
     .then(data => {
@@ -451,7 +455,7 @@ function Modal({ goal, setGoal, cycles, setCycles, iters, setIters, onStart, onC
 
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
           <button className="btn" style={{ background: '#475569' }} onClick={onClose}>Cancel</button>
-          <button className="btn" onClick={() => { setGoal(inputGoal); onStart(); }}>Start Run</button>
+          <button className="btn" onClick={() => { setGoal(inputGoal); onStart(inputGoal); }}>Start Run</button>
         </div>
       </div>
     </div>

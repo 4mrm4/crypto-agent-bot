@@ -15,6 +15,11 @@ from api.event_bus import EventBus
 from memory.vector_store import VectorStore
 from orchestration.factory import make_orchestrator
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(name)-20s | %(levelname)-5s | %(message)s",
+    datefmt="%H:%M:%S",
+)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Crypto Agent Bot")
@@ -146,6 +151,9 @@ async def _run_orchestration(run_id: str, goal: str, max_cycles: int, max_iterat
     # Patch: inject event publishing into the orchestrator
     _patch_orchestrator(orchestrator, bus, run_id)
 
+    logger.info("━" * 50)
+    logger.info("[RUN %s] Starting goal: %s", run_id, goal)
+    logger.info("[RUN %s] max_cycles=%s  max_iterations=%s", run_id, max_cycles, max_iterations)
     await bus.publish("run_start", {"goal": goal, "max_cycles": max_cycles, "max_iterations": max_iterations})
 
     try:
@@ -153,11 +161,13 @@ async def _run_orchestration(run_id: str, goal: str, max_cycles: int, max_iterat
         loop = asyncio.get_running_loop()
 
         if max_iterations > 1:
+            logger.info("[RUN %s] AutoResearch loop enabled — will iterate up to %s times", run_id, max_iterations)
             result = await loop.run_in_executor(
                 None,
                 lambda: orchestrator.run_research_loop(goal, max_cycles=max_cycles, max_iterations=max_iterations),
             )
         else:
+            logger.info("[RUN %s] Single-pass mode (use max_iterations > 1 for research loop)", run_id)
             result = await loop.run_in_executor(
                 None,
                 lambda: orchestrator.run_research_goal(goal, max_cycles=max_cycles),
@@ -170,9 +180,11 @@ async def _run_orchestration(run_id: str, goal: str, max_cycles: int, max_iterat
             "converged": result.get("converged", False),
         })
 
+        logger.info("[RUN %s] ✅ Complete. Converged=%s | Iterations=%s", run_id, result.get("converged"), result.get("total_iterations"))
+
         _active_runs[run_id] = {"status": "done", "goal": goal, "result": result}
     except Exception as exc:
-        logger.exception("Run failed")
+        logger.exception("[RUN %s] ❌ Failed: %s", run_id, exc)
         await bus.publish("run_error", {"message": str(exc)})
         _active_runs[run_id] = {"status": "error", "goal": goal, "error": str(exc)}
 
@@ -180,18 +192,20 @@ async def _run_orchestration(run_id: str, goal: str, max_cycles: int, max_iterat
 def _patch_orchestrator(orchestrator: "HermesOrchestrator", bus: EventBus, run_id: str):
     """Patch orchestrator methods to emit events to the bus.
 
-    Uses a callback function that schedules coroutines on the event loop.
+    Captures the event loop at patch time (main thread) so emit() works
+    from executor threads where asyncio.get_running_loop() would fail.
     """
-    orig_methods = {}
+    try:
+        _loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _loop = None
 
     def emit(event_type: str, payload: Dict[str, Any]):
-        try:
-            loop = asyncio.get_running_loop()
-            asyncio.run_coroutine_threadsafe(
-                bus.publish(event_type, payload), loop
-            )
-        except RuntimeError:
-            pass  # No event loop available
+        if _loop is None:
+            return
+        asyncio.run_coroutine_threadsafe(
+            bus.publish(event_type, payload), _loop
+        )
 
     # Wrap _generate_hypothesis
     if hasattr(orchestrator, "_generate_hypothesis"):
@@ -199,6 +213,7 @@ def _patch_orchestrator(orchestrator: "HermesOrchestrator", bus: EventBus, run_i
 
         def patched_generate(goal, past_iterations, iter_num, max_iterations):
             hypothesis = orig_gen(goal, past_iterations, iter_num, max_iterations)
+            logger.info("[RUN %s] Hypothesis iter %s/%s: %s", run_id, iter_num, max_iterations, hypothesis[:120])
             emit("hypothesis", {
                 "hypothesis": hypothesis,
                 "iteration": iter_num,
@@ -214,6 +229,7 @@ def _patch_orchestrator(orchestrator: "HermesOrchestrator", bus: EventBus, run_i
 
         def patched_critique(output, goal, hypothesis):
             critique = orig_crit(output, goal, hypothesis)
+            logger.info("[RUN %s] Critique for '%s': %s", run_id, hypothesis[:60], critique[:200])
             emit("critique", {
                 "critique": critique,
                 "hypothesis": hypothesis,
@@ -227,21 +243,32 @@ def _patch_orchestrator(orchestrator: "HermesOrchestrator", bus: EventBus, run_i
         orig_run = orchestrator._run_research_goal
 
         def patched_run(goal, max_cycles=5, hypothesis="", iteration=1):
+            logger.info("[RUN %s] ── Iteration %s starting ──", run_id, iteration)
             emit("iteration_start", {"iteration": iteration, "goal": goal[:200]})
             result = orig_run(goal, max_cycles=max_cycles, hypothesis=hypothesis, iteration=iteration)
             # Emit events for each board task
             done_tasks = orchestrator.board.get_tasks_by_status("DONE") if hasattr(orchestrator, "board") else []
             for task in done_tasks:
                 if task.result:
+                    logger.info("[RUN %s]   Task done [%s]: %s", run_id, task.assigned_to, task.description[:80])
                     emit("task_done", {
                         "task_id": task.id,
                         "agent": task.assigned_to,
                         "description": task.description[:200],
                         "result": str(task.result)[:500],
                     })
+            # Extract and emit metrics
+            metrics = orchestrator._extract_metrics(result) if hasattr(orchestrator, "_extract_metrics") else {}
+            logger.info("[RUN %s] ── Iteration %s done — metrics: Sharpe=%.2f WR=%s DD=%s Trades=%s",
+                        run_id, iteration,
+                        metrics.get("sharpe_ratio", 0),
+                        metrics.get("win_rate", "—"),
+                        metrics.get("max_drawdown", "—"),
+                        metrics.get("total_trades", 0))
             emit("iteration_result", {
                 "iteration": iteration,
                 "task_count": len(done_tasks),
+                "metrics": metrics,
             })
             return result
 

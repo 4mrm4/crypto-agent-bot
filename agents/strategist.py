@@ -130,6 +130,10 @@ class StrategistAgent(BaseAgent):
             You can also set backtest config: timerange (e.g. "20250101-20251231"),
             pairs (list of exchange symbols), and timeframe (e.g. "1h", "15m", "4h").
 
+            NOTE: Full historical data for BTC/USDT, ETH/USDT, XRP/USDT, SOL/USDT
+            is ALREADY cached locally for 2017-2026 on 5m/15m/1h timeframes.
+            Do NOT call download_data — just pick a timerange within those bounds.
+
             Examples:
               SMA:     {"strategy_type": "sma_crossover", "fast_ma": 10, "slow_ma": 30}
               MACD:    {"strategy_type": "macd_crossover", "timerange": "20250101-20251231", "timeframe": "15m"}
@@ -183,7 +187,7 @@ class StrategistAgent(BaseAgent):
 
             Examples:
               {"timerange": "20250101-20251231", "timeframe": "15m", "pairs": ["BTC/USDT", "ETH/USDT"]}
-              {"timerange": "20260101-", "timeframe": "1h"}
+              {"timerange": "20230101-20251231", "timeframe": "1h"}
             """
             import json
             try:
@@ -214,7 +218,7 @@ class StrategistAgent(BaseAgent):
             strat_params = self._generated_strategies[sid].copy()
             # Apply global config as defaults, then strategy-level overrides
             global_cfg = getattr(self, "_backtest_config", {})
-            timerange = strat_params.pop("timerange", global_cfg.get("timerange", "20260101-"))
+            timerange = strat_params.pop("timerange", global_cfg.get("timerange", "20210101-"))
             pairs = strat_params.pop("pairs", global_cfg.get("pairs", None))
             strat_params.setdefault("timeframe", "1d")
             strategy_type = strat_params.pop("strategy_type", "sma_crossover")
@@ -428,9 +432,12 @@ class StrategistAgent(BaseAgent):
             return "\n".join(lines)
 
         def download_data(params_json: str = "{}") -> str:
-            """Download historical market data for backtesting.
+            """Download historical market data.
+            ONLY use this if you need data for a pair or timeframe NOT already cached.
+            BTC/USDT, ETH/USDT, XRP/USDT, SOL/USDT on 5m/15m/1h (2017-2026) are
+            ALREADY available locally — pick a timerange within those bounds instead.
             Pass JSON: {"pairs": ["BTC/USDT"], "timeframe": "1h", "timerange": "20260101-"}
-            Defaults: pairs=["BTC/USDT"], timeframe=config.TIMEFRAME, timerange="20260101-"
+            Defaults: pairs=["BTC/USDT"], timeframe=config.TIMEFRAME, timerange="20210101-"
             Returns download status and row counts."""
             import json
             try:
@@ -439,7 +446,7 @@ class StrategistAgent(BaseAgent):
                 params = {}
             from config import settings
             pairs = params.get("pairs", [settings.SYMBOL])
-            timerange = params.get("timerange", "20260101-")
+            timerange = params.get("timerange", "20210101-")
             timeframe = params.get("timeframe", settings.TIMEFRAME)
             try:
                 self._engine.download_data(pairs=pairs, timerange=timerange)

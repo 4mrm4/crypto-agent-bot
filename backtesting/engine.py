@@ -4,9 +4,11 @@ Generates temporary strategy files on the fly, runs backtests via the
 Freqtrade CLI, and parses results into pandas DataFrames.
 """
 
+import ast
 import json
 import logging
 import os
+import re
 import shutil
 import string
 import subprocess
@@ -20,6 +22,66 @@ import pandas as pd
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+
+# ── Timerange sanitizer ──
+
+def _sanitize_timerange(raw: str) -> str:
+    """Convert any LLM-invented date format to freqtrade's ``YYYYMMDD-YYYYMMDD``.
+
+    Handles all common variants:
+      "2024-01-01/2024-12-31" -> "20240101-20241231"
+      "2024-01-01-2024-12-31" -> "20240101-20241231"
+      "2024-01-01"            -> "20240101-"
+      "20240101-20241231"     -> unchanged (already valid)
+      "20240101-"             -> unchanged
+      "2024"                  -> "2024"
+    """
+    raw = raw.strip()
+    if not raw:
+        return "20210101-"
+    # Separate by / or whitespace first, then by dash
+    # Extract all digit groups: "2024-01-01/2024-12-31" -> [2024,01,01,2024,12,31]
+    groups = re.findall(r'\d+', raw)
+    if not groups:
+        return "20210101-"
+    # If there's a "/" or "-" separator between dates, groups are split into two dates
+    # Detect: if groups have 6+ entries, treat as two dates of 3 groups each (YYYY MM DD)
+    if len(groups) >= 6:
+        # Two dates: first 3 groups = date1, next 3 = date2
+        d1 = "".join(groups[:3])[:8]
+        d2 = "".join(groups[3:6])[:8]
+        return f"{d1}-{d2}"
+    if len(groups) == 5:
+        # Two dates, first has 3 groups, second has 2 (YYYY MM -> YYYYMM)
+        d1 = "".join(groups[:3])[:8]
+        d2 = "".join(groups[3:])[:8]
+        return f"{d1}-{d2}"
+    if len(groups) == 4:
+        # Could be YYYYMMDD-YYYYMMDD split, or YYYY MM DD YYYY
+        # If any group has length 2, it's likely YYYY MM DD YYYY
+        if any(len(g) <= 2 for g in groups):
+            d1 = "".join(groups[:2])[:8]
+            d2 = "".join(groups[2:])[:8]
+            return f"{d1}-{d2}"
+        # Otherwise it's already two 8-digit dates
+        return f"{groups[0][:8]}-{groups[1][:8]}"
+    if len(groups) == 3:
+        # Single date in YYYY MM DD format
+        d = "".join(groups)[:8]
+        return f"{d}-"
+    if len(groups) == 2:
+        # Could be YYYYMMDD-YYYYMMDD without hyphen, or YYYY MM alone
+        if all(len(g) == 8 for g in groups):
+            return f"{groups[0][:8]}-{groups[1][:8]}"
+        # Two groups: likely YYYY and MM -> pad
+        d = "".join(groups)[:8]
+        return f"{d}-" if len(d) == 8 else d
+    # Single group: "20240101" or "2024" or "20240101-"
+    d = groups[0][:8]
+    if len(d) == 8 and raw.endswith('-'):
+        return f"{d}-"
+    return f"{d}-" if len(d) == 8 else d
 
 # ── Strategy template injected as a temp .py file ──
 
@@ -87,7 +149,9 @@ SMA_CROSSOVER_EXIT = """
 # ── MACD Crossover snippets ──
 
 MACD_CROSSOVER_INDICATOR = """
-        dataframe['macd'], dataframe['macdsignal'], dataframe['macdhist'] = ta.MACD(dataframe, fastperiod=12, slowperiod=26, signalperiod=9)
+        macd_data = ta.MACD(dataframe, fastperiod=12, slowperiod=26, signalperiod=9)
+        dataframe['macd'] = macd_data['macd'].astype(float)
+        dataframe['macdsignal'] = macd_data['macdsignal'].astype(float)
         dataframe['macd'] = dataframe['macd'] - dataframe['macdsignal']
 """
 
@@ -116,7 +180,7 @@ RSI_OVERSOLD_EXIT = """
 # ── Bollinger Bands snippets ──
 
 BB_INDICATOR = """
-        dataframe['bb_upper'], dataframe['bb_middle'], dataframe['bb_lower'] = ta.BBANDS(dataframe, timeperiod=20, nbdevup=2, nbdevdn=2)
+        dataframe['bb_upper'], dataframe['bb_middle'], dataframe['bb_lower'] = ta.BBANDS(dataframe, timeperiod=20, nbdevup=2.0, nbdevdn=2.0)
 """
 
 BB_ENTRY = """
@@ -235,12 +299,12 @@ class BacktestEngine:
         self,
         strategy_params: Optional[Dict[str, Any]] = None,
         strategy_type: str = "sma_crossover",
-        timerange: str = "20260101-",
+        timerange: str = "20210101-",
         pairs: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Generate a strategy from *params*, run a Freqtrade backtest,
-        and return parsed results. timerange defaults to "20260101-" (year-to-date)
-        but can be overridden to any format freqtrade accepts (e.g. "20250101-20251231")."""
+        and return parsed results."""
+        timerange = _sanitize_timerange(timerange)
         params = self._default_strategy_params(strategy_type)
         if strategy_params:
             # Pop timerange and pairs if they were stored in strategy params
@@ -253,6 +317,9 @@ class BacktestEngine:
         strategy_dir.mkdir(parents=True, exist_ok=True)
         strategy_path = strategy_dir / "DynamicStrategy.py"
         strategy_path.write_text(strategy_code, encoding="utf-8")
+
+        # 2a. Validate the generated Python is syntactically valid
+        self._validate_strategy(strategy_code)
 
         pairs = pairs or [settings.SYMBOL]
 
@@ -303,8 +370,9 @@ class BacktestEngine:
             "avg_profit_loss": round(losses["profit_ratio"].mean(), 4) if not losses.empty else 0.0,
         }
 
-    def download_data(self, pairs: Optional[List[str]] = None, timerange: str = "20260101-"):
+    def download_data(self, pairs: Optional[List[str]] = None, timerange: str = "20210101-"):
         """Download historical data via ``freqtrade download-data``."""
+        timerange = _sanitize_timerange(timerange)
         pairs = pairs or [settings.SYMBOL]
         cmd = [
             self._freqtrade_cmd,
@@ -319,6 +387,21 @@ class BacktestEngine:
         logger.info("Downloading data: %s", " ".join(cmd))
         subprocess.run(cmd, check=True, timeout=settings.BACKTEST_TIMEOUT)
         logger.info("Data download complete.")
+
+    # ------------------------------------------------------------------
+    # Strategy validation
+    # ------------------------------------------------------------------
+
+    def _validate_strategy(self, source: str) -> None:
+        """Parse the generated strategy Python for syntax errors before
+        handing to Freqtrade. Raises ``ValueError`` on bad syntax so the
+        strategist agent can catch and regenerate."""
+        try:
+            ast.parse(source, filename="DynamicStrategy.py")
+        except SyntaxError as e:
+            msg = f"Generated strategy has invalid Python syntax (line {e.lineno}): {e.msg}"
+            logger.error(msg)
+            raise ValueError(msg) from e
 
     # ------------------------------------------------------------------
     # Internal helpers

@@ -22,12 +22,17 @@ console = Console()
 def main():
     parser = argparse.ArgumentParser(description="crypto_agent_bot")
     parser.add_argument("--demo", action="store_true", help="Run full demonstration")
+    parser.add_argument("--ui", action="store_true", help="Start Web UI server only (no demo pipeline)")
     parser.add_argument(
         "command",
         nargs="*",
         help="Workspace command: new-goal | list-goals | review | run",
     )
     args = parser.parse_args()
+
+    if args.ui:
+        _run_ui()
+        return
 
     if args.demo:
         _run_demo()
@@ -38,6 +43,7 @@ def main():
     else:
         console.print("[bold cyan]crypto_agent_bot[/]")
         console.print("  --demo          Full pipeline demonstration")
+        console.print("  --ui            Web UI server only (no pipeline)")
         console.print("  run             Interactive workspace")
         console.print("  new-goal <txt>  Run a research goal")
         console.print("  list-goals      Show past goals")
@@ -47,6 +53,42 @@ def main():
 def _make_orchestrator():
     from orchestration.factory import make_orchestrator
     return make_orchestrator()
+
+
+def _run_ui():
+    """Start the Web UI server only — no demo pipeline."""
+    import subprocess
+    import time
+    import webbrowser
+
+    console.print("[bold cyan]crypto_agent_bot — Web UI[/]\n")
+    console.print("[yellow]Starting Web UI server...[/]")
+
+    server = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "api.server:app", "--host", "127.0.0.1", "--port", "8765", "--log-level", "info"],
+        stdout=None,
+        stderr=None,
+    )
+
+    import httpx
+    for _ in range(20):
+        try:
+            r = httpx.get("http://127.0.0.1:8765/api/health", timeout=2)
+            if r.status_code == 200:
+                break
+        except Exception:
+            pass
+        time.sleep(0.5)
+
+    url = "http://127.0.0.1:8765"
+    console.print(f"[green]UI running at {url}[/]")
+    webbrowser.open(url)
+    console.print("\n[green]Press Ctrl+C to stop the server.[/]")
+    try:
+        server.wait()
+    except KeyboardInterrupt:
+        server.terminate()
+        server.wait()
 
 
 def _run_demo():
