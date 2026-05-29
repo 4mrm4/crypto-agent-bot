@@ -2,6 +2,13 @@
 
 Modular crypto trading bot with learning agents, inspired by Vibe-Trading and Hermes Agent patterns.
 
+**Latest updates (May 2026):**
+- Timerange sanitizer — converts any LLM date format (`2024-01-01/2024-12-31`) to freqtrade's `YYYYMMDD-YYYYMMDD`
+- Strategy syntax validation — `ast.parse()` catches bad Python before handing to Freqtrade
+- Web UI goal input fix — modal now sends your typed goal instead of the default
+- TA-Lib compat fix — BBANDS uses `float` params, MACD casts to `float` before subtraction
+- Data pre-loaded for BTC, ETH, XRP, SOL (5m/15m/1h, 2017–2026)
+
 ## Architecture
 
 ```mermaid
@@ -71,20 +78,23 @@ cp .env.example .env
 # 5. Scaffold Freqtrade user data
 python backtesting/setup_ft.py
 
-# 6. Download historical data (once)
+# 6. Download historical data (once — covers BTC, ETH, XRP, SOL 5m/15m/1h)
 freqtrade download-data \
   --userdir ./ft_userdata \
   --exchange binance \
-  -p BTC/USDT \
-  --timerange 20260427- \
-  --timeframes 1h
+  -p BTC/USDT ETH/USDT XRP/USDT SOL/USDT \
+  --timerange 20170817- \
+  --timeframes 5m 15m 1h
 ```
 
 ## Usage
 
 ```bash
-# Web UI dashboard
+# Web UI dashboard (with demo pipeline)
 python main.py --demo
+
+# Web UI only (no auto-demo — start goals from the modal)
+python main.py --ui
 
 # Interactive workspace
 python main.py run
@@ -94,6 +104,7 @@ python main.py new-goal "Find optimal SMA crossover for BTC/USDT"
 
 # With outer loop (iterations)
 python main.py new-goal "Optimise MACD for ETH/USDT with max_iterations=5"
+```
 
 ## Web UI
 
