@@ -21,12 +21,23 @@ STRATEGIST_SYSTEM_PROMPT = """You are a quantitative trading strategist. Your jo
 5. Repeat until you find a strategy that meets targets
 
 Available strategy types:
-- sma_crossover: Simple moving average crossover (fast_ma, slow_ma params)
+- sma_crossover: SMA fast/slow crossover (fast_ma, slow_ma)
 - macd_crossover: MACD line crossing signal line
-- rsi_oversold: Buy when RSI exits oversold (<30), sell when overbought (>70)
-- bollinger_bands: Buy when price touches lower band, sell at upper band
+- rsi_oversold: Buy RSI < 30, sell RSI > 70
+- bollinger_bands: Buy lower band touch, sell upper band
 - combined_sma_rsi: SMA crossover with RSI filter
-- custom: Provide raw indicator_code, entry_condition, exit_condition
+- momentum: ROC + volume confirmation (trending markets)
+- breakout: N-period high breakout with volume spike
+- mean_reversion: BB + RSI oversold (ranging markets)
+- volatility_squeeze: BB width contraction then expansion
+- sentiment_driven: RSI + SMA (use when fear/greed < 30)
+- custom: provide raw indicator_code, entry_condition, exit_condition
+
+REGIME GUIDANCE:
+- strong_uptrend -> prefer sma_crossover, momentum, combined_sma_rsi
+- ranging -> prefer bollinger_bands, rsi_oversold, mean_reversion
+- volatile -> prefer breakout, volatility_squeeze
+- weak_trend -> prefer macd_crossover, combined_sma_rsi
 
 WORK ITERATIVELY — one strategy at a time. Do NOT enumerate many variants at once.
 Use this cycle:
@@ -46,7 +57,12 @@ Target metrics:
 - Max drawdown < 5%
 - Positive profit ratio
 
-IMPORTANT: Use ONLY plain ASCII text. No emoji, no Unicode symbols, no special characters."""
+IMPORTANT: Use ONLY plain ASCII text. No emoji, no Unicode symbols, no special characters.
+
+DATA AVAILABILITY:
+- Local data starts from 2026-04-27 for BTC/USDT and ETH/USDT on 1h
+- For earlier dates, call download_data first (it will use --prepend automatically)
+- Always use timerange format YYYYMMDD-YYYYMMDD (e.g. 20260427-20260530)"""
 
 # Minimum acceptable metrics — any result below these is flagged.
 _MIN_SHARPE = 1.0
@@ -130,9 +146,9 @@ class StrategistAgent(BaseAgent):
             You can also set backtest config: timerange (e.g. "20250101-20251231"),
             pairs (list of exchange symbols), and timeframe (e.g. "1h", "15m", "4h").
 
-            NOTE: Full historical data for BTC/USDT, ETH/USDT, XRP/USDT, SOL/USDT
-            is ALREADY cached locally for 2017-2026 on 5m/15m/1h timeframes.
-            Do NOT call download_data — just pick a timerange within those bounds.
+            NOTE: Local data starts from 2026-04-27. For any earlier dates you MUST
+            call download_data first with --prepend. Available pairs: BTC/USDT, ETH/USDT.
+            Default to timerange 20260427- unless you have explicitly downloaded earlier data.
 
             Examples:
               SMA:     {"strategy_type": "sma_crossover", "fast_ma": 10, "slow_ma": 30}
@@ -149,7 +165,9 @@ class StrategistAgent(BaseAgent):
 
             strategy_type = params.pop("strategy_type", "sma_crossover")
             valid_types = {"sma_crossover", "macd_crossover", "rsi_oversold",
-                           "bollinger_bands", "combined_sma_rsi", "custom"}
+                           "bollinger_bands", "combined_sma_rsi", "custom",
+                           "momentum", "breakout", "mean_reversion",
+                           "volatility_squeeze", "sentiment_driven"}
             if strategy_type not in valid_types:
                 return f"Error: unknown strategy_type '{strategy_type}'. Valid: {', '.join(sorted(valid_types))}"
 
@@ -206,6 +224,7 @@ class StrategistAgent(BaseAgent):
             Uses timerange and pairs from the strategy params or global backtest config.
             Returns performance metrics and records keep/discard verdict."""
             import json
+            from config import settings
             try:
                 params = json.loads(backtest_json)
             except json.JSONDecodeError:
@@ -220,7 +239,7 @@ class StrategistAgent(BaseAgent):
             global_cfg = getattr(self, "_backtest_config", {})
             timerange = strat_params.pop("timerange", global_cfg.get("timerange", "20210101-"))
             pairs = strat_params.pop("pairs", global_cfg.get("pairs", None))
-            strat_params.setdefault("timeframe", "1d")
+            strat_params.setdefault("timeframe", global_cfg.get("timeframe", settings.TIMEFRAME))
             strategy_type = strat_params.pop("strategy_type", "sma_crossover")
             try:
                 result = self._engine.run_backtest(
@@ -243,6 +262,7 @@ class StrategistAgent(BaseAgent):
                 lines.append(f"  Pairs: {pairs}")
 
             # Auto-create iteration record for keep/discard tracking
+            strat_params["_strategy_id"] = sid
             rec = IterationRecord(strat_params, result)
             rec.evaluate()
             self._iteration_history.append(rec)
@@ -466,12 +486,21 @@ class StrategistAgent(BaseAgent):
             ids = data.get("ids", [])
             if len(ids) < 2:
                 return "Provide at least two strategy IDs to compare."
-            records = {r.params.get("_sid", ""): r for r in self._iteration_history}
+            records = {r.params.get("_strategy_id", ""): r for r in self._iteration_history}
             matched = []
             for sid in ids:
-                rec = records.get(sid)
-                if rec:
-                    matched.append((sid, rec))
+                found = None
+                # Check records map first
+                if sid in records:
+                    found = records[sid]
+                else:
+                    # Search iteration history for records whose params match
+                    for rec in self._iteration_history:
+                        if rec.params.get("_strategy_id") == sid:
+                            found = rec
+                            break
+                if found:
+                    matched.append((sid, found))
                 else:
                     # Check if it's in generated strategies
                     if sid in self._generated_strategies:

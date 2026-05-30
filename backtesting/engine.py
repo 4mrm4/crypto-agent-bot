@@ -261,6 +261,97 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "indicator_params_block": "",
         "default_params": {"startup_candle_count": 20},
     },
+
+    "momentum": {
+        "indicator_code": """
+        dataframe['roc'] = ta.ROC(dataframe, timeperiod=10)
+        dataframe['volume_ma'] = ta.SMA(dataframe['volume'], timeperiod=20)
+        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=14)
+    """,
+        "entry_condition": """
+        (dataframe['roc'] > 2.0) &
+        (dataframe['volume'] > dataframe['volume_ma'] * 1.5) &
+        (dataframe['rsi'] > 50) & (dataframe['rsi'] < 75)
+    """,
+        "exit_condition": """
+        (dataframe['roc'] < 0) | (dataframe['rsi'] > 75)
+    """,
+        "indicator_params_block": "",
+        "default_params": {"startup_candle_count": 25},
+    },
+
+    "breakout": {
+        "indicator_code": """
+        dataframe['highest_high'] = dataframe['high'].rolling(20).max().shift(1)
+        dataframe['volume_ma'] = ta.SMA(dataframe['volume'], timeperiod=20)
+        dataframe['atr'] = ta.ATR(dataframe, timeperiod=14)
+    """,
+        "entry_condition": """
+        (dataframe['close'] > dataframe['highest_high']) &
+        (dataframe['volume'] > dataframe['volume_ma'] * 1.3)
+    """,
+        "exit_condition": """
+        (dataframe['close'] < dataframe['highest_high'] - dataframe['atr'] * 2)
+    """,
+        "indicator_params_block": "",
+        "default_params": {"startup_candle_count": 25},
+    },
+
+    "mean_reversion": {
+        "indicator_code": """
+        dataframe['bb_upper'], dataframe['bb_middle'], dataframe['bb_lower'] = ta.BBANDS(
+            dataframe, timeperiod=20, nbdevup=2.0, nbdevdn=2.0)
+        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=14)
+        dataframe['distance_from_mean'] = (dataframe['close'] - dataframe['bb_middle']) / dataframe['bb_middle']
+    """,
+        "entry_condition": """
+        (dataframe['close'] < dataframe['bb_lower']) &
+        (dataframe['rsi'] < 35) &
+        (dataframe['distance_from_mean'] < -0.02)
+    """,
+        "exit_condition": """
+        (dataframe['close'] > dataframe['bb_middle']) | (dataframe['rsi'] > 60)
+    """,
+        "indicator_params_block": "",
+        "default_params": {"startup_candle_count": 25},
+    },
+
+    "volatility_squeeze": {
+        "indicator_code": """
+        dataframe['bb_upper'], dataframe['bb_middle'], dataframe['bb_lower'] = ta.BBANDS(
+            dataframe, timeperiod=20, nbdevup=2.0, nbdevdn=2.0)
+        dataframe['bb_width'] = (dataframe['bb_upper'] - dataframe['bb_lower']) / dataframe['bb_middle']
+        dataframe['bb_width_min'] = dataframe['bb_width'].rolling(120).min()
+        dataframe['macd'], dataframe['macdsignal'], _ = [
+            x.astype(float) for x in ta.MACD(dataframe['close'].astype(float))]
+    """,
+        "entry_condition": """
+        (dataframe['bb_width'] <= dataframe['bb_width_min'] * 1.05) &
+        (dataframe['macd'] > dataframe['macdsignal'])
+    """,
+        "exit_condition": """
+        (dataframe['bb_width'] > dataframe['bb_width_min'] * 3) |
+        (dataframe['macd'] < dataframe['macdsignal'])
+    """,
+        "indicator_params_block": "",
+        "default_params": {"startup_candle_count": 130},
+    },
+
+    "sentiment_driven": {
+        "indicator_code": """
+        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=14)
+        dataframe['sma50'] = ta.SMA(dataframe, timeperiod=50)
+    """,
+        "entry_condition": """
+        (dataframe['rsi'] < 40) &
+        (dataframe['close'] > dataframe['sma50'])
+    """,
+        "exit_condition": """
+        (dataframe['rsi'] > 65) | (dataframe['close'] < dataframe['sma50'])
+    """,
+        "indicator_params_block": "",
+        "default_params": {"startup_candle_count": 55},
+    },
 }
 
 
@@ -374,18 +465,50 @@ class BacktestEngine:
         """Download historical data via ``freqtrade download-data``."""
         timerange = _sanitize_timerange(timerange)
         pairs = pairs or [settings.SYMBOL]
-        cmd = [
-            self._freqtrade_cmd,
-            "download-data",
-            "--userdir", str(self.ft_userdata_dir),
-            "--exchange", settings.EXCHANGE_ID,
-            "-p", *pairs,
-            "--timerange", timerange,
-            "--timeframes", settings.TIMEFRAME,
-            "--datadir", str(self.ft_userdata_dir / "data"),
-        ]
-        logger.info("Downloading data: %s", " ".join(cmd))
-        subprocess.run(cmd, check=True, timeout=settings.BACKTEST_TIMEOUT)
+
+        def _build_cmd(prepend=False):
+            cmd = [
+                self._freqtrade_cmd,
+                "download-data",
+                "--userdir", str(self.ft_userdata_dir),
+                "--exchange", settings.EXCHANGE_ID,
+                "-p", *pairs,
+                "--timerange", timerange,
+                "--timeframes", settings.TIMEFRAME,
+                "--datadir", str(self.ft_userdata_dir / "data"),
+            ]
+            if prepend:
+                cmd.append("--prepend")
+            return cmd
+
+        logger.info("Downloading data: %s", " ".join(_build_cmd()))
+        result = subprocess.run(
+            _build_cmd(),
+            capture_output=True, text=True,
+            timeout=settings.BACKTEST_TIMEOUT
+        )
+
+        # Detect the prepend warning
+        combined = (result.stdout or "") + (result.stderr or "")
+        if "Use `--prepend`" in combined or "--prepend" in combined:
+            logger.info("Local data exists but requested range is earlier — retrying with --prepend")
+            result = subprocess.run(
+                _build_cmd(prepend=True),
+                capture_output=True, text=True,
+                timeout=settings.BACKTEST_TIMEOUT
+            )
+
+        if result.returncode != 0:
+            raise RuntimeError(f"Data download failed:\n{result.stderr}")
+
+        # Check for zero-length download
+        if "length 0" in (result.stdout + result.stderr):
+            raise RuntimeError(
+                f"Download returned 0 candles for timerange {timerange}. "
+                "The requested date range may not be available from the exchange. "
+                "Try a more recent timerange or use --prepend."
+            )
+
         logger.info("Data download complete.")
 
     # ------------------------------------------------------------------
@@ -469,30 +592,43 @@ class BacktestEngine:
         ]
 
         logger.info("Running backtest: %s", " ".join(cmd))
-        try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=settings.BACKTEST_TIMEOUT)
-            logger.info("Backtest completed.")
-        except subprocess.CalledProcessError as exc:
-            logger.error("Backtest stderr:\n%s", exc.stderr)
-            raise RuntimeError(f"Freqtrade backtest failed: {exc.stderr}") from exc
+        proc_result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=settings.BACKTEST_TIMEOUT
+        )
+        stderr = proc_result.stderr or ""
+        stdout = proc_result.stdout or ""
 
-        # In Freqtrade 2026.4 results are stored in a .zip inside export_path
-        # with an associated .last_result.json pointing to the latest zip
+        if proc_result.returncode != 0:
+            logger.error("Backtest stderr:\n%s", stderr)
+            raise RuntimeError(f"Freqtrade backtest failed: {stderr}")
+
+        if "No data found" in stderr or "No data found" in stdout:
+            raise RuntimeError(
+                "Freqtrade found no data for the requested timerange. "
+                f"Stderr: {stderr[-500:]}"
+            )
+
+        logger.info("Backtest completed.")
+
+        # Find result ZIP
         last_result_file = export_path / ".last_result.json"
-        if not last_result_file.exists():
-            # fallback: pick the newest .zip
-            zips = sorted(export_path.glob("*.zip"), key=os.path.getmtime, reverse=True)
-            if not zips:
-                raise FileNotFoundError(f"No result ZIP found in {export_path}")
-            zip_path = zips[0]
-        else:
+        if last_result_file.exists():
             with open(last_result_file) as lrf:
                 meta = json.load(lrf)
             zip_path = export_path / meta.get("latest_backtest", "")
+        else:
+            zips = sorted(export_path.glob("*.zip"), key=os.path.getmtime, reverse=True)
+            if not zips:
+                logger.warning("No result ZIP found — backtest likely produced 0 trades")
+                return {"strategy": {"DynamicStrategy": {"total_trades": 0, "trades": []}}}
+            zip_path = zips[0]
+
+        if not zip_path.exists():
+            logger.warning("Result ZIP missing — backtest likely produced 0 trades")
+            return {"strategy": {"DynamicStrategy": {"total_trades": 0, "trades": []}}}
 
         import zipfile
         with zipfile.ZipFile(zip_path) as zf:
-            # The zip contains one JSON entry (e.g. "backtest-result.json")
             json_name = [n for n in zf.namelist() if n.endswith(".json")][0]
             return json.load(zf.open(json_name))
 
@@ -520,5 +656,14 @@ class BacktestEngine:
                 "raw": raw,
             }
         except (StopIteration, KeyError, TypeError, AttributeError) as exc:
-            logger.warning("Could not parse backtest result: %s", exc)
-            return {"error": str(exc), "raw": raw}
+            logger.warning("Could not parse backtest result: %s — raw keys: %s", exc, list(raw.keys()) if isinstance(raw, dict) else type(raw))
+            # Return zeroed metrics so the agent knows it failed
+            return {
+                "error": str(exc),
+                "raw": raw,
+                "total_trades": 0,
+                "profit_ratio": 0,
+                "max_drawdown": 0,
+                "sharpe_ratio": 0,
+                "win_rate": 0,
+            }

@@ -154,6 +154,10 @@ async def _run_orchestration(run_id: str, goal: str, max_cycles: int, max_iterat
     logger.info("━" * 50)
     logger.info("[RUN %s] Starting goal: %s", run_id, goal)
     logger.info("[RUN %s] max_cycles=%s  max_iterations=%s", run_id, max_cycles, max_iterations)
+    # Print goal plainly to terminal so it's visible above all async noise
+    print(f"\n{'='*60}")
+    print(f"  GOAL: {goal}")
+    print(f"{'='*60}\n")
     await bus.publish("run_start", {"goal": goal, "max_cycles": max_cycles, "max_iterations": max_iterations})
 
     try:
@@ -179,6 +183,12 @@ async def _run_orchestration(run_id: str, goal: str, max_cycles: int, max_iterat
             "total_iterations": result.get("total_iterations", 1),
             "converged": result.get("converged", False),
         })
+
+        # Emit sentiment if available in result (single-pass mode)
+        if isinstance(result, dict):
+            sentiment = result.get("sentiment")
+            if sentiment:
+                await bus.publish("sentiment", sentiment)
 
         logger.info("[RUN %s] ✅ Complete. Converged=%s | Iterations=%s", run_id, result.get("converged"), result.get("total_iterations"))
 
@@ -270,6 +280,11 @@ def _patch_orchestrator(orchestrator: "HermesOrchestrator", bus: EventBus, run_i
                 "task_count": len(done_tasks),
                 "metrics": metrics,
             })
+            # Emit sentiment if available in result
+            if isinstance(result, dict):
+                sentiment = result.get("sentiment")
+                if sentiment:
+                    emit("sentiment", sentiment)
             return result
 
         orchestrator._run_research_goal = patched_run

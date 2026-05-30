@@ -1,6 +1,7 @@
 """LangGraph state graph for the Hermes multi-agent orchestration loop."""
 
 import logging
+import threading
 from typing import Any, Dict, List, Literal, Optional, TypedDict
 
 from langgraph.graph import END, StateGraph
@@ -8,6 +9,13 @@ from langgraph.graph import END, StateGraph
 from orchestration.board import TaskBoard
 
 logger = logging.getLogger(__name__)
+
+_shutdown_event = threading.Event()
+
+
+def request_shutdown():
+    """Call this on SIGINT/KeyboardInterrupt to stop the graph cleanly."""
+    _shutdown_event.set()
 
 
 # ── State type ──
@@ -88,6 +96,14 @@ def dispatch_task(state: OrchestratorState) -> Dict[str, Any]:
 
 def execute_agent(state: OrchestratorState) -> Dict[str, Any]:
     """Run the assigned agent on the current task."""
+    if _shutdown_event.is_set():
+        logger.info("Shutdown requested — skipping agent execution")
+        board = state["board"]
+        task_id = state["current_task_id"]
+        if task_id and task_id in board.tasks:
+            board.tasks[task_id].status = "DONE"
+            board.tasks[task_id].result = "Skipped: shutdown requested"
+        return {"messages": ["EXECUTE: shutdown"]}
     board = state["board"]
     task_id = state["current_task_id"]
     agent_name = state["current_agent_name"]

@@ -134,6 +134,20 @@ function App() {
         }
         break;
 
+      case 'sentiment':
+        if (payload) {
+          const el = document.getElementById('sentiment-value');
+          if (el) {
+            el.textContent = (payload.bias || 'NEUTRAL').toUpperCase();
+            el.style.color = payload.bias === 'bullish' ? '#4ade80' : payload.bias === 'bearish' ? '#f87171' : '#fbbf24';
+          }
+          const fgEl = document.getElementById('sentiment-fg');
+          if (fgEl && payload.fear_greed) {
+            fgEl.textContent = `Fear & Greed: ${payload.fear_greed.value} (${payload.fear_greed.classification})`;
+          }
+        }
+        break;
+
       case 'task_done':
         setAgentTimeline(prev => [...prev.slice(-49), {
           agent: payload.agent,
@@ -147,6 +161,9 @@ function App() {
       case 'run_start':
         setRunning(true);
         setHypothesis('');
+        // Reset sentiment
+        { const el = document.getElementById('sentiment-value'); if (el) { el.textContent = '--'; el.style.color = ''; } }
+        { const el = document.getElementById('sentiment-fg'); if (el) el.textContent = 'Fear & Greed: --'; }
         setMetrics({});
         setIteration(0);
         setIterationChart([]);
@@ -299,11 +316,16 @@ function CentrePanel({ hypothesis, iteration, maxIterations, metrics, chartData 
       </div>
 
       {/* Metric Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
         <MetricCard label="Sharpe Ratio" value={metrics.sharpe_ratio?.toFixed(2) || '—'} color={COLORS.blue} />
         <MetricCard label="Win Rate" value={metrics.win_rate ? `${(metrics.win_rate * 100).toFixed(0)}%` : '—'} color={COLORS.green} />
         <MetricCard label="Max Drawdown" value={metrics.max_drawdown ? `${(Math.abs(metrics.max_drawdown) * 100).toFixed(1)}%` : '—'} color={COLORS.red} />
         <MetricCard label="Total Trades" value={metrics.total_trades || '—'} color={COLORS.purple} />
+        <div className="card" style={{ padding: '8px 12px', borderRadius: '8px', background: '#1a1a2e', border: '1px solid #2a2a4a' }}>
+          <div style={{ fontSize: '10px', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Market Sentiment</div>
+          <div id="sentiment-value" style={{ fontSize: '1.4rem', fontWeight: 700 }}>--</div>
+          <div id="sentiment-fg" style={{ fontSize: '0.8rem', opacity: 0.7 }}>Fear & Greed: --</div>
+        </div>
       </div>
 
       {/* Mini chart */}

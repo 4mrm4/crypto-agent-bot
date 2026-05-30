@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from orchestration.board import TaskBoard
 from orchestration.graph import build_orchestration_graph
 from orchestration.research import ResearchIteration, check_convergence
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,39 @@ class HermesOrchestrator:
                 )
                 logger.info("Injected past insights from memory.")
 
+        # Fetch market sentiment if enabled
+        sentiment_report = {}
+        if getattr(settings, "ENABLE_SENTIMENT", True):
+            try:
+                from data.sentiment import SentimentFetcher
+                sf = SentimentFetcher()
+                symbol = settings.SYMBOL.replace("/USDT", "")
+                sentiment_report = sf.get_full_sentiment_report(symbol)
+                logger.info(
+                    "Sentiment: F&G=%d (%s), bias=%s, score=%.2f",
+                    sentiment_report["fear_greed"]["value"],
+                    sentiment_report["fear_greed"]["classification"],
+                    sentiment_report["bias"],
+                    sentiment_report["score"],
+                )
+            except Exception as exc:
+                logger.warning("Sentiment fetch failed: %s", exc)
+
+        # Detect chart patterns on recent data
+        pattern_report = {}
+        if getattr(settings, "ENABLE_PATTERNS", True):
+            try:
+                from data.fetcher import MarketDataFetcher
+                from data.patterns import PatternDetector
+                fetcher = MarketDataFetcher()
+                df = fetcher.fetch_ohlcv(settings.SYMBOL, "1h", limit=50)
+                if df is not None and len(df) > 20:
+                    pd_detector = PatternDetector()
+                    pattern_report = pd_detector.get_pattern_report(df)
+                    logger.info("Patterns: %s (bias=%s)", pattern_report["active_patterns"], pattern_report["bias"])
+            except Exception as exc:
+                logger.warning("Pattern detection failed: %s", exc)
+
         # Build enriched goal with hypothesis context
         enriched_goal = goal
         if hypothesis:
@@ -175,6 +209,18 @@ class HermesOrchestrator:
             import json
             specs_text = json.dumps(research_specs, indent=2)[:800]
             strategist_task_desc += f"\n\nUse these research specs as starting hypotheses:\n{specs_text}"
+        if sentiment_report:
+            strategist_task_desc += (
+                f"\n\nCurrent market sentiment: {sentiment_report['bias'].upper()} "
+                f"(Fear/Greed={sentiment_report['fear_greed']['value']}, score={sentiment_report['score']:.2f}). "
+                f"Consider sentiment when choosing strategy type."
+            )
+        if pattern_report and pattern_report.get("active_patterns"):
+            strategist_task_desc += (
+                f"\n\nActive chart patterns: {', '.join(pattern_report['active_patterns'])} "
+                f"(bias={pattern_report['bias']}). "
+                f"Factor this into entry/exit timing."
+            )
         self.board.add_task(strategist_task_desc, assigned_to="strategist")
 
         self.board.add_task(
@@ -235,6 +281,13 @@ class HermesOrchestrator:
                     persisted += 1
             if persisted:
                 logger.info("Persisted %d iteration records to memory", persisted)
+
+        # Attach sentiment/pattern data to output for Web UI emission
+        if isinstance(output, dict):
+            if sentiment_report:
+                output["sentiment"] = sentiment_report
+            if pattern_report:
+                output["pattern_report"] = pattern_report
 
         logger.info("=== Inner research complete ===")
         return output
@@ -376,7 +429,6 @@ class HermesOrchestrator:
 
     def _extract_metrics(self, output: Dict[str, Any]) -> Dict[str, Any]:
         """Extract best available metrics from the research output."""
-        # Try from the output top-level fields first
         metrics = {
             "sharpe_ratio": output.get("sharpe_ratio", 0),
             "win_rate": output.get("win_rate", 0),
@@ -385,20 +437,25 @@ class HermesOrchestrator:
             "total_trades": output.get("total_trades", 0),
         }
 
-        # If not populated, try to find the strategist task result
-        if not metrics["total_trades"]:
-            done_tasks = self.board.get_tasks_by_status("DONE")
-            for task in done_tasks:
-                if task.result and "Backtest result" in str(task.result):
-                    lines = str(task.result).split("\n")
-                    for line in lines:
-                        for key in ["sharpe_ratio", "win_rate", "max_drawdown", "total_trades", "profit_ratio"]:
-                            if key in line:
-                                try:
-                                    val = line.split(":")[-1].strip()
-                                    metrics[key] = float(val)
-                                except (ValueError, IndexError):
-                                    pass
+        if metrics["total_trades"]:
+            return metrics
+
+        # Search task results for the strategist's backtest output dict
+        strategist = self.agents.get("strategist")
+        if strategist and hasattr(strategist, "_iteration_history") and strategist._iteration_history:
+            # Take the best Sharpe from iteration history
+            best = max(
+                strategist._iteration_history,
+                key=lambda r: r.metrics.get("sharpe_ratio", -999) if isinstance(r.metrics.get("sharpe_ratio"), (int, float)) else -999
+            )
+            return {
+                "sharpe_ratio": best.metrics.get("sharpe_ratio", 0),
+                "win_rate": best.metrics.get("win_rate", 0),
+                "max_drawdown": best.metrics.get("max_drawdown", 0),
+                "profit_ratio": best.metrics.get("profit_ratio", best.metrics.get("total_profit", 0)),
+                "total_trades": best.metrics.get("total_trades", 0),
+            }
+
         return metrics
 
     def _extract_strategy_id(self, output: Dict[str, Any]) -> str:

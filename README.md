@@ -8,6 +8,15 @@ Modular crypto trading bot with learning agents, inspired by Vibe-Trading and He
 - Web UI goal input fix — modal now sends your typed goal instead of the default
 - TA-Lib compat fix — BBANDS uses `float` params, MACD casts to `float` before subtraction
 - Data pre-loaded for BTC, ETH, XRP, SOL (5m/15m/1h, 2017–2026)
+- **Shutdown safety** — Ctrl+C triggers clean graph shutdown via `threading.Event`
+- **`--prepend` auto-detect** — `download_data()` retries with `--prepend` when local data exists but timerange is earlier
+- **Graceful zero-trade handling** — missing ZIP files return zeroed metrics instead of crashing
+- **Better metric extraction** — `_extract_metrics()` reads directly from iteration history (max Sharpe), no fragile text parsing
+- **Sentiment data** — Fear & Greed Index + CryptoPanic/CoinGecko news, shown as a 5th Web UI metric card
+- **Candlestick pattern detection** — 13 TA-Lib patterns (hammer, engulfing, etc.) injected into strategist task context
+- **Market regime detection** — ADX/ATR/SMA200-based classification (trending, ranging, volatile)
+- **5 new strategy types** — `momentum`, `breakout`, `mean_reversion`, `volatility_squeeze`, `sentiment_driven`
+- **Regime guidance** — system prompt tells the LLM which strategy types suit each market regime
 
 ## Architecture
 
@@ -57,6 +66,9 @@ graph TD
 | **FastAPI Server** | `api/server.py` | WebSocket streaming + REST endpoints |
 | **EventBus** | `api/event_bus.py` | Async event streaming for Web UI |
 | **Web UI** | `ui/index.html` | Single-file React dashboard |
+| **SentimentFetcher** | `data/sentiment.py` | Fear & Greed + CryptoPanic/CoinGecko news |
+| **PatternDetector** | `data/patterns.py` | 13 candlestick patterns via TA-Lib |
+| **MarketRegimeDetector** | `data/regime.py` | ADX/ATR/SMA200 regime classification |
 
 ## Setup
 
@@ -159,7 +171,7 @@ python test_e2e.py      # Full end-to-end
 
 ## Strategy Types
 
-The strategist supports 6 strategy types:
+The strategist supports 11 strategy types:
 
 | Type | Description | Indicators |
 |---|---|---|
@@ -168,6 +180,11 @@ The strategist supports 6 strategy types:
 | `rsi_oversold` | RSI oversold/overbought | `ta.RSI` |
 | `bollinger_bands` | Bollinger Bands lower/upper touch | `ta.BBANDS` |
 | `combined_sma_rsi` | SMA crossover + RSI filter | `ta.SMA`, `ta.RSI` |
+| `momentum` | ROC + volume confirmation | `ta.ROC`, `ta.SMA`, `ta.RSI` |
+| `breakout` | N-period high breakout with volume spike | rolling max, `ta.SMA`, `ta.ATR` |
+| `mean_reversion` | BB + RSI oversold for ranging markets | `ta.BBANDS`, `ta.RSI` |
+| `volatility_squeeze` | BB width contraction then expansion | `ta.BBANDS`, `ta.MACD` |
+| `sentiment_driven` | RSI + SMA (use when fear/greed < 30) | `ta.RSI`, `ta.SMA` |
 | `custom` | User-defined TA code | Any `ta.*` expressions |
 
 ## Strategist Tools

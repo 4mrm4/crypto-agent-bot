@@ -148,6 +148,14 @@ def _run_demo():
 
 def _run_cli_command(cmd_list):
     """Parse and execute a workspace CLI command."""
+    import signal
+    from orchestration.graph import request_shutdown
+
+    def _handle_sigint(sig, frame):
+        logger.info("Received SIGINT — requesting clean graph shutdown...")
+        request_shutdown()
+
+    signal.signal(signal.SIGINT, _handle_sigint)
     from orchestration.hermes import HermesOrchestrator
     from workspace.vibe import VibeWorkspace
 
