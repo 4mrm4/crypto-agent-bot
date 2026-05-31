@@ -109,6 +109,10 @@ class DynamicStrategy(IStrategy):
 $indicator_params_block
     def populate_indicators(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
         $indicator_code
+        # Coerce all object/string columns to numeric to prevent Arrow backend errors
+        for col in dataframe.columns:
+            if dataframe[col].dtype in ('object', 'string', 'large_string'):
+                dataframe[col] = pd.to_numeric(dataframe[col], errors='coerce')
         return dataframe
 
     def populate_entry_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
@@ -149,38 +153,51 @@ SMA_CROSSOVER_EXIT = """
 # ── MACD Crossover snippets ──
 
 MACD_CROSSOVER_INDICATOR = """
-        macd_data = ta.MACD(dataframe, fastperiod=12, slowperiod=26, signalperiod=9)
+        macd_data = ta.MACD(
+            dataframe,
+            fastperiod=self.macd_fast.value,
+            slowperiod=self.macd_slow.value,
+            signalperiod=self.macd_signal.value,
+        )
         dataframe['macd'] = macd_data['macd'].astype(float)
         dataframe['macdsignal'] = macd_data['macdsignal'].astype(float)
-        dataframe['macd'] = dataframe['macd'] - dataframe['macdsignal']
+        dataframe['macd_hist'] = (dataframe['macd'] - dataframe['macdsignal']).astype(float)
 """
 
 MACD_CROSSOVER_ENTRY = """
-        (dataframe['macd'].shift(1) <= 0) & (dataframe['macd'] > 0)
+        (dataframe['macd_hist'].shift(1) <= 0) & (dataframe['macd_hist'] > 0)
 """
 
 MACD_CROSSOVER_EXIT = """
-        (dataframe['macd'].shift(1) >= 0) & (dataframe['macd'] < 0)
+        (dataframe['macd_hist'].shift(1) >= 0) & (dataframe['macd_hist'] < 0)
 """
 
 # ── RSI Oversold/Overbought snippets ──
 
 RSI_INDICATOR = """
-        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=14)
+        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=self.rsi_period.value)
 """
 
 RSI_OVERSOLD_ENTRY = """
-        (dataframe['rsi'] < 30) & (dataframe['rsi'].shift(1) >= 30)
+        (dataframe['rsi'] < self.rsi_buy_threshold.value) & (dataframe['rsi'].shift(1) >= self.rsi_buy_threshold.value)
 """
 
 RSI_OVERSOLD_EXIT = """
-        (dataframe['rsi'] > 70) & (dataframe['rsi'].shift(1) <= 70)
+        (dataframe['rsi'] > self.rsi_sell_threshold.value) & (dataframe['rsi'].shift(1) <= self.rsi_sell_threshold.value)
 """
 
 # ── Bollinger Bands snippets ──
 
 BB_INDICATOR = """
-        dataframe['bb_upper'], dataframe['bb_middle'], dataframe['bb_lower'] = ta.BBANDS(dataframe, timeperiod=20, nbdevup=2.0, nbdevdn=2.0)
+        upper, middle, lower = ta.BBANDS(
+            dataframe['close'].astype(float),
+            timeperiod=self.bb_period.value,
+            nbdevup=2.0,
+            nbdevdn=2.0,
+        )
+        dataframe['bb_upper'] = upper
+        dataframe['bb_middle'] = middle
+        dataframe['bb_lower'] = lower
 """
 
 BB_ENTRY = """
@@ -227,21 +244,31 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "indicator_code": MACD_CROSSOVER_INDICATOR,
         "entry_condition": MACD_CROSSOVER_ENTRY,
         "exit_condition": MACD_CROSSOVER_EXIT,
-        "indicator_params_block": "",
+        "indicator_params_block": """
+    macd_fast = IntParameter(8, 20, default=12, space="buy")
+    macd_slow = IntParameter(20, 40, default=26, space="buy")
+    macd_signal = IntParameter(6, 14, default=9, space="buy")
+""",
         "default_params": {"startup_candle_count": 33},
     },
     "rsi_oversold": {
         "indicator_code": RSI_INDICATOR,
         "entry_condition": RSI_OVERSOLD_ENTRY,
         "exit_condition": RSI_OVERSOLD_EXIT,
-        "indicator_params_block": "",
+        "indicator_params_block": """
+    rsi_period = IntParameter(10, 21, default=14, space="buy")
+    rsi_buy_threshold = IntParameter(25, 35, default=30, space="buy")
+    rsi_sell_threshold = IntParameter(65, 80, default=70, space="sell")
+""",
         "default_params": {"startup_candle_count": 20},
     },
     "bollinger_bands": {
         "indicator_code": BB_INDICATOR,
         "entry_condition": BB_ENTRY,
         "exit_condition": BB_EXIT,
-        "indicator_params_block": "",
+        "indicator_params_block": """
+    bb_period = IntParameter(15, 30, default=20, space="buy")
+""",
         "default_params": {"startup_candle_count": 26},
     },
     "combined_sma_rsi": {
@@ -351,6 +378,37 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
     """,
         "indicator_params_block": "",
         "default_params": {"startup_candle_count": 55},
+    },
+
+    "multi_timeframe": {
+        "indicator_code": """
+        # 1h timeframe indicators (primary)
+        dataframe['sma20'] = ta.SMA(dataframe, timeperiod=20)
+        dataframe['sma50'] = ta.SMA(dataframe, timeperiod=50)
+        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=14)
+        # Proxy for 4h trend: use longer SMAs on 1h data (approx 4x periods)
+        dataframe['sma80'] = ta.SMA(dataframe, timeperiod=80)
+        dataframe['sma200'] = ta.SMA(dataframe, timeperiod=200)
+        dataframe['adx'] = ta.ADX(dataframe, timeperiod=14)
+    """,
+        "entry_condition": """
+        # Short-term signal: 20 crosses above 50
+        (dataframe['sma20'].shift(1) <= dataframe['sma50'].shift(1)) &
+        (dataframe['sma20'] > dataframe['sma50']) &
+        # Long-term confirmation: price above 200 SMA (higher timeframe proxy)
+        (dataframe['close'] > dataframe['sma200']) &
+        # Trend strength: ADX > 20
+        (dataframe['adx'] > 20) &
+        # RSI not overbought
+        (dataframe['rsi'] > 40) & (dataframe['rsi'] < 70)
+    """,
+        "exit_condition": """
+        (dataframe['sma20'].shift(1) >= dataframe['sma50'].shift(1)) &
+        (dataframe['sma20'] < dataframe['sma50']) |
+        (dataframe['close'] < dataframe['sma200'])
+    """,
+        "indicator_params_block": "",
+        "default_params": {"startup_candle_count": 205},
     },
 }
 
@@ -511,6 +569,118 @@ class BacktestEngine:
 
         logger.info("Data download complete.")
 
+    def walk_forward_validate(
+        self,
+        strategy_params: Dict[str, Any],
+        strategy_type: str = "sma_crossover",
+        start_date: str = "",
+        end_date: str = "",
+        windows: int = 3,
+        pairs: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Split timerange into N windows and backtest each independently.
+        Returns per-window metrics and an overall consistency score.
+        A strategy is only valid if it performs reasonably across ALL windows.
+        """
+        from datetime import datetime, timedelta
+
+        # ── 3A: Auto-detect available data range if dates not provided ──
+        if not start_date or not end_date:
+            data_path = self.ft_userdata_dir / "data" / "binance"
+            pair_file = list(data_path.glob("BTC_USDT-1h*.json"))
+            if not pair_file:
+                pair_file = list(data_path.glob("BTC_USDT-1h*.feather"))
+            if pair_file:
+                import time
+                newest = max(pair_file, key=lambda f: f.stat().st_mtime)
+                end_dt = datetime.fromtimestamp(newest.stat().st_mtime)
+                # Start 90 days before end for meaningful windows
+                start_dt = end_dt - timedelta(days=90)
+                start_date = start_date or start_dt.strftime("%Y%m%d")
+                end_date = end_date or end_dt.strftime("%Y%m%d")
+                logger.info(
+                    "Auto-detected data range for walk-forward: %s to %s",
+                    start_date, end_date
+                )
+            else:
+                # Fallback to last 30 days
+                from datetime import datetime as dt
+                end_date = end_date or dt.utcnow().strftime("%Y%m%d")
+                start_date = start_date or (dt.utcnow() - timedelta(days=30)).strftime("%Y%m%d")
+
+        start = datetime.strptime(start_date, "%Y%m%d")
+        end = datetime.strptime(end_date, "%Y%m%d")
+        total_days = (end - start).days
+        window_days = total_days // windows
+
+        # ── 3A: Minimum window size guard ──
+        if window_days < 14:
+            actual_windows = max(2, total_days // 14)
+            logger.warning(
+                "Requested %d windows but only %d days available. "
+                "Reducing to %d windows (%d days each).",
+                windows, total_days, actual_windows, total_days // actual_windows
+            )
+            windows = actual_windows
+            window_days = total_days // windows
+
+        if total_days < 14:
+            return {
+                "error": f"Only {total_days} days of data available. "
+                         "Need at least 14 days for walk-forward validation.",
+                "windows": [],
+                "consistency_score": 0,
+                "avg_sharpe": 0,
+                "avg_win_rate": 0,
+                "is_robust": False,
+            }
+
+        window_results = []
+        for i in range(windows):
+            w_start = start + timedelta(days=i * window_days)
+            w_end = w_start + timedelta(days=window_days)
+            timerange = f"{w_start.strftime('%Y%m%d')}-{w_end.strftime('%Y%m%d')}"
+            try:
+                result = self.run_backtest(
+                    strategy_params=dict(strategy_params),
+                    strategy_type=strategy_type,
+                    timerange=timerange,
+                    pairs=pairs,
+                )
+                window_results.append({
+                    "window": i + 1,
+                    "timerange": timerange,
+                    "sharpe": result.get("sharpe_ratio", 0),
+                    "win_rate": result.get("win_rate", 0),
+                    "max_drawdown": result.get("max_drawdown", 0),
+                    "total_trades": result.get("total_trades", 0),
+                    "error": result.get("error", ""),
+                })
+            except Exception as exc:
+                window_results.append({
+                    "window": i + 1,
+                    "timerange": timerange,
+                    "error": str(exc),
+                    "sharpe": 0, "win_rate": 0,
+                    "max_drawdown": 0, "total_trades": 0,
+                })
+
+        # Consistency score: % of windows with positive Sharpe
+        valid_windows = [w for w in window_results if w["sharpe"] > 0 and w["total_trades"] >= 3]
+        consistency = len(valid_windows) / windows if windows > 0 else 0
+
+        avg_sharpe = sum(w["sharpe"] for w in window_results) / windows if windows > 0 else 0
+        avg_win_rate = sum(w["win_rate"] for w in window_results) / windows if windows > 0 else 0
+
+        return {
+            "windows": window_results,
+            "consistency_score": round(consistency, 2),
+            "avg_sharpe": round(avg_sharpe, 3),
+            "avg_win_rate": round(avg_win_rate, 3),
+            "is_robust": consistency >= 0.67,  # passes 2/3 windows minimum
+        }
+
     # ------------------------------------------------------------------
     # Strategy validation
     # ------------------------------------------------------------------
@@ -630,34 +800,79 @@ class BacktestEngine:
         import zipfile
         with zipfile.ZipFile(zip_path) as zf:
             json_name = [n for n in zf.namelist() if n.endswith(".json")][0]
-            return json.load(zf.open(json_name))
+            result_data = json.load(zf.open(json_name))
+        # Dump for debugging (overwritten each run)
+        debug_path = export_path / "last_result_debug.json"
+        with open(debug_path, "w") as dbf:
+            json.dump(result_data, dbf, indent=2, default=str)
+        logger.debug("Raw result dumped to %s", debug_path)
+        return result_data
 
     def _parse_results(self, raw: Dict[str, Any]) -> Dict[str, Any]:
-        """Convert Freqtrade 2026.4's nested result into a flat summary + trades DataFrame."""
-        try:
-            # Navigate: raw["strategy"]["DynamicStrategy"] -> flat result dict
-            strategy_block = raw.get("strategy", {})
-            strat_name = next(iter(strategy_block))
-            strategy_data = strategy_block[strat_name]
+        """Parse Freqtrade result JSON into flat summary."""
+        # Log raw structure for debugging
+        if isinstance(raw, dict):
+            logger.debug("Raw result top-level keys: %s", list(raw.keys()))
 
-            trades_raw = strategy_data.get("trades", [])
+        try:
+            strategy_block = raw.get("strategy", {})
+            if not strategy_block:
+                # Some versions put results directly at top level
+                strategy_block = {"DynamicStrategy": raw}
+
+            strat_name = next(iter(strategy_block))
+            sd = strategy_block[strat_name]
+
+            logger.debug("Parsing strategy block for '%s', keys: %s",
+                         strat_name, list(sd.keys()))
+
+            trades_raw = sd.get("trades", [])
             trades = pd.DataFrame(trades_raw) if trades_raw else pd.DataFrame()
 
-            metrics = self.get_performance_metrics(trades) if not trades.empty else {}
+            # Try multiple field name variants across Freqtrade versions
+            def _get(d, *keys, default=0):
+                for k in keys:
+                    if k in d and d[k] is not None:
+                        try:
+                            return float(d[k])
+                        except (TypeError, ValueError):
+                            pass
+                return default
+
+            total_trades = int(_get(sd, "total_trades", "trades_count", default=len(trades)))
+            sharpe = _get(sd, "sharpe", "sharpe_ratio", "sharpe_ratio_account")
+            win_rate = _get(sd, "winrate", "win_rate", "wins_per_trade")
+            drawdown = _get(sd, "max_drawdown_account", "max_drawdown", "max_drawdown_abs")
+            profit = _get(sd, "profit_mean", "profit_total", "profit_factor",
+                          "profit_total_abs")
+
+            logger.info(
+                "Parsed metrics: trades=%d sharpe=%.3f wr=%.3f dd=%.3f profit=%.4f",
+                total_trades, sharpe, win_rate, drawdown, profit
+            )
+
+            metrics = {}
+            if not trades.empty:
+                metrics = self.get_performance_metrics(trades)
 
             return {
-                "summary": strategy_data,
-                "total_trades": strategy_data.get("total_trades", len(trades)),
-                "profit_ratio": strategy_data.get("profit_mean", 0),
-                "max_drawdown": strategy_data.get("max_drawdown_account", 0),
-                "sharpe_ratio": strategy_data.get("sharpe", 0),
-                "win_rate": strategy_data.get("winrate", metrics.get("win_rate", 0)),
+                "summary": sd,
+                "total_trades": total_trades,
+                "profit_ratio": profit or metrics.get("total_profit", 0),
+                "max_drawdown": drawdown or metrics.get("max_drawdown", 0),
+                "sharpe_ratio": sharpe or metrics.get("sharpe_ratio", 0),
+                "win_rate": win_rate or metrics.get("win_rate", 0),
                 "trades_df": trades,
                 "raw": raw,
             }
+
         except (StopIteration, KeyError, TypeError, AttributeError) as exc:
-            logger.warning("Could not parse backtest result: %s — raw keys: %s", exc, list(raw.keys()) if isinstance(raw, dict) else type(raw))
-            # Return zeroed metrics so the agent knows it failed
+            logger.warning(
+                "Could not parse backtest result: %s\nRaw type: %s, keys: %s",
+                exc,
+                type(raw),
+                list(raw.keys()) if isinstance(raw, dict) else "N/A"
+            )
             return {
                 "error": str(exc),
                 "raw": raw,

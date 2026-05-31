@@ -3,6 +3,7 @@
 import json
 import logging
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -31,6 +32,7 @@ Available strategy types:
 - mean_reversion: BB + RSI oversold (ranging markets)
 - volatility_squeeze: BB width contraction then expansion
 - sentiment_driven: RSI + SMA (use when fear/greed < 30)
+- multi_timeframe: 1h SMA crossover confirmed by 200 SMA (higher TF proxy) + ADX filter
 - custom: provide raw indicator_code, entry_condition, exit_condition
 
 REGIME GUIDANCE:
@@ -57,12 +59,45 @@ Target metrics:
 - Max drawdown < 5%
 - Positive profit ratio
 
-IMPORTANT: Use ONLY plain ASCII text. No emoji, no Unicode symbols, no special characters.
+STRATEGY CONCEPT LIBRARY:
+When choosing a strategy, first consider these proven concepts:
+- Golden Cross: SMA50/200 crossover -> use sma_crossover(fast_ma=50, slow_ma=200)
+- RSI Divergence: oversold bounce -> use rsi_oversold
+- Volatility Breakout: N-day high + volume -> use breakout
+- MACD Histogram Reversal: zero-cross -> use macd_crossover
+- BB Squeeze: contraction then expansion -> use volatility_squeeze
+- Fear/Greed Contrarian: extreme fear buy -> use sentiment_driven
+- Multi-TF Trend: short cross + long confirm -> use multi_timeframe
+- Momentum + Volume: ROC + volume spike -> use momentum
+- Mean Reversion: BB + RSI oversold -> use mean_reversion
+
+Map the research goal to the most suitable concept, then pick its
+freqtrade_type and suggested_params as your starting point.
+
+NEW TOOLS AVAILABLE:
+- run_hyperopt: After generating a strategy, use this to automatically find
+  optimal parameters via Freqtrade's built-in optimizer. Faster and more
+  thorough than manual suggest_next_params. Use epochs=50 for a quick search,
+  epochs=200 for thorough optimization.
+- walk_forward_validate: Before declaring a strategy 'kept', validate it across
+  multiple time windows to check it's not overfit.
+
+VALIDATION WORKFLOW (use this order):
+1. generate_strategy
+2. run_backtest (quick check)
+3. If metrics look promising: walk_forward_validate (robustness check)
+4. If robust: run_hyperopt (optimize parameters)
+5. run_backtest again with optimized params
+6. If passes: record as kept
 
 DATA AVAILABILITY:
 - Local data starts from 2026-04-27 for BTC/USDT and ETH/USDT on 1h
 - For earlier dates, call download_data first (it will use --prepend automatically)
-- Always use timerange format YYYYMMDD-YYYYMMDD (e.g. 20260427-20260530)"""
+- Always use timerange format YYYYMMDD-YYYYMMDD (e.g. 20260427-20260530)
+
+IMPORTANT: Use ONLY plain ASCII text. No emoji, no Unicode symbols, no special characters.
+
+"""
 
 # Minimum acceptable metrics — any result below these is flagged.
 _MIN_SHARPE = 1.0
@@ -125,6 +160,12 @@ class StrategistAgent(BaseAgent):
         # Track the best strategy found
         self._best_strategy: Optional[Dict[str, Any]] = None
         self._best_params: Optional[Dict[str, Any]] = None
+        # Structured experiment tracker
+        from orchestration.experiment_tracker import ExperimentTracker
+        self._tracker = ExperimentTracker()
+        # Current market context (set by Hermes before task dispatch)
+        self._current_regime: str = ""
+        self._current_sentiment: float = 0.0
         tools = self._build_tools()
         super().__init__(
             name="strategist",
@@ -167,7 +208,8 @@ class StrategistAgent(BaseAgent):
             valid_types = {"sma_crossover", "macd_crossover", "rsi_oversold",
                            "bollinger_bands", "combined_sma_rsi", "custom",
                            "momentum", "breakout", "mean_reversion",
-                           "volatility_squeeze", "sentiment_driven"}
+                           "volatility_squeeze", "sentiment_driven",
+                           "multi_timeframe"}
             if strategy_type not in valid_types:
                 return f"Error: unknown strategy_type '{strategy_type}'. Valid: {', '.join(sorted(valid_types))}"
 
@@ -184,6 +226,19 @@ class StrategistAgent(BaseAgent):
                 params.setdefault("fast_ma", 10)
                 params.setdefault("slow_ma", 30)
 
+            # Retrieve past winning strategies from memory for context
+            try:
+                from memory.vector_store import VectorStore
+                vs = VectorStore()
+                past_winners = vs.get_best_strategies(min_sharpe=0.8, k=3)
+                if past_winners:
+                    past_text = "\n".join([f"  - {r['text'][:150]}" for r in past_winners])
+                    memory_hint = f"\n[Memory: {len(past_winners)} past winning strategies found:\n{past_text}\n]"
+                else:
+                    memory_hint = ""
+            except Exception:
+                memory_hint = ""
+
             strategy_id = uuid.uuid4().hex[:8]
             self._generated_strategies[strategy_id] = params
 
@@ -197,7 +252,9 @@ class StrategistAgent(BaseAgent):
                 summary += f", timeframe={params['timeframe']}"
             if params.get("pairs"):
                 summary += f", pairs={params['pairs']}"
-            return summary
+            return summary + memory_hint
+
+        # Tool: run_backtest
 
         def set_backtest_config(config_json: str = "{}") -> str:
             """Set global backtest configuration that applies to all subsequent runs.
@@ -266,14 +323,50 @@ class StrategistAgent(BaseAgent):
             rec = IterationRecord(strat_params, result)
             rec.evaluate()
             self._iteration_history.append(rec)
+
+            # Persist result to strategy memory if verdict is kept
+            if rec.verdict == "kept":
+                try:
+                    from memory.vector_store import VectorStore
+                    vs = VectorStore()
+                    vs.store_strategy_result(
+                        strategy_type=strategy_type,
+                        params={k: v for k, v in strat_params.items()
+                                if k not in ("indicator_code", "entry_condition",
+                                             "exit_condition", "indicator_params_block")},
+                        metrics=result,
+                        timerange=timerange,
+                    )
+                except Exception as exc:
+                    logger.debug("Could not persist strategy to memory: %s", exc)
+            # Record structured experiment for data-driven iteration
+            try:
+                from orchestration.experiment_tracker import Experiment
+                exp = Experiment(
+                    strategy_type=strategy_type,
+                    params={k: v for k, v in strat_params.items()
+                            if k not in ("indicator_code", "entry_condition",
+                                         "exit_condition", "indicator_params_block")},
+                    timerange=timerange,
+                    regime=getattr(self, "_current_regime", ""),
+                    sentiment_score=getattr(self, "_current_sentiment", 0.0),
+                    sharpe=result.get("sharpe_ratio", 0),
+                    win_rate=result.get("win_rate", 0),
+                    max_drawdown=result.get("max_drawdown", 0),
+                    total_trades=result.get("total_trades", 0),
+                    verdict=rec.verdict,
+                    iteration=len(self._iteration_history),
+                )
+                self._tracker.record(exp)
+            except Exception as exc:
+                logger.debug("Could not record experiment: %s", exc)
             lines.append(f"  Verdict: {rec.verdict.upper()} -- {rec.reason}")
 
             return "\n".join(lines)
 
         def suggest_next_params(_: str = "") -> str:
-            """Analyse iteration history and suggest what to try next.
-            Works with any strategy type. Looks at past keep/discard records
-            and recommends the most promising direction.
+            """Analyse past attempts and recommend next parameters to try.
+            Uses the structured ExperimentTracker for data-driven suggestions.
             Call this after run_backtest + interpret_metrics."""
 
             if not self._iteration_history:
@@ -281,74 +374,22 @@ class StrategistAgent(BaseAgent):
                         "  generate_strategy with strategy_type='sma_crossover', fast_ma=10, slow_ma=30, stoploss=-0.05\n"
                         "Then backtest and iterate.")
 
-            # Group best result by strategy type
-            best_by_type = {}
-            seen_types = set()
-            for rec in self._iteration_history:
-                st = rec.params.get("strategy_type", "sma_crossover")
-                seen_types.add(st)
-                sharpe = rec.metrics.get("sharpe_ratio", -999)
-                if isinstance(sharpe, (int, float)):
-                    prev = best_by_type.get(st, {}).get("sharpe", -999)
-                    if sharpe > prev:
-                        best_by_type[st] = {"params": rec.params, "sharpe": sharpe, "metrics": rec.metrics}
+            tracker_summary = self._tracker.summary()
 
-            # Analyse recent issues
-            recent = self._iteration_history[-3:]
-            issues_seen = []
-            for rec in recent:
-                if rec.verdict == "discarded":
-                    issues_seen.append(rec.reason)
-            common_issues = "; ".join(sorted(set(issues_seen))) if issues_seen else "none"
+            last = self._iteration_history[-1]
+            strategy_type = last.params.get("strategy_type", "sma_crossover")
+            current_params = {k: v for k, v in last.params.items()
+                              if k not in ("strategy_type", "indicator_code",
+                                           "entry_condition", "exit_condition")}
 
-            lines = [
-                f"Iteration history: {len(self._iteration_history)} attempts across types: {', '.join(sorted(seen_types))}",
-                f"Recent issues: {common_issues}",
-            ]
+            next_params = self._tracker.suggest_next_params(strategy_type, current_params)
+            next_params["strategy_type"] = strategy_type
 
-            for st, best in best_by_type.items():
-                lines.append(f"Best {st}: Sharpe={best['sharpe']:.2f} params={best['params']}")
-
-            # Generic metric-driven suggestions (type-agnostic)
-            if "Sharpe" in common_issues:
-                lines.append("Suggestion: Tighten stoploss, add a filter indicator, or try a different strategy type.")
-            elif "Win rate" in common_issues:
-                lines.append("Suggestion: Stricter entry conditions -- increase indicator thresholds or combine with a filter.")
-            elif "Drawdown" in common_issues:
-                lines.append("Suggestion: Reduce stoploss, add trailing stop, or lower position sizing.")
-            elif "profit" in common_issues.lower():
-                lines.append("Suggestion: Try the opposite signal direction, a different pair, or a different timeframe.")
-            else:
-                lines.append("Suggestion: Try adjusting parameters or switching to a different strategy type.")
-
-            # For SMA-based strategies, suggest numerical ranges
-            sma_types = [st for st in seen_types if st in ("sma_crossover", "combined_sma_rsi")]
-            if sma_types and best_by_type:
-                best = best_by_type.get(sma_types[0])
-                if best:
-                    bf = best["params"].get("fast_ma", 10)
-                    bs = best["params"].get("slow_ma", 30)
-                    tested_fast = set()
-                    tested_slow = set()
-                    for rec in self._iteration_history:
-                        f = rec.params.get("fast_ma")
-                        s = rec.params.get("slow_ma")
-                        if f: tested_fast.add(f)
-                        if s: tested_slow.add(s)
-
-                    lines.append("")
-                    lines.append("SMA next params to try:")
-                    candidates = [(bf + 5, bs + 10), (bf, bs + 20), (bf + 10, bs + 30), (bf - 3, bs - 5)]
-                    found = False
-                    for cf, cs in candidates:
-                        if cf not in tested_fast and cs not in tested_slow and cf < cs:
-                            lines.append(f"  fast_ma={cf}, slow_ma={cs}")
-                            found = True
-                            break
-                    if not found:
-                        lines.append("  (nearby SMA combos exhausted -- try a different strategy type)")
-
-            return "\n".join(lines)
+            return (
+                f"{tracker_summary}\n\n"
+                f"Suggested next params: {json.dumps(next_params, indent=2)}\n"
+                f"Use generate_strategy with these params, then run_backtest."
+            )
 
         # ------------------------------------------------------------------
         # New tool: get_best_strategy
@@ -534,6 +575,130 @@ class StrategistAgent(BaseAgent):
                 lines.append(f"**Recommended**: [{best_sid}] with Sharpe={best_sharpe}")
             return "\n".join(lines)
 
+        def run_hyperopt(params_json: str = "{}") -> str:
+            """
+            Run Freqtrade hyperopt to automatically find optimal parameters.
+            MUCH more powerful than manual parameter tweaking.
+            Pass JSON: {"strategy_id": "abc123", "epochs": 50, "loss": "SharpeHyperOptLoss"}
+            Loss options: SharpeHyperOptLoss, WinRatioAndProfitRatioLoss, OnlyProfitHyperOptLoss
+            Returns best parameters found by hyperopt.
+            """
+            import json, subprocess
+            try:
+                params = json.loads(params_json)
+            except json.JSONDecodeError:
+                params = {}
+
+            sid = params.get("strategy_id", "")
+            epochs = int(params.get("epochs", 50))
+            loss = params.get("loss", "SharpeHyperOptLoss")
+
+            if sid and sid not in self._generated_strategies:
+                return f"Error: unknown strategy_id '{sid}'. Use generate_strategy first."
+
+            # ── 2B: Check if this strategy type supports hyperopt ──
+            if sid and sid in self._generated_strategies:
+                strat_type = self._generated_strategies[sid].get("strategy_type", "")
+                HYPEROPT_SUPPORTED = {
+                    "sma_crossover", "combined_sma_rsi", "macd_crossover",
+                    "rsi_oversold", "bollinger_bands", "multi_timeframe"
+                }
+                if strat_type and strat_type not in HYPEROPT_SUPPORTED:
+                    return (
+                        f"Note: {strat_type} does not have IntParameter declarations "
+                        f"so hyperopt cannot tune its parameters. "
+                        f"Try one of: {', '.join(sorted(HYPEROPT_SUPPORTED))}"
+                    )
+
+            # Use latest generated strategy if no ID given
+            if not sid and self._generated_strategies:
+                sid = list(self._generated_strategies.keys())[-1]
+
+            global_cfg = getattr(self, "_backtest_config", {})
+            timerange = global_cfg.get("timerange", "20260427-")
+            pairs = global_cfg.get("pairs", ["BTC/USDT"])
+
+            cmd = [
+                self._engine._freqtrade_cmd,
+                "hyperopt",
+                "--userdir", str(self._engine.ft_userdata_dir),
+                "--config", str(self._engine.ft_userdata_dir / "config.json"),
+                "--strategy-path", str(self._engine.ft_userdata_dir / "strategies"),
+                "--strategy", "DynamicStrategy",
+                "--hyperopt-loss", loss,
+                "--epochs", str(epochs),
+                "--timerange", timerange,
+                "--spaces", "buy", "sell", "roi", "stoploss",
+            ]
+
+            try:
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=300
+                )
+                output = result.stdout[-2000:] if result.stdout else ""
+                stderr = result.stderr[-500:] if result.stderr else ""
+                if result.returncode != 0:
+                    return f"Hyperopt failed:\n{stderr}"
+                return f"Hyperopt complete ({epochs} epochs):\n{output}"
+            except subprocess.TimeoutExpired:
+                return "Hyperopt timed out after 5 minutes. Try fewer epochs."
+            except Exception as exc:
+                return f"Hyperopt error: {exc}"
+
+        def walk_forward_validate(params_json: str = "{}") -> str:
+            """
+            Validate a strategy across multiple time windows to check robustness.
+            A strategy that only works in one period is likely overfit.
+            Pass JSON: {"strategy_id": "abc123", "windows": 3}
+            Returns per-window metrics and overall consistency score.
+            Call this before declaring a strategy as 'kept'.
+            """
+            import json
+            try:
+                params = json.loads(params_json)
+            except json.JSONDecodeError:
+                params = {}
+
+            sid = params.get("strategy_id", "")
+            windows = int(params.get("windows", 3))
+
+            if not sid or sid not in self._generated_strategies:
+                return f"Error: unknown strategy_id '{sid}'"
+
+            strat_params = self._generated_strategies[sid].copy()
+            strategy_type = strat_params.pop("strategy_type", "sma_crossover")
+            strat_params.pop("timerange", None)
+            strat_params.pop("pairs", None)
+
+            try:
+                result = self._engine.walk_forward_validate(
+                    strategy_params=strat_params,
+                    strategy_type=strategy_type,
+                    windows=windows,
+                )
+            except Exception as exc:
+                return f"Walk-forward failed: {exc}"
+
+            lines = [
+                f"Walk-forward validation ({windows} windows):",
+                f"  Consistency: {result['consistency_score']:.0%} of windows profitable",
+                f"  Average Sharpe: {result['avg_sharpe']:.2f}",
+                f"  Average Win Rate: {result['avg_win_rate']:.0%}",
+                f"  Robust: {'YES' if result['is_robust'] else 'NO - likely overfit'}",
+                "",
+                "Per-window results:",
+            ]
+            for w in result["windows"]:
+                if w.get("error"):
+                    lines.append(f"  Window {w['window']} ({w['timerange']}): ERROR - {w['error']}")
+                else:
+                    lines.append(
+                        f"  Window {w['window']} ({w['timerange']}): "
+                        f"Sharpe={w['sharpe']:.2f} WR={w['win_rate']:.0%} "
+                        f"Trades={w['total_trades']}"
+                    )
+            return "\n".join(lines)
+
         def get_research_history(query_json: str = '{"goal":""}') -> str:
             """Query past research iterations from memory.
             Pass JSON: {"goal": "SMA crossover BTC", "k": 5}
@@ -587,4 +752,12 @@ class StrategistAgent(BaseAgent):
                  description="View all attempts, filtered by 'kept' or 'discarded'."),
             Tool(name="get_research_history", func=get_research_history,
                  description="Query past research iterations from ChromaDB memory. Args: JSON with goal and k."),
+            Tool(name="run_hyperopt", func=run_hyperopt,
+                 description="Run Freqtrade hyperopt for automatic parameter optimization. "
+                             "Args: JSON with strategy_id, epochs (default 50), loss function. "
+                             "Use after generate_strategy to find optimal parameters automatically."),
+            Tool(name="walk_forward_validate", func=walk_forward_validate,
+                 description="Validate strategy robustness across multiple time windows. "
+                             "Args: JSON with strategy_id and windows (default 3). "
+                             "Use before declaring a strategy as kept to check it is not overfit."),
         ]

@@ -36,21 +36,28 @@ class ResearchIteration:
         )
 
 
-def check_convergence(metrics: Dict[str, Any]) -> bool:
-    """Check if metrics meet the convergence targets.
+def check_convergence(metrics: Dict[str, Any], total_trades_min: int = 5) -> bool:
+    """
+    Check if research has converged to an acceptable strategy.
+    Uses realistic targets based on available data window.
 
-    Targets: Sharpe >= 1.5, win_rate >= 45%, max_drawdown <= 10%.
+    Targets (relaxed for short data windows):
+    - Sharpe >= 0.8 (was 1.5 — unrealistic on 30 days)
+    - Win rate >= 40% (was 45%)
+    - Max drawdown <= 15% (was 10%)
+    - At least 5 trades (new — prevents convergence on 1-trade flukes)
     """
     sharpe = metrics.get("sharpe_ratio", 0)
     win_rate = metrics.get("win_rate", 0)
     drawdown = abs(metrics.get("max_drawdown", 0))
     total_trades = metrics.get("total_trades", 0)
 
-    if total_trades == 0:
+    if total_trades < total_trades_min:
         return False
-
-    sharpe_ok = isinstance(sharpe, (int, float)) and sharpe >= 1.5
-    wr_ok = isinstance(win_rate, (int, float)) and win_rate >= 0.45
-    dd_ok = drawdown <= 0.10
-
-    return sharpe_ok and wr_ok and dd_ok
+    if sharpe < 0.8:
+        return False
+    if win_rate < 0.40:
+        return False
+    if drawdown > 0.15:
+        return False
+    return True

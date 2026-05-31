@@ -16,3 +16,5 @@ freqtrade>=2024.0
 sentence-transformers>=3.0.0
 httpx>=0.27.0
 websockets>=12.0
+talib-binary>=0.4.0
+langchain-core>=0.2.0

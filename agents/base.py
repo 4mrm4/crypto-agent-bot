@@ -3,13 +3,31 @@
 import logging
 from typing import Any, Callable, Dict, List, Optional
 
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.tools import Tool
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 
+from agents.token_tracker import TokenTracker
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+
+class TokenUsageHandler(BaseCallbackHandler):
+    """Captures token usage from every LLM call into the global TokenTracker."""
+
+    def on_llm_end(self, response, **kwargs):
+        try:
+            llm_output = getattr(response, "llm_output", None) or {}
+            usage = llm_output.get("token_usage", {})
+            if usage:
+                TokenTracker.get().add_usage(
+                    prompt=usage.get("prompt_tokens", 0),
+                    completion=usage.get("completion_tokens", 0),
+                )
+        except Exception:
+            pass
 
 
 class BaseAgent:
@@ -30,6 +48,7 @@ class BaseAgent:
             temperature=settings.LLM_TEMPERATURE,
             api_key=settings.OPENAI_API_KEY,
             base_url=settings.OPENAI_BASE_URL or None,
+            callbacks=[TokenUsageHandler()],
         )
         self.system_prompt = system_prompt
 

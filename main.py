@@ -24,11 +24,32 @@ def main():
     parser.add_argument("--demo", action="store_true", help="Run full demonstration")
     parser.add_argument("--ui", action="store_true", help="Start Web UI server only (no demo pipeline)")
     parser.add_argument(
+        "--auto-research",
+        metavar="TOPIC",
+        help="Run autonomous research mode: searches web for strategies on TOPIC, "
+             "tests and iterates automatically. Example: --auto-research 'BTC momentum strategies'"
+    )
+    parser.add_argument(
         "command",
         nargs="*",
         help="Workspace command: new-goal | list-goals | review | run",
     )
     args = parser.parse_args()
+
+    # Auto-download historical data on startup
+    from backtesting.setup_data import ensure_data_available
+    logger.info("Checking historical data availability...")
+    data_ok = ensure_data_available()
+    if not data_ok:
+        logger.warning(
+            "Could not download historical data. "
+            "Backtests will use whatever data is locally available."
+        )
+
+    if args.auto_research:
+        from orchestration.auto_research import run_auto_research
+        run_auto_research(args.auto_research)
+        return
 
     if args.ui:
         _run_ui()

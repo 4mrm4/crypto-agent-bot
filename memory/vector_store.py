@@ -99,3 +99,81 @@ class VectorStore:
         """Delete all documents in the collection."""
         self.collection.delete(where={})
         logger.info("Cleared collection: %s", self.collection_name)
+
+    def store_strategy_result(
+        self,
+        strategy_type: str,
+        params: dict,
+        metrics: dict,
+        regime: str = "",
+        sentiment_score: float = 0.0,
+        timerange: str = "",
+    ) -> None:
+        """Store a completed backtest result for future retrieval."""
+        import json, uuid
+        text = (
+            f"Strategy type={strategy_type} params={json.dumps(params)} | "
+            f"Sharpe={metrics.get('sharpe_ratio', 0):.2f} "
+            f"WR={metrics.get('win_rate', 0):.0%} "
+            f"DD={abs(metrics.get('max_drawdown', 0)):.2%} "
+            f"Trades={metrics.get('total_trades', 0)} | "
+            f"Regime={regime} Sentiment={sentiment_score:.2f} "
+            f"Timerange={timerange}"
+        )
+        metadata = {
+            "type": "strategy_result",
+            "strategy_type": strategy_type,
+            "sharpe": str(round(metrics.get("sharpe_ratio", 0), 4)),
+            "win_rate": str(round(metrics.get("win_rate", 0), 4)),
+            "max_drawdown": str(round(abs(metrics.get("max_drawdown", 0)), 4)),
+            "total_trades": str(metrics.get("total_trades", 0)),
+            "regime": regime,
+            "timerange": timerange,
+        }
+        doc_id = f"strategy_{uuid.uuid4().hex[:12]}"
+        self._collection.add(
+            documents=[text],
+            metadatas=[metadata],
+            ids=[doc_id],
+        )
+
+    def get_best_strategies(
+        self,
+        regime: str = "",
+        min_sharpe: float = 0.5,
+        k: int = 5,
+    ) -> list:
+        """
+        Retrieve top performing past strategies from memory.
+        Filters by regime if provided, returns up to k results sorted by Sharpe.
+        """
+        query = f"best strategy sharpe win rate regime {regime}" if regime else "best strategy high sharpe win rate"
+        results = self.query_similar(query, k=k * 3)  # over-fetch then filter
+
+        strategy_results = [
+            r for r in results
+            if r["metadata"].get("type") == "strategy_result"
+        ]
+
+        # Filter by min Sharpe
+        filtered = []
+        for r in strategy_results:
+            try:
+                sharpe = float(r["metadata"].get("sharpe", 0))
+                if sharpe >= min_sharpe:
+                    filtered.append((sharpe, r))
+            except (ValueError, TypeError):
+                pass
+
+        # Filter by regime if specified
+        if regime:
+            regime_filtered = [
+                (s, r) for s, r in filtered
+                if r["metadata"].get("regime", "") == regime
+            ]
+            if regime_filtered:
+                filtered = regime_filtered
+
+        # Sort by Sharpe descending and return top k
+        filtered.sort(key=lambda x: x[0], reverse=True)
+        return [r for _, r in filtered[:k]]

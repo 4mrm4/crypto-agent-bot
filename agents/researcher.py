@@ -39,6 +39,7 @@ class ResearcherAgent(BaseAgent):
             system_prompt=RESEARCHER_SYSTEM_PROMPT,
         )
         self._generated_specs: Dict[str, Dict[str, Any]] = {}
+        self._specs: Dict[str, Dict[str, Any]] = {}
 
     def _build_tools(self):
         def web_search(query_json: str = "{}") -> str:
@@ -83,6 +84,48 @@ class ResearcherAgent(BaseAgent):
 
                 if not results:
                     return "No results found for that query."
+
+                # ── 7B: Extract strategy-relevant content from snippets ──
+                # Re-fetch with raw data to score relevance
+                try:
+                    strategy_keywords = [
+                        "strategy", "indicator", "entry", "exit", "crossover",
+                        "RSI", "MACD", "SMA", "EMA", "breakout", "backtest",
+                        "win rate", "sharpe", "drawdown"
+                    ]
+                    all_raw = []
+                    for topic in data.get("RelatedTopics", [])[:max_results]:
+                        if "Text" in topic:
+                            all_raw.append({
+                                "title": topic.get("Text", "")[:100],
+                                "snippet": topic.get("Text", ""),
+                            })
+
+                    relevant = []
+                    for r in all_raw:
+                        text = (r.get("snippet", "") + " " + r.get("title", "")).lower()
+                        score = sum(1 for kw in strategy_keywords if kw.lower() in text)
+                        if score >= 2:
+                            relevant.append({
+                                "title": r.get("title", ""),
+                                "snippet": r.get("snippet", ""),
+                                "relevance_score": score,
+                            })
+
+                    relevant.sort(key=lambda x: x["relevance_score"], reverse=True)
+
+                    if relevant:
+                        lines = [f"Found {len(relevant)} strategy-relevant results:"]
+                        for r in relevant[:5]:
+                            lines.append(f"\n[Score={r['relevance_score']}] {r['title']}")
+                            lines.append(f"  {r['snippet'][:200]}")
+                        lines.append(
+                            "\nNext step: Use generate_custom_strategy_spec to convert the "
+                            "most relevant result into a testable strategy spec."
+                        )
+                        return "\n".join(lines)
+                except Exception:
+                    pass  # Fall back to basic results below
 
                 return f"Search results for '{query}':\n" + "\n".join(results)
 
@@ -130,49 +173,77 @@ class ResearcherAgent(BaseAgent):
                 return f"Error fetching URL: {exc}"
 
         def generate_custom_strategy_spec(spec_json: str = "{}") -> str:
-            """Generate a fully-specified custom strategy spec for the freqtrade backtester.
-            Pass JSON with:
-            {
-                "name": "ema_trend_follow",
-                "indicator_code": "dataframe['ema_fast'] = ta.EMA(dataframe, timeperiod=10)\\ndataframe['ema_slow'] = ta.EMA(dataframe, timeperiod=30)",
-                "entry_condition": "(dataframe['ema_fast'] > dataframe['ema_slow']) & (dataframe['volume'] > 1000)",
-                "exit_condition": "(dataframe['ema_fast'] < dataframe['ema_slow'])",
-                "timeframe": "1h",
-                "description": "EMA trend following with volume confirmation"
+            """
+            Create a structured strategy spec that maps to a known strategy type.
+            Pass JSON: {
+                "name": "My Strategy",
+                "concept": "Buy when RSI oversold and price above 200 SMA",
+                "regime": "ranging"
+            }
+            Returns a spec the strategist can use directly with generate_strategy.
+            """
+            import json
+            from data.strategy_concepts import STRATEGY_CONCEPTS, get_concepts_for_regime
+
+            try:
+                params = json.loads(spec_json) if spec_json.strip() else {}
+            except json.JSONDecodeError:
+                params = {"name": spec_json, "concept": spec_json}
+
+            name = params.get("name", "Custom")
+            concept = params.get("concept", "")
+            regime = params.get("regime", "")
+
+            # Find closest matching concept from the library
+            best_match = None
+            if concept:
+                concept_lower = concept.lower()
+                keyword_map = {
+                    "sma_crossover":       ["sma", "moving average", "crossover", "golden cross"],
+                    "rsi_oversold":        ["rsi", "oversold", "overbought", "relative strength"],
+                    "bollinger_bands":     ["bollinger", "band", "squeeze", "volatility band"],
+                    "macd_crossover":      ["macd", "histogram", "signal line"],
+                    "momentum":            ["momentum", "roc", "rate of change", "volume"],
+                    "breakout":            ["breakout", "high", "resistance", "support break"],
+                    "mean_reversion":      ["mean reversion", "reversal", "oversold bounce"],
+                    "volatility_squeeze":  ["squeeze", "contraction", "expansion", "low vol"],
+                    "multi_timeframe":     ["multi timeframe", "higher timeframe", "confluence"],
+                    "sentiment_driven":    ["fear", "greed", "sentiment", "emotion"],
+                }
+                best_type = "sma_crossover"
+                best_score = 0
+                for strat_type, keywords in keyword_map.items():
+                    score = sum(1 for kw in keywords if kw in concept_lower)
+                    if score > best_score:
+                        best_score = score
+                        best_type = strat_type
+
+                # Find matching concept in library
+                for c in STRATEGY_CONCEPTS:
+                    if c["freqtrade_type"] == best_type:
+                        best_match = c
+                        break
+
+            # Build the spec
+            spec = {
+                "name": name,
+                "concept": concept,
+                "suggested_strategy_type": best_match["freqtrade_type"] if best_match else "sma_crossover",
+                "suggested_params": best_match.get("suggested_params", {}) if best_match else {},
+                "regime": regime or (best_match["best_regime"] if best_match else "any"),
+                "ready_to_use": True,
+                "usage": (
+                    f"Call generate_strategy with strategy_type='{best_match['freqtrade_type'] if best_match else 'sma_crossover'}'"
+                    f" and params={json.dumps(best_match.get('suggested_params', {}) if best_match else {})}"
+                )
             }
 
-            Returns the spec ID and a summary. The spec can be passed to the strategist's
-            generate_strategy tool with strategy_type='custom' and these code blocks."""
-            import json, uuid
-            try:
-                spec = json.loads(spec_json)
-            except json.JSONDecodeError:
-                spec = {}
+            spec_id = f"spec_{name[:8].replace(' ', '_').lower()}"
+            if not hasattr(self, "_specs"):
+                self._specs = {}
+            self._specs[spec_id] = spec
 
-            required = ["indicator_code", "entry_condition", "exit_condition"]
-            missing = [k for k in required if not spec.get(k)]
-            if missing:
-                return f"Error: missing required fields: {', '.join(missing)}"
-
-            spec_id = uuid.uuid4().hex[:8]
-            spec.setdefault("name", f"custom_{spec_id}")
-            spec.setdefault("timeframe", "1h")
-            spec.setdefault("description", "Custom strategy")
-            self._generated_specs[spec_id] = spec
-
-            return (
-                f"Strategy spec [{spec_id}] created: {spec['name']}\n"
-                f"  Description: {spec['description']}\n"
-                f"  Timeframe: {spec['timeframe']}\n"
-                f"  Indicator code: {spec['indicator_code'][:100]}...\n"
-                f"  Entry: {spec['entry_condition'][:100]}...\n"
-                f"  Exit: {spec['exit_condition'][:100]}...\n\n"
-                f"To backtest this, call strategist's generate_strategy with:\n"
-                f'  {{"strategy_type": "custom", '
-                f'"indicator_code": "{spec["indicator_code"]}", '
-                f'"entry_condition": "{spec["entry_condition"]}", '
-                f'"exit_condition": "{spec["exit_condition"]}"}}'
-            )
+            return json.dumps(spec, indent=2)
 
         return [
             Tool(name="web_search", func=web_search,
@@ -180,7 +251,7 @@ class ResearcherAgent(BaseAgent):
             Tool(name="read_paper", func=read_paper,
                  description="Fetch and summarise a URL into strategy info. Args: JSON with url."),
             Tool(name="generate_custom_strategy_spec", func=generate_custom_strategy_spec,
-                 description="Generate a fully-specified custom strategy for freqtrade. Args: JSON with indicator_code, entry_condition, exit_condition."),
+                 description="Create a structured strategy spec that maps to a known strategy type. Pass JSON with name, concept, and optional regime. Returns a ready-to-use spec for generate_strategy."),
         ]
 
     def get_specs(self) -> Dict[str, Dict[str, Any]]:

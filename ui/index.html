@@ -83,6 +83,7 @@ function App() {
   const [running, setRunning] = useState(false);
   const [agentTimeline, setAgentTimeline] = useState([]);
   const [eventLog, setEventLog] = useState([]);
+  const [tokenUsage, setTokenUsage] = useState({ total_tokens: 0, prompt_tokens: 0, completion_tokens: 0 });
   const eventLogRef = useRef(null);
 
   // Connect WebSocket when runId changes
@@ -171,6 +172,10 @@ function App() {
         setEventLog([]);
         break;
 
+      case 'token_usage':
+        setTokenUsage(payload || { total_tokens: 0, prompt_tokens: 0, completion_tokens: 0 });
+        break;
+
       case 'run_complete':
         setRunning(false);
         break;
@@ -248,6 +253,7 @@ function App() {
           maxIterations={maxIterations}
           metrics={metrics}
           chartData={iterationChart}
+          tokenUsage={tokenUsage}
         />
 
         {/* Right: Iteration chart + stats */}
@@ -302,7 +308,7 @@ function AgentTimelinePanel({ events }) {
 }
 
 // ── Centre Panel ──
-function CentrePanel({ hypothesis, iteration, maxIterations, metrics, chartData }) {
+function CentrePanel({ hypothesis, iteration, maxIterations, metrics, chartData, tokenUsage }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflow: 'hidden' }}>
       {/* Hypothesis */}
@@ -316,7 +322,7 @@ function CentrePanel({ hypothesis, iteration, maxIterations, metrics, chartData 
       </div>
 
       {/* Metric Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '8px' }}>
         <MetricCard label="Sharpe Ratio" value={metrics.sharpe_ratio?.toFixed(2) || '—'} color={COLORS.blue} />
         <MetricCard label="Win Rate" value={metrics.win_rate ? `${(metrics.win_rate * 100).toFixed(0)}%` : '—'} color={COLORS.green} />
         <MetricCard label="Max Drawdown" value={metrics.max_drawdown ? `${(Math.abs(metrics.max_drawdown) * 100).toFixed(1)}%` : '—'} color={COLORS.red} />
@@ -326,6 +332,8 @@ function CentrePanel({ hypothesis, iteration, maxIterations, metrics, chartData 
           <div id="sentiment-value" style={{ fontSize: '1.4rem', fontWeight: 700 }}>--</div>
           <div id="sentiment-fg" style={{ fontSize: '0.8rem', opacity: 0.7 }}>Fear & Greed: --</div>
         </div>
+        {/* Token counter card */}
+        <TokenCard usage={tokenUsage} />
       </div>
 
       {/* Mini chart */}
@@ -351,6 +359,24 @@ function MetricCard({ label, value, color }) {
 }
 
 // ── Simple SVG Line Chart (no external dependencies) ──
+// ── Token Usage Card ──
+function TokenCard({ usage }) {
+  const total = usage?.total_tokens || 0;
+  const prompt = usage?.prompt_tokens || 0;
+  const completion = usage?.completion_tokens || 0;
+  return (
+    <div className="card" style={{ padding: '8px 12px', borderRadius: '8px', background: '#1a1a2e', border: '1px solid #2a2a4a' }}>
+      <div style={{ fontSize: '10px', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Token Usage</div>
+      <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#eab308' }}>{total.toLocaleString()}</div>
+      {total > 0 && (
+        <div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px' }}>
+          ↑{prompt.toLocaleString()} ↓{completion.toLocaleString()}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SvgLineChart({ data, width, height, color, xKey, yKey }) {
   if (!data || data.length === 0) return null;
   const pad = 30;

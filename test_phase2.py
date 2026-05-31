@@ -40,6 +40,79 @@ def main():
     print("\n[OK] Phase 2 test passed!")
 
 
+def test_sanitize_timerange_slash_format():
+    from backtesting.engine import _sanitize_timerange
+    assert _sanitize_timerange("2024-01-01/2024-12-31") == "20240101-20241231"
+
+
+def test_sanitize_timerange_year_only():
+    from backtesting.engine import _sanitize_timerange
+    result = _sanitize_timerange("2024")
+    assert result.startswith("2024")
+
+
+def test_sanitize_timerange_already_correct():
+    from backtesting.engine import _sanitize_timerange
+    assert _sanitize_timerange("20240101-20241231") == "20240101-20241231"
+
+
+def test_sanitize_timerange_open_ended():
+    from backtesting.engine import _sanitize_timerange
+    result = _sanitize_timerange("20260427-")
+    assert result == "20260427-"
+
+
+def test_sanitize_timerange_iso_slash_variants():
+    from backtesting.engine import _sanitize_timerange
+    assert _sanitize_timerange("2024-06-01/2024-09-01") == "20240601-20240901"
+    assert _sanitize_timerange("2023-01-01/2023-12-31") == "20230101-20231231"
+
+
+def test_strategy_syntax_validation_catches_bad_python():
+    from backtesting.engine import BacktestEngine
+    engine = BacktestEngine()
+    bad_code = "class DynamicStrategy:\n    def populate_indicators(self):\n      bad indent\n    bad = 1"
+    try:
+        engine._validate_strategy(bad_code)
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "syntax" in str(e).lower() or "indent" in str(e).lower()
+
+
+def test_strategy_syntax_validation_passes_good_python():
+    from backtesting.engine import BacktestEngine
+    engine = BacktestEngine()
+    good_code = (
+        "from freqtrade.strategy import IStrategy\n"
+        "import pandas as pd\n"
+        "class DynamicStrategy(IStrategy):\n"
+        "    timeframe = '1h'\n"
+        "    stoploss = -0.05\n"
+        "    minimal_roi = {'0': 0.01}\n"
+    )
+    engine._validate_strategy(good_code)  # should not raise
+
+
+def test_parse_results_handles_zero_trades():
+    """Ensure _parse_results returns zeroed dict not exception on empty result."""
+    from backtesting.engine import BacktestEngine
+    engine = BacktestEngine()
+    raw = {"strategy": {"DynamicStrategy": {"total_trades": 0, "trades": []}}}
+    result = engine._parse_results(raw)
+    assert result["total_trades"] == 0
+    assert result["sharpe_ratio"] == 0
+    assert "error" not in result
+
+
+def test_parse_results_handles_missing_strategy_key():
+    """Ensure _parse_results handles unexpected JSON structure gracefully."""
+    from backtesting.engine import BacktestEngine
+    engine = BacktestEngine()
+    raw = {"unexpected_key": "some_value"}
+    result = engine._parse_results(raw)
+    assert "error" in result or result.get("total_trades", 0) == 0
+
+
 if __name__ == "__main__":
     import pandas as pd
     main()

@@ -82,7 +82,8 @@ class HermesOrchestrator:
             # 6. Persist to memory
             self._persist_research_iteration(iteration, goal)
             logger.info(
-                "Iteration %d: %s | Sharpe=%.2f WR=%.0f%% DD=%.1f%%",
+                "Iteration %d: %s | Sharpe=%.2f WR=%.0f%% DD=%.1f%% "
+                "(targets: Sharpe>=0.8 WR>=40%% DD<=15%% trades>=5)",
                 iter_num, verdict.upper(),
                 metrics.get("sharpe_ratio", 0),
                 metrics.get("win_rate", 0) * 100,
@@ -165,6 +166,18 @@ class HermesOrchestrator:
             except Exception as exc:
                 logger.warning("Pattern detection failed: %s", exc)
 
+        # On-chain data (only if enabled)
+        onchain_report = {}
+        if getattr(settings, "ENABLE_ONCHAIN", False):
+            try:
+                from data.onchain import OnChainFetcher
+                ocf = OnChainFetcher()
+                onchain_report = ocf.get_onchain_report(settings.SYMBOL)
+                if onchain_report.get("summary"):
+                    logger.info("On-chain: %s", onchain_report["summary"])
+            except Exception as exc:
+                logger.warning("On-chain fetch failed: %s", exc)
+
         # Build enriched goal with hypothesis context
         enriched_goal = goal
         if hypothesis:
@@ -220,6 +233,12 @@ class HermesOrchestrator:
                 f"\n\nActive chart patterns: {', '.join(pattern_report['active_patterns'])} "
                 f"(bias={pattern_report['bias']}). "
                 f"Factor this into entry/exit timing."
+            )
+        if onchain_report and onchain_report.get("netflow"):
+            strategist_task_desc += (
+                f"\n\nOn-chain signal: {onchain_report['netflow']['signal'].upper()} "
+                f"({onchain_report['large_whale_count']} large whale transactions). "
+                f"Factor this into directional bias."
             )
         self.board.add_task(strategist_task_desc, assigned_to="strategist")
 

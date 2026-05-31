@@ -27,9 +27,9 @@ class Settings:
     BACKTEST_TIMEOUT: int = int(os.getenv("BACKTEST_TIMEOUT", "300"))
 
     # LangChain model
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "deepseek-chat")
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.3"))
-    OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "")
+    OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
 
     # Optional API keys
     CRYPTOPANIC_API_KEY: str = os.getenv("CRYPTOPANIC_API_KEY", "")

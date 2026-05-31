@@ -145,8 +145,14 @@ async def ws_run_events(websocket: WebSocket, run_id: str):
 async def _run_orchestration(run_id: str, goal: str, max_cycles: int, max_iterations: int, bus: EventBus):
     """Run orchestrator in a thread, publishing events to the bus."""
     from orchestration.hermes import HermesOrchestrator
+    from orchestration.auto_research import run_auto_research
 
     orchestrator = make_orchestrator()
+
+    # Reset and emit starting token count
+    from agents.token_tracker import TokenTracker
+    TokenTracker.get().reset()
+    await bus.publish("token_usage", TokenTracker.get().get_usage())
 
     # Patch: inject event publishing into the orchestrator
     _patch_orchestrator(orchestrator, bus, run_id)
@@ -164,7 +170,15 @@ async def _run_orchestration(run_id: str, goal: str, max_cycles: int, max_iterat
         # Run in executor to avoid blocking the event loop
         loop = asyncio.get_running_loop()
 
-        if max_iterations > 1:
+        # ── 4B: Auto-research mode via goal prefix ──
+        if goal.startswith("Auto-research:"):
+            topic = goal[len("Auto-research:"):].strip()
+            logger.info("[RUN %s] Auto-research mode: %s", run_id, topic)
+            result = await loop.run_in_executor(
+                None,
+                lambda: run_auto_research(topic, event_bus=bus, loop=loop),
+            )
+        elif max_iterations > 1:
             logger.info("[RUN %s] AutoResearch loop enabled — will iterate up to %s times", run_id, max_iterations)
             result = await loop.run_in_executor(
                 None,
@@ -217,6 +231,14 @@ def _patch_orchestrator(orchestrator: "HermesOrchestrator", bus: EventBus, run_i
             bus.publish(event_type, payload), _loop
         )
 
+    def emit_tokens():
+        """Emit current cumulative token usage."""
+        try:
+            from agents.token_tracker import TokenTracker
+            emit("token_usage", TokenTracker.get().get_usage())
+        except Exception:
+            pass
+
     # Wrap _generate_hypothesis
     if hasattr(orchestrator, "_generate_hypothesis"):
         orig_gen = orchestrator._generate_hypothesis
@@ -229,6 +251,7 @@ def _patch_orchestrator(orchestrator: "HermesOrchestrator", bus: EventBus, run_i
                 "iteration": iter_num,
                 "max_iterations": max_iterations,
             })
+            emit_tokens()
             return hypothesis
 
         orchestrator._generate_hypothesis = patched_generate
@@ -244,6 +267,7 @@ def _patch_orchestrator(orchestrator: "HermesOrchestrator", bus: EventBus, run_i
                 "critique": critique,
                 "hypothesis": hypothesis,
             })
+            emit_tokens()
             return critique
 
         orchestrator._critique_iteration = patched_critique
@@ -275,6 +299,7 @@ def _patch_orchestrator(orchestrator: "HermesOrchestrator", bus: EventBus, run_i
                         metrics.get("win_rate", "—"),
                         metrics.get("max_drawdown", "—"),
                         metrics.get("total_trades", 0))
+            emit_tokens()
             emit("iteration_result", {
                 "iteration": iteration,
                 "task_count": len(done_tasks),
