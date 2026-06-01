@@ -57,24 +57,51 @@ Modular crypto trading bot with 5 LangGraph ReAct agents, Freqtrade backtesting,
 
 ```mermaid
 graph TD
-    CLI[CLI / main.py] --> WS[VibeWorkspace]
-    WS --> HERMES[HermesOrchestrator]
-    HERMES --> AUTO[AutoResearch Outer Loop]
+    MAIN[main.py] --> UI[FastAPI Server]
+    MAIN --> AUTO[AutonomousResearchLoop]
+    MAIN --> HERMES[HermesOrchestrator]
+    MAIN --> WS[VibeWorkspace CLI]
+
     HERMES --> GRAPH[LangGraph State Graph]
     GRAPH --> ANALYST[Analyst Agent]
     GRAPH --> STRATEGIST[Strategist Agent]
     GRAPH --> CURATOR[MemoryCurator Agent]
     GRAPH --> RISK[RiskManager Agent]
     GRAPH --> RESEARCHER[Researcher Agent]
+
     ANALYST --> FETCHER[MarketDataFetcher / CCXT]
     STRATEGIST --> ENGINE[BacktestEngine / Freqtrade]
     STRATEGIST --> TRACKER[ExperimentTracker]
     CURATOR --> MEMORY[VectorStore / ChromaDB]
     RESEARCHER --> WEB[Web Search / DDG]
-    RESEACHER --> CONCEPTS[Strategy Concepts]
-    HERMES -.-> UI[Web UI / FastAPI + WebSocket]
+    RESEARCHER --> CONCEPTS[Strategy Concepts]
+    HERMES -.-> UIWS[Web UI / WebSocket]
+
     ENGINE --> FREQ[Freqtrade Subprocess]
-    ENGINE --> SETUP[Auto Data Download]
+    ENGINE --> DATA[DataSplitConfig / Holdout Guard]
+    ENGINE --> BLIND[BlindParameterSearch]
+    ENGINE --> OOS[OOSValidator]
+    ENGINE --> SYNTH[SyntheticValidator]
+
+    AUTO --> REGIME[MarketRegimeDetector]
+    AUTO --> SENT[SentimentFetcher]
+    AUTO --> HERMES
+
+    SC[SignalScanner] --> PE[LiveExecutor]
+    SC --> REGIME
+    PE --> EXCH[Exchange / CCXT]
+    PE --> RM[RiskManager Agent]
+    RM --> KELLY[Kelly Criterion]
+    RM --> CB[CircuitBreaker]
+    AD[AnomalyDetector] --> CB
+    WS2[MarketDataStream] --> EXCH
+    MEF[MultiExchangeFetcher] --> EXCH
+
+    DP[DeploymentPipeline] --> ENGINE
+    DP --> OOS
+    DP --> SYNTH
+    VM[ValidationMode] --> PE
+    PM[PerformanceMonitor] --> RM
 
     subgraph "AutoResearch Outer Loop"
         HYP[Generate Hypothesis] --> RESEARCH[Web Research]
@@ -120,6 +147,16 @@ graph TD
 | **OOSValidator** | `backtesting/oos_validator.py` | Holdout-only strategy validation |
 | **SyntheticValidator** | `backtesting/synthetic_validator.py` | Random walk + permutation sanity checks |
 | **DeploymentPipeline** | `orchestration/deployment_pipeline.py` | 11-gate strategy deployment gauntlet |
+| **PerformanceMonitor** | `monitoring/performance_monitor.py` | Live vs backtest degradation tracking |
+| **AnomalyDetector** | `monitoring/anomaly_detector.py` | 7-checks: rapid drawdown, stuck positions, API errors |
+| **MarketDataStream** | `data/stream.py` | Live Binance WebSocket feeds |
+| **MultiExchangeFetcher** | `data/fetcher.py` | Binance/Bybit best-price routing |
+| **AutonomousResearchLoop** | `orchestration/autonomous_loop.py` | Self-directing research engine |
+| **LiveExecutor** | `execution/live_executor.py` | Bridges approved strategies to exchange orders |
+| **TradeSignal** | `execution/trade_signal.py` | Structured trade proposal with full provenance |
+| **SignalScanner** | `execution/signal_scanner.py` | Scans pairs × approved strategies every 60s |
+| **AuditLog** | `execution/audit_log.py` | Append-only JSONL log of every trade decision |
+| **StrategyManager** | `orchestration/strategy_manager.py` | Strategy decay detection + auto-retire |
 | **ValidationMode** | `execution/validation_mode.py` | 90-day conservative execution with tight CB |
 | **PerformanceMonitor** | `monitoring/performance_monitor.py` | Live vs backtest degradation tracking |
 
