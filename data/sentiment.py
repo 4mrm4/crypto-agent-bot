@@ -49,13 +49,21 @@ class SentimentFetcher:
             return []
 
     def _get_coingecko_news(self, currency: str = "BTC") -> list:
-        """Fallback: CoinGecko news feed (no key needed)."""
+        """Fallback: CoinGecko news feed (requires COINGECKO_API_KEY in .env)."""
+        api_key = getattr(settings, "COINGECKO_API_KEY", "")
+        if not api_key:
+            logger.info(
+                "CoinGecko news skipped — set COINGECKO_API_KEY in .env to enable, "
+                "or set CRYPTOPANIC_API_KEY for CryptoPanic news instead."
+            )
+            return []
         try:
             symbol_map = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana"}
             coin_id = symbol_map.get(currency.upper(), currency.lower())
             r = httpx.get(
                 f"https://api.coingecko.com/api/v3/news",
                 params={"category": coin_id},
+                headers={"x_cg_pro_api_key": api_key},
                 timeout=10
             )
             items = r.json().get("data", [])[:10]

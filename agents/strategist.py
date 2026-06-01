@@ -33,7 +33,6 @@ Available strategy types:
 - volatility_squeeze: BB width contraction then expansion
 - sentiment_driven: RSI + SMA (use when fear/greed < 30)
 - multi_timeframe: 1h SMA crossover confirmed by 200 SMA (higher TF proxy) + ADX filter
-- custom: provide raw indicator_code, entry_condition, exit_condition
 
 REGIME GUIDANCE:
 - strong_uptrend -> prefer sma_crossover, momentum, combined_sma_rsi
@@ -182,20 +181,17 @@ class StrategistAgent(BaseAgent):
             """Generate a strategy of any supported type.
             Pass JSON with: strategy_type, and type-specific params.
 
-            Types: sma_crossover, macd_crossover, rsi_oversold, bollinger_bands, combined_sma_rsi, custom
+            Types: sma_crossover, macd_crossover, rsi_oversold, bollinger_bands,
+            combined_sma_rsi, momentum, breakout, mean_reversion,
+            volatility_squeeze, sentiment_driven, multi_timeframe
 
-            You can also set backtest config: timerange (e.g. "20250101-20251231"),
-            pairs (list of exchange symbols), and timeframe (e.g. "1h", "15m", "4h").
-
-            NOTE: Local data starts from 2026-04-27. For any earlier dates you MUST
-            call download_data first with --prepend. Available pairs: BTC/USDT, ETH/USDT.
-            Default to timerange 20260427- unless you have explicitly downloaded earlier data.
+            AVOID 'custom' type — use one of the predefined types above.
+            Do NOT set timerange — the research window is automatically applied.
 
             Examples:
-              SMA:     {"strategy_type": "sma_crossover", "fast_ma": 10, "slow_ma": 30}
-              MACD:    {"strategy_type": "macd_crossover", "timerange": "20250101-20251231", "timeframe": "15m"}
-              RSI:     {"strategy_type": "rsi_oversold", "pairs": ["BTC/USDT", "ETH/USDT"]}
-              Custom:  {"strategy_type": "custom", "indicator_code": "...", "entry_condition": "...", "exit_condition": "..."}
+              SMA:  {"strategy_type": "sma_crossover", "fast_ma": 10, "slow_ma": 30}
+              MACD: {"strategy_type": "macd_crossover"}
+              RSI:  {"strategy_type": "rsi_oversold"}
 
             Returns the strategy ID."""
             import json, uuid
@@ -494,9 +490,8 @@ class StrategistAgent(BaseAgent):
 
         def download_data(params_json: str = "{}") -> str:
             """Download historical market data.
-            ONLY use this if you need data for a pair or timeframe NOT already cached.
-            BTC/USDT, ETH/USDT, XRP/USDT, SOL/USDT on 5m/15m/1h (2017-2026) are
-            ALREADY available locally — pick a timerange within those bounds instead.
+            ONLY call this if you get a data error. BTC/USDT, ETH/USDT on 5m/15m/1h
+            from 2017-2023 are ALREADY cached. DO NOT download holdout data (2024+).
             Pass JSON: {"pairs": ["BTC/USDT"], "timeframe": "1h", "timerange": "20260101-"}
             Defaults: pairs=["BTC/USDT"], timeframe=config.TIMEFRAME, timerange="20210101-"
             Returns download status and row counts."""
@@ -574,6 +569,96 @@ class StrategistAgent(BaseAgent):
                 lines.append(f"")
                 lines.append(f"**Recommended**: [{best_sid}] with Sharpe={best_sharpe}")
             return "\n".join(lines)
+
+        def generate_strategy_for_regime(params_json: str = "{}") -> str:
+            """Generate a strategy tailored to the current market regime.
+            Pass JSON with optional 'regime' and/or 'strategy_type_hint'.
+            If regime is omitted, auto-detects it from live market data.
+            If strategy_type_hint is omitted, picks the best fit for the regime."""
+            import json
+            try:
+                params = json.loads(params_json)
+            except json.JSONDecodeError:
+                params = {}
+
+            from data.regime import MarketRegimeDetector, REGIME_STRATEGY_MAP
+            from data.fetcher import MarketDataFetcher
+            from config import settings
+
+            regime = params.get("regime", "")
+            strategy_type_hint = params.get("strategy_type_hint", "")
+
+            # Auto-detect regime if not provided
+            if not regime:
+                try:
+                    fetcher = MarketDataFetcher()
+                    df = fetcher.fetch_ohlcv(settings.SYMBOL, "1h", limit=250)
+                    if df is not None and len(df) > 200:
+                        detector = MarketRegimeDetector()
+                        regime = detector.classify_regime(df)
+                except Exception as exc:
+                    return f"Error detecting regime: {exc}"
+
+            # Get regime-strategy mapping
+            regime_map = REGIME_STRATEGY_MAP.get(regime, {})
+            recommended = regime_map.get("use", [])
+            avoided = regime_map.get("avoid", [])
+
+            if not recommended:
+                return (
+                    f"No strategies recommended for regime '{regime}'. "
+                    f"Consider switching pairs or waiting for a different market condition."
+                )
+
+            # If hint is given, validate it against regime
+            if strategy_type_hint:
+                if strategy_type_hint in avoided:
+                    return (
+                        f"Strategy type '{strategy_type_hint}' is discouraged in "
+                        f"regime '{regime}'. Recommended: {', '.join(recommended)}. "
+                        f"Use generate_strategy instead if you want to override."
+                    )
+                chosen_type = strategy_type_hint
+            else:
+                chosen_type = recommended[0]
+
+            # Build params dict for the chosen strategy type
+            strategy_params = {"strategy_type": chosen_type, "stoploss": -0.05}
+
+            # Set sensible defaults per type
+            if chosen_type in ("sma_crossover", "combined_sma_rsi"):
+                strategy_params.update({"fast_ma": 10, "slow_ma": 30})
+            elif chosen_type == "macd_crossover":
+                strategy_params.update({"macd_fast": 12, "macd_slow": 26, "macd_signal": 9})
+            elif chosen_type == "rsi_oversold":
+                strategy_params.update({"rsi_period": 14, "rsi_buy_threshold": 30, "rsi_sell_threshold": 70})
+            elif chosen_type == "bollinger_bands":
+                strategy_params.update({"bb_period": 20})
+            elif chosen_type == "momentum":
+                strategy_params.update({"roc_period": 10})
+            elif chosen_type == "breakout":
+                strategy_params.update({"lookback": 20})
+            elif chosen_type == "mean_reversion":
+                strategy_params.update({"bb_period": 20, "rsi_period": 14})
+            elif chosen_type == "volatility_squeeze":
+                strategy_params.update({"bb_period": 20})
+            elif chosen_type == "sentiment_driven":
+                strategy_params.update({"rsi_period": 14})
+            elif chosen_type == "multi_timeframe":
+                strategy_params.update({"fast_ma": 20, "slow_ma": 50})
+
+            # Generate the strategy
+            strategy_id = uuid.uuid4().hex[:8]
+            self._generated_strategies[strategy_id] = strategy_params
+
+            return (
+                f"Regime-aware strategy [{strategy_id}] created:\n"
+                f"  Regime: {regime}\n"
+                f"  Type: {chosen_type}\n"
+                f"  Params: {json.dumps(strategy_params)}\n"
+                f"  Regime recommended types: {', '.join(recommended)}\n"
+                f"  Regime avoided types: {', '.join(avoided)}"
+            )
 
         def run_hyperopt(params_json: str = "{}") -> str:
             """
@@ -689,11 +774,12 @@ class StrategistAgent(BaseAgent):
                 "Per-window results:",
             ]
             for w in result["windows"]:
+                tr = w.get("test_timerange", w.get("train_timerange", "unknown"))
                 if w.get("error"):
-                    lines.append(f"  Window {w['window']} ({w['timerange']}): ERROR - {w['error']}")
+                    lines.append(f"  Window {w['window']} ({tr}): ERROR - {w['error']}")
                 else:
                     lines.append(
-                        f"  Window {w['window']} ({w['timerange']}): "
+                        f"  Window {w['window']} ({tr}): "
                         f"Sharpe={w['sharpe']:.2f} WR={w['win_rate']:.0%} "
                         f"Trades={w['total_trades']}"
                     )
@@ -730,7 +816,8 @@ class StrategistAgent(BaseAgent):
         return [
             Tool(name="generate_strategy", func=generate_strategy,
                  description="Create a strategy of any type. Args: JSON with strategy_type and type-specific params. "
-                             "Types: sma_crossover, macd_crossover, rsi_oversold, bollinger_bands, combined_sma_rsi, custom."),
+                             "Types: sma_crossover, macd_crossover, rsi_oversold, bollinger_bands, combined_sma_rsi. "
+                             "AVOID 'custom' type — it often produces broken Python."),
             # Backward-compat alias
             Tool(name="generate_sma_strategy", func=generate_strategy,
                  description="[DEPRECATED] Use generate_strategy instead."),
@@ -752,6 +839,10 @@ class StrategistAgent(BaseAgent):
                  description="View all attempts, filtered by 'kept' or 'discarded'."),
             Tool(name="get_research_history", func=get_research_history,
                  description="Query past research iterations from ChromaDB memory. Args: JSON with goal and k."),
+            Tool(name="generate_strategy_for_regime", func=generate_strategy_for_regime,
+                 description="Generate a strategy tailored to the current market regime. "
+                             "Args: JSON with regime (optional, auto-detected if omitted) and strategy_type_hint. "
+                             "Automatically restricts to strategies recommended for that regime."),
             Tool(name="run_hyperopt", func=run_hyperopt,
                  description="Run Freqtrade hyperopt for automatic parameter optimization. "
                              "Args: JSON with strategy_id, epochs (default 50), loss function. "

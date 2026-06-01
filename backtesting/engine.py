@@ -7,6 +7,7 @@ Freqtrade CLI, and parses results into pandas DataFrames.
 import ast
 import json
 import logging
+import uuid
 import os
 import re
 import shutil
@@ -20,6 +21,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from config import settings
+from backtesting.data_split import DATA_SPLIT
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +96,7 @@ import pandas as pd
 import talib.abstract as ta
 
 
-class DynamicStrategy(IStrategy):
+class $strategy_name(IStrategy):
     # --- User-defined parameters (set by agent) ---
     timeframe = "$timeframe"
     minimal_roi = $minimal_roi
@@ -108,10 +110,16 @@ class DynamicStrategy(IStrategy):
     # --- Indicator parameters ---
 $indicator_params_block
     def populate_indicators(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
-        $indicator_code
-        # Coerce all object/string columns to numeric to prevent Arrow backend errors
+        # Coerce string-typed columns upfront (covers PyArrow backend which stores
+        # strings as pd.ArrowDtype(pa.string()), not caught by simple 'string' check)
+        import pandas.api.types as ptypes
         for col in dataframe.columns:
-            if dataframe[col].dtype in ('object', 'string', 'large_string'):
+            if ptypes.is_string_dtype(dataframe[col]):
+                dataframe[col] = pd.to_numeric(dataframe[col], errors='coerce')
+        $indicator_code
+        # Second pass: catch any new columns created by indicator code
+        for col in dataframe.columns:
+            if ptypes.is_string_dtype(dataframe[col]):
                 dataframe[col] = pd.to_numeric(dataframe[col], errors='coerce')
         return dataframe
 
@@ -195,9 +203,9 @@ BB_INDICATOR = """
             nbdevup=2.0,
             nbdevdn=2.0,
         )
-        dataframe['bb_upper'] = upper
-        dataframe['bb_middle'] = middle
-        dataframe['bb_lower'] = lower
+        dataframe['bb_upper'] = upper.astype(float)
+        dataframe['bb_middle'] = middle.astype(float)
+        dataframe['bb_lower'] = lower.astype(float)
 """
 
 BB_ENTRY = """
@@ -326,8 +334,11 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
 
     "mean_reversion": {
         "indicator_code": """
-        dataframe['bb_upper'], dataframe['bb_middle'], dataframe['bb_lower'] = ta.BBANDS(
-            dataframe, timeperiod=20, nbdevup=2.0, nbdevdn=2.0)
+        bb_upper, bb_middle, bb_lower = ta.BBANDS(
+            dataframe['close'], timeperiod=20, nbdevup=2.0, nbdevdn=2.0)
+        dataframe['bb_upper'] = bb_upper.astype(float)
+        dataframe['bb_middle'] = bb_middle.astype(float)
+        dataframe['bb_lower'] = bb_lower.astype(float)
         dataframe['rsi'] = ta.RSI(dataframe, timeperiod=14)
         dataframe['distance_from_mean'] = (dataframe['close'] - dataframe['bb_middle']) / dataframe['bb_middle']
     """,
@@ -345,8 +356,11 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
 
     "volatility_squeeze": {
         "indicator_code": """
-        dataframe['bb_upper'], dataframe['bb_middle'], dataframe['bb_lower'] = ta.BBANDS(
-            dataframe, timeperiod=20, nbdevup=2.0, nbdevdn=2.0)
+        bb_upper, bb_middle, bb_lower = ta.BBANDS(
+            dataframe['close'], timeperiod=20, nbdevup=2.0, nbdevdn=2.0)
+        dataframe['bb_upper'] = bb_upper.astype(float)
+        dataframe['bb_middle'] = bb_middle.astype(float)
+        dataframe['bb_lower'] = bb_lower.astype(float)
         dataframe['bb_width'] = (dataframe['bb_upper'] - dataframe['bb_lower']) / dataframe['bb_middle']
         dataframe['bb_width_min'] = dataframe['bb_width'].rolling(120).min()
         dataframe['macd'], dataframe['macdsignal'], _ = [
@@ -454,18 +468,39 @@ class BacktestEngine:
         """Generate a strategy from *params*, run a Freqtrade backtest,
         and return parsed results."""
         timerange = _sanitize_timerange(timerange)
+
+        # HOLDOUT GUARD — never allow research backtests to touch holdout data
+        if DATA_SPLIT.is_in_holdout(timerange):
+            raise ValueError(
+                f"HOLDOUT VIOLATION: Attempted to run research backtest on holdout window. "
+                f"Timerange '{timerange}' includes data from {DATA_SPLIT.holdout_start} or later."
+                "Holdout data is reserved for OOSValidator.final_oos_validation() only."
+            )
+
+        # Force research window if timerange is the default (open-ended)
+        if timerange == "20210101-" or timerange.startswith("20210101"):
+            timerange = DATA_SPLIT.research_timerange()
+            logger.info("Forcing timerange to research window: %s", timerange)
+
         params = self._default_strategy_params(strategy_type)
         if strategy_params:
             # Pop timerange and pairs if they were stored in strategy params
             params.update(strategy_params)
         params.setdefault("timeframe", settings.TIMEFRAME)
 
-        # 1. Write temporary strategy file
+        # 1. Write temporary strategy file with UUID to avoid collision
+        strategy_name = f"Strategy_{uuid.uuid4().hex[:8]}"
+        params["strategy_name"] = strategy_name
         strategy_code = self._render_strategy(params)
         strategy_dir = self.ft_userdata_dir / "strategies"
         strategy_dir.mkdir(parents=True, exist_ok=True)
-        strategy_path = strategy_dir / "DynamicStrategy.py"
+        strategy_path = strategy_dir / f"{strategy_name}.py"
         strategy_path.write_text(strategy_code, encoding="utf-8")
+        # Clean up old generated strategy files
+        for f in strategy_dir.glob("Strategy_*.py"):
+            if f.name != strategy_path.name:
+                try: f.unlink()
+                except Exception: pass
 
         # 2a. Validate the generated Python is syntactically valid
         self._validate_strategy(strategy_code)
@@ -479,7 +514,7 @@ class BacktestEngine:
         result = self._run_freqtrade_backtest(config, strategy_path)
 
         # 4. Parse result JSON
-        return self._parse_results(result)
+        return self._parse_results(result, strategy_name=strategy_name)
 
     def get_performance_metrics(self, trades_df: pd.DataFrame) -> Dict[str, Any]:
         """Compute standard performance metrics from a trades DataFrame.
@@ -522,6 +557,16 @@ class BacktestEngine:
     def download_data(self, pairs: Optional[List[str]] = None, timerange: str = "20210101-"):
         """Download historical data via ``freqtrade download-data``."""
         timerange = _sanitize_timerange(timerange)
+
+        # HOLDOUT GUARD — never download holdout data for research
+        if DATA_SPLIT.is_in_holdout(timerange):
+            raise ValueError(
+                f"HOLDOUT VIOLATION: Refusing to download holdout data for research. "
+                f"Timerange '{timerange}' overlaps holdout window starting "
+                f"{DATA_SPLIT.holdout_start}. Holdout data is reserved for "
+                f"OOSValidator.final_oos_validation() only."
+            )
+
         pairs = pairs or [settings.SYMBOL]
 
         def _build_cmd(prepend=False):
@@ -582,75 +627,34 @@ class BacktestEngine:
         Split timerange into N windows and backtest each independently.
         Returns per-window metrics and an overall consistency score.
         A strategy is only valid if it performs reasonably across ALL windows.
+
+        Uses DATA_SPLIT research window. Never touches holdout data.
         """
         from datetime import datetime, timedelta
 
-        # ── 3A: Auto-detect available data range if dates not provided ──
-        if not start_date or not end_date:
-            data_path = self.ft_userdata_dir / "data" / "binance"
-            pair_file = list(data_path.glob("BTC_USDT-1h*.json"))
-            if not pair_file:
-                pair_file = list(data_path.glob("BTC_USDT-1h*.feather"))
-            if pair_file:
-                import time
-                newest = max(pair_file, key=lambda f: f.stat().st_mtime)
-                end_dt = datetime.fromtimestamp(newest.stat().st_mtime)
-                # Start 90 days before end for meaningful windows
-                start_dt = end_dt - timedelta(days=90)
-                start_date = start_date or start_dt.strftime("%Y%m%d")
-                end_date = end_date or end_dt.strftime("%Y%m%d")
-                logger.info(
-                    "Auto-detected data range for walk-forward: %s to %s",
-                    start_date, end_date
-                )
-            else:
-                # Fallback to last 30 days
-                from datetime import datetime as dt
-                end_date = end_date or dt.utcnow().strftime("%Y%m%d")
-                start_date = start_date or (dt.utcnow() - timedelta(days=30)).strftime("%Y%m%d")
-
-        start = datetime.strptime(start_date, "%Y%m%d")
-        end = datetime.strptime(end_date, "%Y%m%d")
-        total_days = (end - start).days
-        window_days = total_days // windows
-
-        # ── 3A: Minimum window size guard ──
-        if window_days < 14:
-            actual_windows = max(2, total_days // 14)
-            logger.warning(
-                "Requested %d windows but only %d days available. "
-                "Reducing to %d windows (%d days each).",
-                windows, total_days, actual_windows, total_days // actual_windows
-            )
-            windows = actual_windows
-            window_days = total_days // windows
-
-        if total_days < 14:
+        # Use DATA_SPLIT's predefined research window and WFV splits
+        splits = DATA_SPLIT.wfv_splits(n_splits=windows)
+        if not splits:
             return {
-                "error": f"Only {total_days} days of data available. "
-                         "Need at least 14 days for walk-forward validation.",
-                "windows": [],
-                "consistency_score": 0,
-                "avg_sharpe": 0,
-                "avg_win_rate": 0,
-                "is_robust": False,
+                "error": "No WFV splits could be generated from research window",
+                "windows": [], "consistency_score": 0,
+                "avg_sharpe": 0, "avg_win_rate": 0, "is_robust": False,
             }
 
         window_results = []
-        for i in range(windows):
-            w_start = start + timedelta(days=i * window_days)
-            w_end = w_start + timedelta(days=window_days)
-            timerange = f"{w_start.strftime('%Y%m%d')}-{w_end.strftime('%Y%m%d')}"
+        for i, (train_tr, test_tr) in enumerate(splits):
             try:
+                # Run on test window only (validation within research window)
                 result = self.run_backtest(
                     strategy_params=dict(strategy_params),
                     strategy_type=strategy_type,
-                    timerange=timerange,
+                    timerange=test_tr,
                     pairs=pairs,
                 )
                 window_results.append({
                     "window": i + 1,
-                    "timerange": timerange,
+                    "train_timerange": train_tr,
+                    "test_timerange": test_tr,
                     "sharpe": result.get("sharpe_ratio", 0),
                     "win_rate": result.get("win_rate", 0),
                     "max_drawdown": result.get("max_drawdown", 0),
@@ -660,7 +664,8 @@ class BacktestEngine:
             except Exception as exc:
                 window_results.append({
                     "window": i + 1,
-                    "timerange": timerange,
+                    "train_timerange": train_tr,
+                    "test_timerange": test_tr,
                     "error": str(exc),
                     "sharpe": 0, "win_rate": 0,
                     "max_drawdown": 0, "total_trades": 0,
@@ -744,6 +749,7 @@ class BacktestEngine:
         """Execute ``freqtrade backtesting`` via subprocess and capture ZIP-packed JSON output."""
         export_path = self.ft_userdata_dir / "backtest_results"
         export_path.mkdir(parents=True, exist_ok=True)
+        strategy_name = strategy_path.stem  # Derive strategy name from the filename
 
         # Write temp config
         temp_config = self.ft_userdata_dir / "temp_backtest_config.json"
@@ -756,7 +762,7 @@ class BacktestEngine:
             "--userdir", str(self.ft_userdata_dir),
             "--config", str(temp_config),
             "--strategy-path", str(strategy_path.parent),
-            "--strategy", "DynamicStrategy",
+            "--strategy", strategy_name,
             "--export", "trades",
             "--backtest-directory", str(export_path),
         ]
@@ -790,12 +796,12 @@ class BacktestEngine:
             zips = sorted(export_path.glob("*.zip"), key=os.path.getmtime, reverse=True)
             if not zips:
                 logger.warning("No result ZIP found — backtest likely produced 0 trades")
-                return {"strategy": {"DynamicStrategy": {"total_trades": 0, "trades": []}}}
+                return {"strategy": {strategy_name: {"total_trades": 0, "trades": []}}}
             zip_path = zips[0]
 
         if not zip_path.exists():
             logger.warning("Result ZIP missing — backtest likely produced 0 trades")
-            return {"strategy": {"DynamicStrategy": {"total_trades": 0, "trades": []}}}
+            return {"strategy": {strategy_name: {"total_trades": 0, "trades": []}}}
 
         import zipfile
         with zipfile.ZipFile(zip_path) as zf:
@@ -808,7 +814,7 @@ class BacktestEngine:
         logger.debug("Raw result dumped to %s", debug_path)
         return result_data
 
-    def _parse_results(self, raw: Dict[str, Any]) -> Dict[str, Any]:
+    def _parse_results(self, raw: Dict[str, Any], strategy_name: str = "DynamicStrategy") -> Dict[str, Any]:
         """Parse Freqtrade result JSON into flat summary."""
         # Log raw structure for debugging
         if isinstance(raw, dict):
@@ -818,7 +824,7 @@ class BacktestEngine:
             strategy_block = raw.get("strategy", {})
             if not strategy_block:
                 # Some versions put results directly at top level
-                strategy_block = {"DynamicStrategy": raw}
+                strategy_block = {strategy_name: raw}
 
             strat_name = next(iter(strategy_block))
             sd = strategy_block[strat_name]

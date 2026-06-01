@@ -33,6 +33,57 @@ class CuratorAgent(BaseAgent):
             system_prompt=CURATOR_SYSTEM_PROMPT,
         )
 
+    def inject_context(
+        self,
+        goal: str,
+        k: int = 3,
+        current_research_window: str = "",
+        contamination_guard: bool = True,
+    ) -> str:
+        """Retrieve relevant past insights for agent context.
+
+        If contamination_guard=True and current_research_window is set:
+        - Only injects strategies from DIFFERENT data windows
+        - Adds context note: "Past strategy insights (from different data periods)"
+
+        If contamination_guard=False:
+        - Legacy behaviour (for backward compatibility)
+        """
+        from backtesting.data_split import DATA_SPLIT
+
+        if contamination_guard and current_research_window:
+            results = self._vector_store.query_strategies_excluding_window(
+                query=goal,
+                exclude_window=current_research_window,
+                k=k,
+            )
+            if not results:
+                return "No past strategies from different data periods found."
+            parts = [
+                "[MEMORY CONTEXT - Past relevant research"
+                " (from different data periods):]"
+            ]
+            for r in results:
+                meta = r.get("metadata", {}) or {}
+                win = meta.get("discovered_on_window", "unknown")
+                text = r.get("document", "")[:300]
+                parts.append(
+                    f"- [{meta.get('regime', '?')} / {win}]: {text}"
+                )
+            return "\n".join(parts)
+        else:
+            # Legacy: standard similarity search
+            results = self._vector_store.query_similar(goal, k=k)
+            if not results:
+                return ""
+            parts = ["[MEMORY CONTEXT - Past relevant research:]"]
+            for r in results:
+                parts.append(f"- {r['text'][:300]}")
+                meta = r.get("metadata", {})
+                if meta.get("goal_id"):
+                    parts[-1] += f" (from goal {meta['goal_id']})"
+            return "\n".join(parts)
+
     def _build_tools(self):
         def search_memory_fn(query_json: str = '{"query":""}') -> str:
             """Search vector memory for relevant past insights.
@@ -63,12 +114,13 @@ class CuratorAgent(BaseAgent):
 
         def store_insight_fn(kwargs_json: str = '{"text":"","metadata":{}}') -> str:
             """Store a new insight into vector memory.
-            Args: JSON like {"text": "SMA 10/30 had Sharpe -2.66", "metadata": {"goal_id": "...", "agent": "strategist"}}"""
+            Args: JSON like {"text": "SMA 10/30 had Sharpe -2.66",
+                            "metadata": {"goal_id": "...", "agent": "strategist"}}"""
             import json
             try:
                 params = json.loads(kwargs_json) if kwargs_json.strip() else {}
             except json.JSONDecodeError:
-                return f"Error: invalid JSON"
+                return "Error: invalid JSON"
 
             text = params.get("text", "")
             metadata = params.get("metadata", {})
@@ -79,32 +131,21 @@ class CuratorAgent(BaseAgent):
 
             self._vector_store.store_insight(text, metadata=metadata)
             return f"Stored insight ({len(text)} chars)"
-        from langchain_core.tools import Tool
 
         return [
             Tool(name="search_memory", func=search_memory_fn,
-                 description="Search past agent insights. Args: JSON with 'query' and 'k'."),
+                 description="Search past agent insights. "
+                             "Args: JSON with 'query' and 'k'."),
             Tool(name="store_insight", func=store_insight_fn,
-                 description="Store a new insight into long-term memory. Args: JSON with 'text' and 'metadata'."),
+                 description="Store a new insight into long-term memory. "
+                             "Args: JSON with 'text' and 'metadata'."),
         ]
-
-    def inject_context(self, goal: str, k: int = 3) -> str:
-        """Retrieve relevant memories and format them as prompt context."""
-        results = self._vector_store.query_similar(goal, k=k)
-        if not results:
-            return ""
-        parts = ["[MEMORY CONTEXT - Past relevant research:]"]
-        for r in results:
-            parts.append(f"- {r['text'][:300]}")
-            meta = r.get("metadata", {})
-            if meta.get("goal_id"):
-                parts[-1] += f" (from goal {meta['goal_id']})"
-        return "\n".join(parts)
 
     def store_goal_result(self, goal_id: str, description: str, result: dict):
         """Store a completed goal's results into memory."""
         self._vector_store.store_insight(
-            f"Goal: {description}\nBoard: {result.get('board_summary', '')}\nStrategies: {len(result.get('strategies', []))}",
+            f"Goal: {description}\nBoard: {result.get('board_summary', '')}\n"
+            f"Strategies: {len(result.get('strategies', []))}",
             metadata={"goal_id": goal_id, "type": "goal_result"},
         )
 

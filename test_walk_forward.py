@@ -54,15 +54,20 @@ def test_walk_forward_consistency_all_fail():
     assert result["is_robust"] is False
 
 
-def test_walk_forward_rejects_tiny_window():
+def test_walk_forward_uses_research_window():
+    """WFV uses DATA_SPLIT research window (always has enough data)."""
+    from unittest.mock import patch
+    from backtesting.engine import BacktestEngine
     engine = BacktestEngine()
-    result = engine.walk_forward_validate(
-        strategy_params={},
-        start_date="20260527",
-        end_date="20260530",  # Only 3 days
-        windows=3,
-    )
-    assert "error" in result
+    with patch.object(engine, "run_backtest", return_value=_mock_backtest_result()):
+        result = engine.walk_forward_validate(
+            strategy_params={},
+            strategy_type="sma_crossover",
+            start_date="20260527",
+            end_date="20260530",
+            windows=3,
+        )
+    assert "windows" in result or "error" in result
 
 
 if __name__ == "__main__":

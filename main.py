@@ -30,6 +30,13 @@ def main():
              "tests and iterates automatically. Example: --auto-research 'BTC momentum strategies'"
     )
     parser.add_argument(
+        "--autonomous",
+        action="store_true",
+        help="Start fully autonomous mode: self-directs research goals based on market "
+             "conditions, runs continuously, monitors strategy decay, and adapts without "
+             "human input. Use --ui to also start the web dashboard."
+    )
+    parser.add_argument(
         "command",
         nargs="*",
         help="Workspace command: new-goal | list-goals | review | run",
@@ -45,6 +52,10 @@ def main():
             "Could not download historical data. "
             "Backtests will use whatever data is locally available."
         )
+
+    if args.autonomous:
+        _run_autonomous(ui=args.ui)
+        return
 
     if args.auto_research:
         from orchestration.auto_research import run_auto_research
@@ -110,6 +121,83 @@ def _run_ui():
     except KeyboardInterrupt:
         server.terminate()
         server.wait()
+
+
+def _run_autonomous(ui: bool = False):
+    """Start the autonomous research loop, optionally with the web UI."""
+    import asyncio
+
+    from agents.analyst import AnalystAgent
+    from agents.strategist import StrategistAgent
+    from agents.risk_manager import RiskManagerAgent
+    from agents.curator import CuratorAgent
+    from agents.researcher import ResearcherAgent
+    from backtesting.engine import BacktestEngine
+    from memory.vector_store import VectorStore
+    from orchestration.autonomous_loop import AutonomousResearchLoop
+    from orchestration.experiment_tracker import ExperimentTracker
+    from orchestration.hermes import HermesOrchestrator
+    from data.regime import MarketRegimeDetector
+    from config import settings
+
+    console.print("\n" + "=" * 60)
+    console.print("[bold cyan]CRYPTO AGENT BOT — AUTONOMOUS MODE[/bold cyan]")
+    console.print("[white]Self-directing research. Never waits for human input.[/white]")
+    console.print(f"[white]Interval: {settings.AUTONOMOUS_INTERVAL_MINUTES} minutes[/white]")
+    console.print("=" * 60 + "\n")
+
+    engine = BacktestEngine()
+    agents = {
+        "analyst": AnalystAgent(),
+        "strategist": StrategistAgent(engine=engine),
+        "risk_manager": RiskManagerAgent(),
+        "curator": CuratorAgent(),
+        "researcher": ResearcherAgent(),
+    }
+    orchestrator = HermesOrchestrator(agents=agents)
+    vector_store = VectorStore()
+    experiment_tracker = ExperimentTracker()
+    regime_detector = MarketRegimeDetector()
+
+    event_bus = None
+    if ui:
+        from api.event_bus import EventBus
+        event_bus = EventBus()
+
+    loop = AutonomousResearchLoop(
+        orchestrator=orchestrator,
+        regime_detector=regime_detector,
+        experiment_tracker=experiment_tracker,
+        vector_store=vector_store,
+        interval_minutes=settings.AUTONOMOUS_INTERVAL_MINUTES,
+        event_bus=event_bus,
+    )
+
+    async def _run_with_ui():
+        import uvicorn
+        from api.server import app as fastapi_app
+        fastapi_app.state.autonomous_loop = loop
+        fastapi_app.state.event_bus = event_bus
+        fastapi_app.state.vector_store = vector_store
+        fastapi_app.state.experiment_tracker = experiment_tracker
+        # Loop is started by the server's startup event handler
+        config = uvicorn.Config(fastapi_app, host="127.0.0.1", port=8765, log_level="info")
+        server = uvicorn.Server(config)
+        await server.serve()
+        loop.shutdown()
+
+    async def _run_headless():
+        await loop.run_forever()
+
+    try:
+        if ui:
+            asyncio.run(_run_with_ui())
+        else:
+            asyncio.run(_run_headless())
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Shutdown requested...[/yellow]")
+        loop.shutdown()
+        console.print("[green]Autonomous loop stopped.[/green]")
 
 
 def _run_demo():

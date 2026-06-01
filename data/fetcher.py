@@ -89,3 +89,53 @@ class MarketDataFetcher:
         except ccxt.ExchangeError as exc:
             logger.error("Exchange error fetching price: %s", exc)
             raise
+
+
+# ── Multi-exchange support ──
+
+
+class MultiExchangeFetcher:
+    """Wraps multiple CCXT instances for best-price routing and fallback."""
+
+    def __init__(self, exchange_ids: Optional[list] = None):
+        self._exchange_ids = exchange_ids or ["binance", "bybit"]
+        self._fetchers: dict = {}
+        for eid in self._exchange_ids:
+            try:
+                self._fetchers[eid] = MarketDataFetcher(exchange_id=eid)
+            except Exception as exc:
+                logger.warning("Could not initialise %s: %s", eid, exc)
+
+    def fetch_best_price(self, symbol: str) -> dict:
+        """Return the exchange with the best bid/ask spread."""
+        prices = {}
+        for name, fetcher in self._fetchers.items():
+            try:
+                exch = fetcher.exchange
+                ticker = exch.fetch_ticker(symbol)
+                ask = ticker.get("ask", 0)
+                bid = ticker.get("bid", 0)
+                spread = ((ask - bid) / bid) if bid > 0 else float("inf")
+                prices[name] = {"bid": bid, "ask": ask, "spread_pct": spread}
+            except Exception:
+                pass
+        if not prices:
+            return {"exchange": "binance", "price": 0, "error": "No exchange available"}
+        best = min(prices.items(), key=lambda x: x[1].get("spread_pct", float("inf")))
+        return {"exchange": best[0], **best[1]}
+
+    def fetch_ohlcv_merged(self, symbol: str, timeframe: str = "1h", limit: int = 500) -> pd.DataFrame:
+        """Return OHLCV from primary exchange with fallback."""
+        primary = self._fetchers.get("binance")
+        if primary:
+            try:
+                return primary.fetch_ohlcv(symbol, timeframe, limit)
+            except Exception:
+                pass
+        fallback = self._fetchers.get("bybit")
+        if fallback:
+            try:
+                return fallback.fetch_ohlcv(symbol, timeframe, limit)
+            except Exception:
+                pass
+        return pd.DataFrame()

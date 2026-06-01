@@ -66,7 +66,11 @@ def load_context(state: OrchestratorState) -> Dict[str, Any]:
 # ── Graph node functions ──
 
 def dispatch_task(state: OrchestratorState) -> Dict[str, Any]:
-    """Pick the next TODO task and assign an agent."""
+    """Pick the next TODO task and assign an agent.
+
+    Injects current market regime context into task descriptions
+    so agents (especially the strategist) can make regime-aware decisions.
+    """
     board = state["board"]
     goal = state["goal"]
     cycle = state["cycle"]
@@ -83,6 +87,47 @@ def dispatch_task(state: OrchestratorState) -> Dict[str, Any]:
 
     task = todo_tasks[0]
     agent_name = _pick_agent(task.description, board._agent_capabilities)
+
+    # ── Regime-aware routing ──
+    # Inject current regime context into task description for regime-sensitive agents
+    if agent_name in ("strategist", "analyst", "risk_manager"):
+        try:
+            from data.fetcher import MarketDataFetcher
+            from data.regime import MarketRegimeDetector, REGIME_STRATEGY_MAP
+            from config import settings
+
+            fetcher = MarketDataFetcher()
+            df = fetcher.fetch_ohlcv(settings.SYMBOL, settings.TIMEFRAME, limit=250)
+            if df is not None and len(df) > 200:
+                detector = MarketRegimeDetector()
+                snapshot = detector.classify_regime_snapshot(df)
+                regime_note = (
+                    f"\n\n[CURRENT REGIME: {snapshot.regime} (confidence={snapshot.confidence:.0%})]"
+                    f"\nADX={snapshot.adx:.1f}, ATR%={snapshot.atr_pct:.2%}, "
+                    f"SMA200 distance={snapshot.sma200_distance:.2%}"
+                    f"\nRecommended strategies: {', '.join(snapshot.recommended_strategies)}"
+                    f"\nDiscouraged strategies: {', '.join(snapshot.discouraged_strategies)}"
+                )
+                task.description += regime_note
+                logger.info(
+                    "Injected regime context (%s, conf=%.0f%%) into %s task",
+                    snapshot.regime, snapshot.confidence, agent_name,
+                )
+
+                # Apply penalty for discouraged strategies
+                for discouraged in snapshot.discouraged_strategies:
+                    if discouraged.lower() in task.description.lower():
+                        logger.warning(
+                            "Task uses discouraged strategy '%s' for regime '%s'",
+                            discouraged, snapshot.regime,
+                        )
+                        task.description += (
+                            f"\n[WARNING: '{discouraged}' is discouraged in {snapshot.regime} regime. "
+                            f"Consider switching to: {', '.join(snapshot.recommended_strategies)}]"
+                        )
+        except Exception as exc:
+            logger.debug("Regime injection skipped: %s", exc)
+
     task.status = "IN_PROGRESS"
     task.assigned_to = agent_name
 
@@ -90,7 +135,7 @@ def dispatch_task(state: OrchestratorState) -> Dict[str, Any]:
     return {
         "current_task_id": task.id,
         "current_agent_name": agent_name,
-        "messages": [f"DISPATCH: {task.description} -> {agent_name}"],
+        "messages": [f"DISPATCH: {task.description[:80]} -> {agent_name}"],
     }
 
 

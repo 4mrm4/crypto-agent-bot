@@ -1,269 +1,694 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Crypto Agent Bot</title>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>💰</text></svg>">
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #0f172a; color: #e2e8f0; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
-  ::-webkit-scrollbar { width: 6px; }
-  ::-webkit-scrollbar-track { background: #1e293b; }
-  ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
-  .card { background: #1e293b; border-radius: 12px; border: 1px solid #334155; padding: 16px; }
-  .metric-card { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; border: 1px solid #334155; padding: 16px; text-align: center; }
-  .event-enter { animation: slideIn 0.3s ease-out; }
-  @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
-  .spinner { animation: spin 1s linear infinite; }
-  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-  .pulse { animation: pulse 2s infinite; }
-  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-  .btn { background: #3b82f6; border: none; color: white; padding: 8px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
-  .btn:hover { background: #2563eb; }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .input { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; color: #e2e8f0; width: 100%; }
-  .input:focus { outline: none; border-color: #3b82f6; }
-  select { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 8px; color: #e2e8f0; }
-</style>
-</head>
-<body>
-<div id="root"></div>
-<div id="error-banner" style="display:none; position:fixed; top:0; left:0; right:0; background:#ef4444; color:white; padding:12px 20px; font-family:monospace; font-size:13px; z-index:9999;"></div>
-<script>
-window.onerror = function(msg, url, line, col, err) {
-  var banner = document.getElementById('error-banner');
-  banner.textContent = msg + ' at line ' + line;
-  banner.style.display = 'block';
-};
-</script>
-<script type="text/babel">
-const { useState, useEffect, useRef, useCallback } = React;
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crypto Agent Bot — Autonomous Trading</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>⟐</text></svg>"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Sora:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-deep: #141210;
+        --bg-surface: #1b1815;
+        --bg-card: #221e1a;
+        --bg-elevated: #2d2722;
+        --border: #36302a;
+        --border-light: #443d36;
+        --text: #e6ddd4;
+        --text-secondary: #a6978a;
+        --text-muted: #73665a;
+        --amber: #e8854a;
+        --amber-glow: #e8854a18;
+        --amber-dim: #cc7540;
+        --teal: #4a9e8c;
+        --teal-dim: #3a8a7a;
+        --teal-glow: #4a9e8c15;
+        --sage: #7ab86a;
+        --sage-glow: #7ab86a12;
+        --coral: #d65d5d;
+        --coral-glow: #d65d5d12;
+        --gold: #d8a84a;
+        --gold-glow: #d8a84a12;
+        --radius: 10px;
+        --radius-sm: 6px;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        background: var(--bg-deep);
+        background-image:
+          radial-gradient(ellipse at 20% 50%, rgba(232, 133, 74, 0.04) 0%, transparent 50%),
+          radial-gradient(ellipse at 80% 20%, rgba(74, 158, 140, 0.03) 0%, transparent 50%);
+        color: var(--text);
+        font-family: "Sora", sans-serif;
+        -webkit-font-smoothing: antialiased;
+        min-height: 100vh;
+        position: relative;
+        overflow-x: hidden;
+      }
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        opacity: 0.025;
+        pointer-events: none;
+        z-index: 9999;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+        background-repeat: repeat;
+        background-size: 200px 200px;
+      }
+      body::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-image:
+          linear-gradient(rgba(54, 48, 42, 0.3) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(54, 48, 42, 0.3) 1px, transparent 1px);
+        background-size: 48px 48px;
+        pointer-events: none;
+        z-index: -1;
+      }
+      ::-webkit-scrollbar {
+        width: 3px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 2px;
+      }
+      @keyframes reveal {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes revealLeft {
+        from {
+          opacity: 0;
+          transform: translateX(-8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      @keyframes revealRight {
+        from {
+          opacity: 0;
+          transform: translateX(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.3;
+        }
+      }
+      @keyframes shimmer {
+        0% {
+          background-position: -200% 0;
+        }
+        100% {
+          background-position: 200% 0;
+        }
+      }
+      @keyframes stampIn {
+        from {
+          opacity: 0;
+          scale: 0.9;
+        }
+        to {
+          opacity: 1;
+          scale: 1;
+        }
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes slideUp {
+        from {
+          opacity: 0;
+          transform: translateY(12px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .r1 {
+        animation: reveal 0.4s ease-out both;
+      }
+      .r2 {
+        animation: reveal 0.4s ease-out 0.08s both;
+      }
+      .r3 {
+        animation: reveal 0.4s ease-out 0.16s both;
+      }
+      .r4 {
+        animation: reveal 0.4s ease-out 0.24s both;
+      }
+      .rl {
+        animation: revealLeft 0.4s ease-out both;
+      }
+      .rr {
+        animation: revealRight 0.4s ease-out both;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div
+      id="error-banner"
+      style="
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: var(--coral);
+        color: #fff;
+        padding: 12px 20px;
+        font-family: &quot;DM Mono&quot;, monospace;
+        font-size: 13px;
+        z-index: 99999;
+      "
+    ></div>
+    <script>
+      window.onerror = function (m, u, l, c, e) {
+        var b = document.getElementById("error-banner");
+        b.textContent = m + " at line " + l;
+        b.style.display = "block";
+      };
+    </script>
+    <script type="text/babel">const { useState, useEffect, useRef, useCallback, useMemo, Fragment } = React;
 
-// ── Color theme ──
-const COLORS = {
-  bg: '#0f172a',
-  card: '#1e293b',
-  border: '#334155',
-  text: '#e2e8f0',
-  muted: '#94a3b8',
-  blue: '#3b82f6',
-  green: '#22c55e',
-  red: '#ef4444',
-  yellow: '#eab308',
-  purple: '#a855f7',
+const T = {
+  deep: "#141210",
+  surface: "#1b1815",
+  card: "#221e1a",
+  elevated: "#2d2722",
+  border: "#36302a",
+  borderLight: "#443d36",
+  text: "#e6ddd4",
+  secondary: "#a6978a",
+  muted: "#73665a",
+  amber: "#e8854a",
+  amberDim: "#cc7540",
+  teal: "#4a9e8c",
+  tealDim: "#3a8a7a",
+  sage: "#7ab86a",
+  coral: "#d65d5d",
+  gold: "#d8a84a",
 };
 
-// ── Agent icon mapping ──
-const AGENT_ICONS = {
-  analyst: '📊',
-  strategist: '🎯',
-  risk_manager: '🛡️',
-  curator: '🧠',
-  researcher: '🔬',
+const AGENTS = {
+  analyst: { icon: "◈", label: "Analyst", color: "#448aff" },
+  strategist: { icon: "◉", label: "Strategist", color: "#4a9e8c" },
+  risk_manager: { icon: "▣", label: "Risk Mgr", color: "#7ab86a" },
+  curator: { icon: "◇", label: "Curator", color: "#b388ff" },
+  researcher: { icon: "○", label: "Researcher", color: "#d8a84a" },
 };
 
-// ── App Component ──
+function uid() {
+  return Math.random().toString(36).slice(2, 6);
+}
+function fmtNum(n) {
+  return n != null ? Number(n).toLocaleString() : "—";
+}
+
+// ── App ──
 function App() {
+  const [tab, setTab] = useState("research");
   const [runId, setRunId] = useState(null);
   const [connected, setConnected] = useState(false);
-  const [events, setEvents] = useState([]);
-  const [hypothesis, setHypothesis] = useState('');
+  const [hypothesis, setHypothesis] = useState("");
   const [iteration, setIteration] = useState(0);
-  const [maxIterations, setMaxIterations] = useState(5);
-  const [metrics, setMetrics] = useState({ sharpe_ratio: 0, win_rate: 0, max_drawdown: 0, total_trades: 0 });
-  const [iterationChart, setIterationChart] = useState([]);
+  const [maxIter, setMaxIter] = useState(5);
+  const [metrics, setMetrics] = useState({});
+  const [chartData, setChartData] = useState([]);
   const [showModal, setShowModal] = useState(false);
-  const [goalInput, setGoalInput] = useState('Test SMA crossover for BTC/USDT');
+  const [goalInput, setGoalInput] = useState("Test SMA crossover for BTC/USDT");
   const [cycleInput, setCycleInput] = useState(3);
   const [iterInput, setIterInput] = useState(1);
   const [running, setRunning] = useState(false);
-  const [agentTimeline, setAgentTimeline] = useState([]);
-  const [eventLog, setEventLog] = useState([]);
-  const [tokenUsage, setTokenUsage] = useState({ total_tokens: 0, prompt_tokens: 0, completion_tokens: 0 });
-  const eventLogRef = useRef(null);
+  const [timeline, setTimeline] = useState([]);
+  const [log, setLog] = useState([]);
+  const [tokens, setTokens] = useState({ total_tokens: 0 });
+  const [sentiment, setSentiment] = useState(null);
+  const logRef = useRef(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  // Connect WebSocket when runId changes
+  // Dashboard state
+  const [autonomousState, setAutonomousState] = useState(null);
+  const [autoStarting, setAutoStarting] = useState(false);
+  const [positions, setPositions] = useState([]);
+  const [signalFeed, setSignalFeed] = useState([]);
+  const [strategies, setStrategies] = useState([]);
+  const [circuitBreaker, setCircuitBreaker] = useState({ halted: false });
+  const [regimeSnapshot, setRegimeSnapshot] = useState(null);
+
   useEffect(() => {
     if (!runId) return;
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/run/${runId}`;
-    const ws = new WebSocket(wsUrl);
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${proto}//${window.location.host}/ws/run/${runId}`);
     ws.onopen = () => setConnected(true);
-    ws.onmessage = (msg) => {
+    ws.onmessage = (m) => {
       try {
-        const event = JSON.parse(msg.data);
-        processEvent(event);
-      } catch(e) {}
+        processEvent(JSON.parse(m.data));
+      } catch (e) {}
     };
-    ws.onclose = () => { setConnected(false); };
-    ws.onerror = () => { setConnected(false); };
+    ws.onclose = () => setConnected(false);
+    ws.onerror = () => setConnected(false);
     return () => ws.close();
   }, [runId]);
 
-  function processEvent(event) {
-    const { type, payload, timestamp } = event;
-    const ts = timestamp ? new Date(timestamp).toLocaleTimeString() : '';
-    const entry = { type, payload, timestamp: ts, id: Math.random().toString(36).slice(2, 8) };
-
-    setEvents(prev => [...prev.slice(-200), entry]);
-    setEventLog(prev => [...prev.slice(-49), entry]);
-
+  function processEvent(ev) {
+    const { type, payload, timestamp } = ev;
+    const ts = timestamp ? new Date(timestamp).toLocaleTimeString() : "";
+    const entry = { type, payload, timestamp: ts, id: uid() };
+    setLog((prev) => [...prev.slice(-49), entry]);
     switch (type) {
-      case 'hypothesis':
-        setHypothesis(payload.hypothesis || '');
+      case "hypothesis":
+        setHypothesis(payload.hypothesis || "");
         setIteration(payload.iteration || 0);
-        setMaxIterations(payload.max_iterations || 5);
+        setMaxIter(payload.max_iterations || 5);
         break;
-
-      case 'critique':
-        setHypothesis(prev => prev + '\n\n--- Critique ---\n' + (payload.critique || ''));
+      case "critique":
+        setHypothesis((prev) => prev + "\n\n╌ Critique ╌\n" + (payload.critique || ""));
         break;
-
-      case 'iteration_result':
+      case "iteration_result":
         setIteration(payload.iteration || 0);
         setMetrics(payload.metrics || {});
-        if (payload.metrics) {
-          setIterationChart(prev => [...prev, {
-            iter: payload.iteration,
-            sharpe: payload.metrics.sharpe_ratio || 0,
-            wr: payload.metrics.win_rate || 0,
-            dd: Math.abs(payload.metrics.max_drawdown || 0),
-          }]);
-        }
+        if (payload.metrics)
+          setChartData((prev) => [
+            ...prev,
+            {
+              iter: payload.iteration,
+              sharpe: payload.metrics.sharpe_ratio || 0,
+              wr: payload.metrics.win_rate || 0,
+              dd: Math.abs(payload.metrics.max_drawdown || 0),
+            },
+          ]);
         break;
-
-      case 'sentiment':
-        if (payload) {
-          const el = document.getElementById('sentiment-value');
-          if (el) {
-            el.textContent = (payload.bias || 'NEUTRAL').toUpperCase();
-            el.style.color = payload.bias === 'bullish' ? '#4ade80' : payload.bias === 'bearish' ? '#f87171' : '#fbbf24';
-          }
-          const fgEl = document.getElementById('sentiment-fg');
-          if (fgEl && payload.fear_greed) {
-            fgEl.textContent = `Fear & Greed: ${payload.fear_greed.value} (${payload.fear_greed.classification})`;
-          }
-        }
+      case "sentiment":
+        if (payload) setSentiment(payload);
         break;
-
-      case 'task_done':
-        setAgentTimeline(prev => [...prev.slice(-49), {
-          agent: payload.agent,
-          task: payload.description?.slice(0, 100) || '',
-          time: ts,
-          status: 'done',
-          id: Math.random().toString(36).slice(2, 8),
-        }]);
+      case "task_done":
+        setTimeline((prev) => [
+          ...prev.slice(-49),
+          {
+            agent: payload.agent,
+            task: (payload.description || "").slice(0, 100),
+            time: ts,
+            id: uid(),
+          },
+        ]);
         break;
-
-      case 'run_start':
+      case "run_start":
         setRunning(true);
-        setHypothesis('');
-        // Reset sentiment
-        { const el = document.getElementById('sentiment-value'); if (el) { el.textContent = '--'; el.style.color = ''; } }
-        { const el = document.getElementById('sentiment-fg'); if (el) el.textContent = 'Fear & Greed: --'; }
+        setHypothesis("");
         setMetrics({});
         setIteration(0);
-        setIterationChart([]);
-        setAgentTimeline([]);
-        setEventLog([]);
+        setChartData([]);
+        setTimeline([]);
+        setLog([]);
+        setSentiment(null);
+        setTokens({ total_tokens: 0 });
         break;
-
-      case 'token_usage':
-        setTokenUsage(payload || { total_tokens: 0, prompt_tokens: 0, completion_tokens: 0 });
+      case "token_usage":
+        setTokens(payload || { total_tokens: 0 });
         break;
-
-      case 'run_complete':
+      case "run_complete":
+      case "run_error":
         setRunning(false);
         break;
-
-      case 'run_error':
-        setRunning(false);
+      // Dashboard events
+      case "autonomous_goal_generated":
+        setAutonomousState((prev) => ({
+          ...prev,
+          current_goal: payload.motivation,
+          last_regime: payload.regime,
+        }));
         break;
-
-      case 'heartbeat':
+      case "autonomous_cycle_complete":
+        fetch("/api/autonomous/status")
+          .then((r) => r.json())
+          .then((d) => setAutonomousState(d))
+          .catch(() => {});
+        fetch("/api/regime/current")
+          .then((r) => r.json())
+          .then((d) => setRegimeSnapshot(d))
+          .catch(() => {});
         break;
-
-      default:
+      case "strategy_decay_detected":
+        setLog((prev) => [
+          ...prev.slice(-49),
+          { type: "decay_alert", payload, time: ts, id: uid() },
+        ]);
+        break;
+      case "trade_signal_evaluated":
+        setSignalFeed((prev) => [...prev.slice(-99), { signal: payload, time: ts, id: uid() }]);
+        break;
+      case "trade_executed":
+        setSignalFeed((prev) => [
+          ...prev.slice(-99),
+          { signal: { ...payload, type: "executed" }, time: ts, id: uid() },
+        ]);
+        break;
+        fetch("/api/positions/open")
+          .then((r) => r.json())
+          .then((d) => setPositions(Array.isArray(d) ? d : []))
+          .catch(() => {});
+        break;
+      case "anomaly_detected":
+        setLog((prev) => [...prev.slice(-49), { type: "anomaly", payload, time: ts, id: uid() }]);
+        break;
+      case "circuit_breaker_triggered":
+        setCircuitBreaker({ halted: true, reason: payload.reason });
+        break;
+      case "circuit_breaker_cleared":
+        setCircuitBreaker({ halted: false });
         break;
     }
   }
 
-  // Auto-scroll event log
   useEffect(() => {
-    if (eventLogRef.current) {
-      eventLogRef.current.scrollTop = eventLogRef.current.scrollHeight;
-    }
-  }, [eventLog]);
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [log]);
 
-  function startRun(overrideGoal) {
-    const goal = overrideGoal || goalInput;
-    if (!goal.trim()) return;
+  function startRun(goal) {
+    if (!goal?.trim()) return;
     setShowModal(false);
     setRunning(true);
-    setHypothesis('');
+    setHypothesis("");
+    setMetrics({});
     setIteration(0);
-    setIterationChart([]);
-    setAgentTimeline([]);
-    setEventLog([]);
-    setMetrics({ sharpe_ratio: 0, win_rate: 0, max_drawdown: 0, total_trades: 0 });
-
-    fetch('/api/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ goal: goal, max_cycles: cycleInput, max_iterations: iterInput }),
+    setChartData([]);
+    setTimeline([]);
+    setLog([]);
+    setSentiment(null);
+    setTokens({ total_tokens: 0 });
+    fetch("/api/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ goal, max_cycles: cycleInput, max_iterations: iterInput }),
     })
-    .then(r => r.json())
-    .then(data => {
-      if (data.run_id) setRunId(data.run_id);
-    })
-    .catch(err => {
-      console.error('Failed to start run', err);
-      setRunning(false);
-    });
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.run_id) setRunId(d.run_id);
+      })
+      .catch(() => setRunning(false));
   }
 
+  function startAutonomous() {
+    setAutoStarting(true);
+    fetch("/api/autonomous/start", { method: "POST" })
+      .then((r) => r.json())
+      .then((d) => {
+        setAutoStarting(false);
+        if (d.status === "already_running")
+          setAutonomousState((prev) => ({ ...prev, is_running: true }));
+      })
+      .catch(() => setAutoStarting(false));
+  }
+  function stopAutonomous() {
+    fetch("/api/autonomous/stop", { method: "POST" })
+      .then((r) => r.json())
+      .then(() => setAutonomousState((prev) => ({ ...prev, is_running: false })))
+      .catch(() => {});
+  }
+  function pollAutoStatus() {
+    fetch("/api/autonomous/status")
+      .then((r) => r.json())
+      .then((d) => setAutonomousState(d))
+      .catch(() => {});
+  }
+  // Poll dashboard data
+  useEffect(() => {
+    if (tab !== "dashboard") return;
+    const poll = () => {
+      fetch("/api/autonomous/status")
+        .then((r) => r.json())
+        .then(setAutonomousState)
+        .catch(() => {});
+      fetch("/api/positions/open")
+        .then((r) => r.json())
+        .then((d) => setPositions(Array.isArray(d) ? d : []))
+        .catch(() => {});
+      fetch("/api/strategies/deployable")
+        .then((r) => r.json())
+        .then((d) => setStrategies(Array.isArray(d) ? d : []))
+        .catch(() => {});
+      fetch("/api/circuit-breaker/status")
+        .then((r) => r.json())
+        .then(setCircuitBreaker)
+        .catch(() => {});
+      fetch("/api/regime/current")
+        .then((r) => r.json())
+        .then((d) => setRegimeSnapshot(d))
+        .catch(() => {});
+    };
+    poll();
+    const iv = setInterval(poll, 10000);
+    return () => clearInterval(iv);
+  }, [tab]);
+
+  const dotColor = running ? T.sage : connected ? T.muted : T.coral;
+  const dotLabel = running ? "Running" : connected ? "Standby" : "Offline";
+
+  if (!mounted) return null;
+
+  const tabs = [
+    { id: "research", label: "Research", icon: "⟐" },
+    { id: "dashboard", label: "Dashboard", icon: "◈" },
+    { id: "strategies", label: "Strategies", icon: "◉" },
+    { id: "signals", label: "Signals", icon: "○" },
+  ];
+
   return (
-    <div style={{ padding: '16px', maxWidth: '1600px', margin: '0 auto', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div
+      style={{
+        maxWidth: 1440,
+        margin: "0 auto",
+        padding: "16px 24px",
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+      }}
+    >
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>
-          <span style={{ color: COLORS.blue }}>Crypto Agent Bot</span>
-          {running && <span className="pulse" style={{ color: COLORS.green, fontSize: '14px', marginLeft: '12px' }}>● Running</span>}
-          {connected && !running && <span style={{ color: COLORS.muted, fontSize: '14px', marginLeft: '12px' }}>● Connected</span>}
-          {!connected && runId && <span style={{ color: COLORS.red, fontSize: '14px', marginLeft: '12px' }}>● Disconnected</span>}
-        </h1>
-        <button className="btn" onClick={() => setShowModal(true)} disabled={running}>
-          {running ? 'Running...' : '+ Run New Goal'}
-        </button>
-      </div>
+      <header
+        className="r1"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "0 0 10px 0",
+          borderBottom: `1px solid ${T.border}`,
+          position: "relative",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            bottom: -1,
+            left: 0,
+            height: 2,
+            width: 80,
+            background: T.amber,
+            borderRadius: "0 1px 0 0",
+          }}
+        />
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: "0 8px 0 8px",
+              border: `2px solid ${T.amber}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 16,
+              fontWeight: 700,
+              color: T.amber,
+              fontFamily: "'Syne',sans-serif",
+              letterSpacing: "-0.5px",
+            }}
+          >
+            ⟐
+          </div>
+          <div>
+            <h1
+              style={{
+                fontFamily: "'Syne',sans-serif",
+                fontSize: 17,
+                fontWeight: 700,
+                letterSpacing: "-0.3px",
+                color: T.text,
+                lineHeight: 1.2,
+              }}
+            >
+              Crypto Agent Bot
+            </h1>
+            <div
+              style={{
+                fontSize: 10,
+                color: T.muted,
+                fontFamily: "'DM Mono',monospace",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginTop: 1,
+              }}
+            >
+              <span style={{ color: dotColor, fontSize: 8 }}>●</span>
+              <span>{dotLabel}</span>
+              {tokens.total_tokens > 0 && (
+                <span style={{ color: T.gold }}>◆ {tokens.total_tokens.toLocaleString()} tok</span>
+              )}
+              {circuitBreaker.halted && <span style={{ color: T.coral }}>! CIRCUIT HALTED</span>}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              style={{
+                padding: "7px 14px",
+                borderRadius: "0 6px 0 6px",
+                background: tab === t.id ? T.amber : T.elevated,
+                color: tab === t.id ? "#fff" : T.text,
+                border: `1px solid ${tab === t.id ? T.amber : T.borderLight}`,
+                cursor: "pointer",
+                fontSize: 11,
+                fontWeight: 600,
+                fontFamily: "'Sora',sans-serif",
+                transition: "all 0.15s",
+              }}
+            >
+              {t.icon} {t.label}
+            </button>
+          ))}
+          <button
+            onClick={() => {
+              const s = autonomousState || {};
+              if (s.is_running) stopAutonomous();
+              else startAutonomous();
+            }}
+            disabled={autoStarting || running}
+            style={{
+              padding: "7px 14px",
+              borderRadius: "0 6px 0 6px",
+              background: autoStarting
+                ? "#d8a84a"
+                : autonomousState?.is_running
+                  ? "#7ab86a"
+                  : "#2d2722",
+              color: autoStarting ? "#000" : "#fff",
+              border: `1px solid ${autoStarting ? "#d8a84a" : autonomousState?.is_running ? "#7ab86a" : "#443d36"}`,
+              cursor: autoStarting || running ? "not-allowed" : "pointer",
+              fontSize: 11,
+              fontWeight: 600,
+              fontFamily: "'Sora',sans-serif",
+              opacity: autoStarting || running ? 0.4 : 1,
+              transition: "all 0.15s",
+            }}
+          >
+            {autoStarting
+              ? "Starting\u2026"
+              : autonomousState?.is_running
+                ? "Stop Auto"
+                : "Start Auto"}
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            disabled={running}
+            style={{
+              padding: "7px 14px",
+              borderRadius: "0 6px 0 6px",
+              background: T.elevated,
+              color: T.text,
+              border: `1px solid ${T.borderLight}`,
+              cursor: running ? "not-allowed" : "pointer",
+              fontSize: 11,
+              fontWeight: 600,
+              fontFamily: "'Sora',sans-serif",
+              opacity: running ? 0.4 : 1,
+            }}
+          >
+            + New Run
+          </button>
+        </div>
+      </header>
 
-      {/* Main grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '12px', flex: 1, minHeight: 0 }}>
-        {/* Left: Agent Timeline */}
-        <AgentTimelinePanel events={agentTimeline} />
-
-        {/* Centre: Hypothesis + Metrics */}
-        <CentrePanel
+      {/* Tab content */}
+      {tab === "research" && (
+        <ResearchView
           hypothesis={hypothesis}
           iteration={iteration}
-          maxIterations={maxIterations}
+          maxIter={maxIter}
           metrics={metrics}
-          chartData={iterationChart}
-          tokenUsage={tokenUsage}
+          chartData={chartData}
+          sentiment={sentiment}
+          running={running}
+          timeline={timeline}
+          tokens={tokens}
+          log={log}
+          logRef={logRef}
         />
+      )}
+      {tab === "dashboard" && (
+        <DashboardView
+          autonomousState={autonomousState}
+          circuitBreaker={circuitBreaker}
+          regimeSnapshot={regimeSnapshot}
+          positions={positions}
+          tokens={tokens}
+        />
+      )}
+      {tab === "strategies" && <StrategyLibraryView strategies={strategies} />}
+      {tab === "signals" && <SignalFeedView signals={signalFeed} />}
 
-        {/* Right: Iteration chart + stats */}
-        <RightPanel chartData={iterationChart} />
-      </div>
-
-      {/* Bottom: Event Log */}
-      <EventLogPanel events={eventLog} ref={eventLogRef} />
-
-      {/* Modal */}
       {showModal && (
         <Modal
           goal={goalInput}
@@ -280,238 +705,1598 @@ function App() {
   );
 }
 
-// ── Agent Timeline Panel ──
-function AgentTimelinePanel({ events }) {
+// ════════════════════════════════════════════
+// RESEARCH VIEW (Original layout preserved)
+// ════════════════════════════════════════════
+function ResearchView({
+  hypothesis,
+  iteration,
+  maxIter,
+  metrics,
+  chartData,
+  sentiment,
+  running,
+  timeline,
+  tokens,
+  log,
+  logRef,
+}) {
+  const hasM = metrics && Object.keys(metrics).length > 0;
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <h2 style={{ fontSize: '14px', fontWeight: 600, color: COLORS.muted, marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Agent Timeline</h2>
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        {events.length === 0 && (
-          <p style={{ color: COLORS.muted, fontSize: '13px', textAlign: 'center', marginTop: '40px' }}>No activity yet. Start a research goal.</p>
-        )}
-        {events.map(evt => (
-          <div key={evt.id} className="event-enter" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid #1e293b', fontSize: '13px' }}>
-            <span style={{ fontSize: '16px' }}>{AGENT_ICONS[evt.agent] || '🤖'}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ color: COLORS.text, fontWeight: 500 }}>{evt.agent}</div>
-              <div style={{ color: COLORS.muted, fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{evt.task}</div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ color: COLORS.green, fontSize: '16px' }}>✓</span>
-              <span style={{ color: COLORS.muted, fontSize: '10px' }}>{evt.time}</span>
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: "grid",
+          gridTemplateColumns: "210px 1fr 190px",
+          gap: 12,
+        }}
+      >
+        <div className="rl">
+          <TimelinePanel events={timeline} />
+        </div>
+        <div
+          className="r2"
+          style={{ display: "flex", flexDirection: "column", gap: 10, overflow: "hidden" }}
+        >
+          {/* Hypothesis */}
+          <div
+            style={{
+              background: T.card,
+              borderRadius: "0 8px 0 8px",
+              border: `1px solid ${T.border}`,
+              flexShrink: 0,
+              maxHeight: 160,
+              overflowY: "auto",
+              position: "relative",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                top: 12,
+                left: 0,
+                width: 3,
+                height: 26,
+                background: T.amber,
+                borderRadius: "0 2px 2px 0",
+              }}
+            />
+            <div style={{ padding: "10px 16px 10px 22px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                <h2
+                  style={{
+                    fontFamily: "'Syne',sans-serif",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: T.muted,
+                    textTransform: "uppercase",
+                    letterSpacing: "2px",
+                  }}
+                >
+                  Hypothesis
+                </h2>
+                {iteration > 0 && (
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 600,
+                      padding: "1px 8px",
+                      borderRadius: "0 4px 0 4px",
+                      background: `${T.amber}15`,
+                      color: T.amber,
+                      fontFamily: "'DM Mono',monospace",
+                    }}
+                  >
+                    IT {iteration}/{maxIter}
+                  </span>
+                )}
+              </div>
+              {hypothesis ? (
+                <pre
+                  style={{
+                    fontSize: 11.5,
+                    color: T.text,
+                    lineHeight: 1.7,
+                    fontFamily: "'DM Mono',monospace",
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  {hypothesis}
+                </pre>
+              ) : (
+                <div style={{ fontSize: 12, color: T.muted, fontStyle: "italic" }}>
+                  {running ? "…" : "No hypothesis yet."}
+                </div>
+              )}
             </div>
           </div>
-        ))}
+          {/* Metrics */}
+          <div
+            style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8, flexShrink: 0 }}
+          >
+            <MetricBox
+              label="Sharpe"
+              value={hasM ? metrics.sharpe_ratio?.toFixed(2) : "—"}
+              color={T.amber}
+            />
+            <MetricBox
+              label="Win Rate"
+              value={hasM ? `${(metrics.win_rate * 100).toFixed(0)}%` : "—"}
+              color={T.sage}
+            />
+            <MetricBox
+              label="Max DD"
+              value={hasM ? `${(Math.abs(metrics.max_drawdown) * 100).toFixed(1)}%` : "—"}
+              color={T.coral}
+            />
+            <MetricBox label="Trades" value={hasM ? metrics.total_trades : "—"} color="#b388ff" />
+            <SentimentBox sentiment={sentiment} />
+          </div>
+          {/* Chart */}
+          <div
+            style={{
+              flex: 1,
+              minHeight: 80,
+              background: T.card,
+              borderRadius: "0 8px 0 8px",
+              border: `1px solid ${T.border}`,
+              padding: "10px 16px",
+              position: "relative",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                top: 12,
+                left: 0,
+                width: 3,
+                height: 20,
+                background: T.teal,
+                borderRadius: "0 2px 2px 0",
+              }}
+            />
+            <h2
+              style={{
+                fontFamily: "'Syne',sans-serif",
+                fontSize: 10,
+                fontWeight: 600,
+                color: T.muted,
+                textTransform: "uppercase",
+                letterSpacing: "2px",
+                marginBottom: 6,
+                paddingLeft: 10,
+              }}
+            >
+              Sharpe Progress
+            </h2>
+            {chartData.length === 0 ? (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  height: "calc(100% - 26px)",
+                }}
+              >
+                <div style={{ fontSize: 11, color: T.muted }}>No iterations yet</div>
+              </div>
+            ) : (
+              <Chart data={chartData} xKey="iter" yKey="sharpe" color={T.amber} />
+            )}
+          </div>
+        </div>
+        <div className="rr" style={{ marginTop: 4 }}>
+          <StatsPanel chartData={chartData} tokens={tokens} />
+        </div>
       </div>
+      <LogPanel events={log} ref={logRef} />
     </div>
   );
 }
 
-// ── Centre Panel ──
-function CentrePanel({ hypothesis, iteration, maxIterations, metrics, chartData, tokenUsage }) {
+function TimelinePanel({ events }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflow: 'hidden' }}>
-      {/* Hypothesis */}
-      <div className="card" style={{ flex: '0 0 auto', maxHeight: '200px', overflowY: 'auto' }}>
-        <h2 style={{ fontSize: '14px', fontWeight: 600, color: COLORS.muted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-          Hypothesis {iteration > 0 && <span style={{ color: COLORS.blue }}>— Iteration {iteration}/{maxIterations}</span>}
+    <div
+      style={{
+        background: T.card,
+        borderRadius: "0 8px 0 8px",
+        border: `1px solid ${T.border}`,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        overflow: "hidden",
+        position: "relative",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 2,
+          background: `linear-gradient(90deg,${T.amber},transparent)`,
+        }}
+      />
+      <div
+        style={{
+          padding: "12px 14px 4px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <h2
+          style={{
+            fontFamily: "'Syne',sans-serif",
+            fontSize: 10,
+            fontWeight: 600,
+            color: T.muted,
+            textTransform: "uppercase",
+            letterSpacing: "2px",
+          }}
+        >
+          Agents
         </h2>
-        <pre style={{ fontSize: '12px', color: COLORS.text, whiteSpace: 'pre-wrap', fontFamily: 'monospace', lineHeight: 1.5 }}>
-          {hypothesis || 'Waiting for hypothesis...'}
-        </pre>
+        <span style={{ fontSize: 9, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
+          {events.length}
+        </span>
       </div>
-
-      {/* Metric Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '8px' }}>
-        <MetricCard label="Sharpe Ratio" value={metrics.sharpe_ratio?.toFixed(2) || '—'} color={COLORS.blue} />
-        <MetricCard label="Win Rate" value={metrics.win_rate ? `${(metrics.win_rate * 100).toFixed(0)}%` : '—'} color={COLORS.green} />
-        <MetricCard label="Max Drawdown" value={metrics.max_drawdown ? `${(Math.abs(metrics.max_drawdown) * 100).toFixed(1)}%` : '—'} color={COLORS.red} />
-        <MetricCard label="Total Trades" value={metrics.total_trades || '—'} color={COLORS.purple} />
-        <div className="card" style={{ padding: '8px 12px', borderRadius: '8px', background: '#1a1a2e', border: '1px solid #2a2a4a' }}>
-          <div style={{ fontSize: '10px', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Market Sentiment</div>
-          <div id="sentiment-value" style={{ fontSize: '1.4rem', fontWeight: 700 }}>--</div>
-          <div id="sentiment-fg" style={{ fontSize: '0.8rem', opacity: 0.7 }}>Fear & Greed: --</div>
-        </div>
-        {/* Token counter card */}
-        <TokenCard usage={tokenUsage} />
-      </div>
-
-      {/* Mini chart */}
-      <div className="card" style={{ flex: 1, minHeight: '150px' }}>
-        <h2 style={{ fontSize: '14px', fontWeight: 600, color: COLORS.muted, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Sharpe Progress</h2>
-        {chartData.length === 0 ? (
-          <p style={{ color: COLORS.muted, fontSize: '13px', textAlign: 'center', marginTop: '30px' }}>No iterations yet</p>
+      <div style={{ flex: 1, overflowY: "auto", padding: "2px 8px 8px" }}>
+        {events.length === 0 ? (
+          <div style={{ padding: "32px 8px", textAlign: "center" }}>
+            <div style={{ fontSize: 18, color: T.muted, marginBottom: 6, opacity: 0.3 }}>⟐</div>
+            <div style={{ fontSize: 11, color: T.muted }}>Awaiting activity…</div>
+          </div>
         ) : (
-          <SvgLineChart data={chartData} width={400} height={140} color={COLORS.blue} xKey="iter" yKey="sharpe" />
+          events.map((evt) => {
+            const ag = AGENTS[evt.agent] || { icon: "◆", label: evt.agent, color: T.muted };
+            return (
+              <div
+                key={evt.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "6px 6px",
+                  borderRadius: 4,
+                  borderBottom: `1px solid ${T.border}15`,
+                  transition: "background 0.15s",
+                }}
+              >
+                <div
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: "0 4px 0 4px",
+                    background: `${ag.color}15`,
+                    border: `1px solid ${ag.color}30`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 9,
+                    color: ag.color,
+                    flexShrink: 0,
+                    fontWeight: 700,
+                  }}
+                >
+                  {ag.icon}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: T.text, lineHeight: 1.3 }}>
+                    {ag.label}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 9,
+                      color: T.muted,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {evt.task}
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontSize: 9,
+                    color: T.muted,
+                    fontFamily: "'DM Mono',monospace",
+                    flexShrink: 0,
+                  }}
+                >
+                  {evt.time}
+                </span>
+              </div>
+            );
+          })
         )}
       </div>
     </div>
   );
 }
 
-function MetricCard({ label, value, color }) {
+function MetricBox({ label, value, color }) {
   return (
-    <div className="metric-card">
-      <div style={{ fontSize: '11px', color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>{label}</div>
-      <div style={{ fontSize: '22px', fontWeight: 'bold', color }}>{value}</div>
+    <div
+      style={{
+        background: T.card,
+        borderRadius: "0 6px 0 6px",
+        border: `1px solid ${T.border}`,
+        padding: "8px 10px",
+        textAlign: "center",
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 1.5,
+          background: color,
+          opacity: 0.4,
+        }}
+      />
+      <div
+        style={{
+          fontSize: 9,
+          color: T.muted,
+          textTransform: "uppercase",
+          letterSpacing: "1.5px",
+          marginBottom: 3,
+          fontWeight: 500,
+          fontFamily: "'Syne',sans-serif",
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: 17, fontWeight: 700, color, fontFamily: "'DM Mono',monospace" }}>
+        {value}
+      </div>
     </div>
   );
 }
 
-// ── Simple SVG Line Chart (no external dependencies) ──
-// ── Token Usage Card ──
-function TokenCard({ usage }) {
-  const total = usage?.total_tokens || 0;
-  const prompt = usage?.prompt_tokens || 0;
-  const completion = usage?.completion_tokens || 0;
+function SentimentBox({ sentiment }) {
+  const bias = sentiment?.bias || "NEUTRAL";
+  const fg = sentiment?.fear_greed;
+  const c = bias === "bullish" ? T.sage : bias === "bearish" ? T.coral : T.muted;
   return (
-    <div className="card" style={{ padding: '8px 12px', borderRadius: '8px', background: '#1a1a2e', border: '1px solid #2a2a4a' }}>
-      <div style={{ fontSize: '10px', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Token Usage</div>
-      <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#eab308' }}>{total.toLocaleString()}</div>
-      {total > 0 && (
-        <div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px' }}>
-          ↑{prompt.toLocaleString()} ↓{completion.toLocaleString()}
+    <div
+      style={{
+        background: T.card,
+        borderRadius: "0 6px 0 6px",
+        border: `1px solid ${T.border}`,
+        padding: "8px 10px",
+        textAlign: "center",
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 1.5,
+          background: c,
+          opacity: 0.4,
+        }}
+      />
+      <div
+        style={{
+          fontSize: 9,
+          color: T.muted,
+          textTransform: "uppercase",
+          letterSpacing: "1.5px",
+          marginBottom: 3,
+          fontWeight: 500,
+          fontFamily: "'Syne',sans-serif",
+        }}
+      >
+        Sentiment
+      </div>
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 700,
+          color: c,
+          fontFamily: "'DM Mono',monospace",
+          letterSpacing: "1px",
+        }}
+      >
+        {bias}
+      </div>
+      {fg && (
+        <div
+          style={{ fontSize: 8, color: T.muted, marginTop: 1, fontFamily: "'DM Mono',monospace" }}
+        >
+          {fg.value} {fg.classification}
         </div>
       )}
     </div>
   );
 }
 
-function SvgLineChart({ data, width, height, color, xKey, yKey }) {
-  if (!data || data.length === 0) return null;
-  const pad = 30;
-  const chartW = width - pad * 2;
-  const chartH = height - pad * 2;
-  const xVals = data.map(d => d[xKey]);
-  const yVals = data.map(d => d[yKey] || 0);
-  const xMin = Math.min(...xVals);
-  const xMax = Math.max(...xVals);
-  const yMin = Math.min(...yVals);
-  const yMax = Math.max(...yVals);
-  const xRange = xMax - xMin || 1;
-  const yRange = yMax - yMin || 1;
-  const points = data.map((d, i) => {
-    const x = pad + ((d[xKey] - xMin) / xRange) * chartW;
-    const y = pad + chartH - (((d[yKey] || 0) - yMin) / yRange) * chartH;
-    return `${x},${y}`;
-  });
-  const polyline = points.join(' ');
-  const lastP = points[points.length - 1]?.split(',') || [];
-
-  // Y-axis labels
-  const yLabelPos = (v) => pad + chartH - ((v - yMin) / yRange) * chartH;
-
+function Chart({ data, xKey, yKey, color }) {
+  const w = 700,
+    h = 120,
+    pl = 40,
+    pr = 14,
+    pt = 6,
+    pb = 20,
+    cw = w - pl - pr,
+    ch = h - pt - pb;
+  const xV = data.map((d) => d[xKey]),
+    yV = data.map((d) => d[yKey] || 0),
+    xM = Math.min(...xV),
+    xX = Math.max(...xV),
+    yM = Math.min(...yV),
+    yX = Math.max(...yV),
+    xR = xX - xM || 1,
+    yR = yX - yM || 1;
+  const pts = data.map((d) => ({
+      x: pl + ((d[xKey] - xM) / xR) * cw,
+      y: pt + ch - (((d[yKey] || 0) - yM) / yR) * ch,
+    })),
+    ln = pts.map((p) => `${p.x},${p.y}`).join(" "),
+    fl = pts.map((p) => `${p.x},${p.y}`).join(" "),
+    bs = `${pl},${pt + ch} ${pl + cw},${pt + ch}`;
   return (
-    <svg width={width} height={height} style={{ display: 'block' }}>
-      {/* Grid lines */}
-      <line x1={pad} y1={pad} x2={pad} y2={pad + chartH} stroke="#334155" strokeWidth={1} />
-      <line x1={pad} y1={pad + chartH} x2={pad + chartW} y2={pad + chartH} stroke="#334155" strokeWidth={1} />
-      {[0.25, 0.5, 0.75].map(f => (
-        <line key={f} x1={pad} y1={pad + chartH * f} x2={pad + chartW} y2={pad + chartH * f} stroke="#1e293b" strokeWidth={1} />
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: "100%", display: "block" }}>
+      <defs>
+        <linearGradient id="af" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      {[0.25, 0.5, 0.75].map((f, i) => (
+        <line
+          key={i}
+          x1={pl}
+          y1={pt + ch * f}
+          x2={pl + cw}
+          y2={pt + ch * f}
+          stroke={T.border}
+          strokeWidth="1"
+          strokeDasharray="3 3"
+        />
       ))}
-      {/* Data line */}
-      <polyline points={polyline} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-      {/* Dots */}
-      {data.map((d, i) => {
-        const x = pad + ((d[xKey] - xMin) / xRange) * chartW;
-        const y = pad + chartH - (((d[yKey] || 0) - yMin) / yRange) * chartH;
-        return <circle key={i} cx={x} cy={y} r={3} fill={color} />;
-      })}
-      {/* Y-axis label */}
-      <text x={4} y={pad} fill="#64748b" fontSize={10}>{yMax.toFixed(2)}</text>
-      <text x={4} y={pad + chartH} fill="#64748b" fontSize={10}>{yMin.toFixed(2)}</text>
-      {/* X-axis labels */}
-      <text x={pad} y={pad + chartH + 14} fill="#64748b" fontSize={10}>{xMin}</text>
-      <text x={pad + chartW - 20} y={pad + chartH + 14} fill="#64748b" fontSize={10}>{xMax}</text>
+      <polygon points={`${fl} ${bs}`} fill="url(#af)" />
+      <polyline
+        points={ln}
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      {pts.map((p, i) => (
+        <circle key={i} cx={p.x} cy={p.y} r="2.5" fill={color} stroke={T.card} strokeWidth="1.5" />
+      ))}
+      {pts.length > 0 &&
+        (() => {
+          const l = pts[pts.length - 1];
+          return <circle cx={l.x} cy={l.y} r="5" fill={`${color}25`} />;
+        })()}
+      <text x={pl - 4} y={pt + 4} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">
+        {yX.toFixed(2)}
+      </text>
+      <text
+        x={pl - 4}
+        y={pt + ch + 4}
+        fill={T.muted}
+        fontSize="8"
+        textAnchor="end"
+        fontFamily="DM Mono"
+      >
+        {yM.toFixed(2)}
+      </text>
+      <text x={pl} y={h - 2} fill={T.muted} fontSize="8" fontFamily="DM Mono">
+        {xM}
+      </text>
+      <text x={w - pr} y={h - 2} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">
+        {xX}
+      </text>
     </svg>
   );
 }
 
-// ── Right Panel ──
-function RightPanel({ chartData }) {
-  // Convert data for iteration scatter
+function StatsPanel({ chartData, tokens }) {
+  const best = chartData.length > 0 ? Math.max(...chartData.map((d) => d.sharpe || 0)) : null;
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <h2 style={{ fontSize: '14px', fontWeight: 600, color: COLORS.muted, marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Iteration History</h2>
-      <div style={{ flex: 1, minHeight: 0 }}>
-        {chartData.length === 0 ? (
-          <p style={{ color: COLORS.muted, fontSize: '13px', textAlign: 'center', marginTop: '40px' }}>No iterations yet</p>
-        ) : (
-          <SvgLineChart data={chartData} width={260} height={280} color={COLORS.blue} xKey="iter" yKey="sharpe" />
-        )}
-      </div>
-      <div style={{ marginTop: 'auto', fontSize: '12px', color: COLORS.muted }}>
-        <div>Iterations: {chartData.length}</div>
-        {chartData.length > 0 && (
-          <div>Best Sharpe: {Math.max(...chartData.map(d => d.sharpe || 0)).toFixed(2)}</div>
-        )}
+    <div
+      style={{
+        background: T.card,
+        borderRadius: "0 8px 0 8px",
+        border: `1px solid ${T.border}`,
+        display: "flex",
+        flexDirection: "column",
+        padding: "12px 14px",
+        height: "100%",
+        position: "relative",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 2,
+          background: `linear-gradient(90deg,${T.teal},transparent)`,
+        }}
+      />
+      <h2
+        style={{
+          fontFamily: "'Syne',sans-serif",
+          fontSize: 10,
+          fontWeight: 600,
+          color: T.muted,
+          textTransform: "uppercase",
+          letterSpacing: "2px",
+          marginBottom: 12,
+        }}
+      >
+        Run Stats
+      </h2>
+      <StatRow label="Iterations" value={chartData.length || "—"} />
+      <StatRow label="Best Sharpe" value={best != null ? best.toFixed(2) : "—"} color={T.amber} />
+      <div style={{ flex: 1 }} />
+      <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 8, marginTop: 4 }}>
+        <StatRow
+          label="Total Tokens"
+          value={tokens.total_tokens?.toLocaleString() || "0"}
+          color={T.gold}
+        />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6 }}>
+          <div style={{ background: T.surface, borderRadius: "0 4px 0 4px", padding: "4px 8px" }}>
+            <div style={{ fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
+              ↑ Prompt
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: T.text,
+                fontFamily: "'DM Mono',monospace",
+              }}
+            >
+              {fmtNum(tokens.prompt_tokens)}
+            </div>
+          </div>
+          <div style={{ background: T.surface, borderRadius: "0 4px 0 4px", padding: "4px 8px" }}>
+            <div style={{ fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
+              ↓ Completion
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: T.text,
+                fontFamily: "'DM Mono',monospace",
+              }}
+            >
+              {fmtNum(tokens.completion_tokens)}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-// ── Event Log Panel ──
-const EventLogPanel = React.forwardRef(function EventLogPanel({ events }, ref) {
+function StatRow({ label, value, color }) {
   return (
-    <div className="card" style={{ marginTop: '12px', maxHeight: '120px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      <h2 style={{ fontSize: '12px', fontWeight: 600, color: COLORS.muted, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '1px' }}>Event Log</h2>
-      <div ref={ref} style={{ flex: 1, overflowY: 'auto', fontSize: '11px', fontFamily: 'monospace', lineHeight: 1.6 }}>
-        {events.length === 0 && <span style={{ color: COLORS.muted }}>Waiting for events...</span>}
-        {events.map(evt => (
-          <div key={evt.id} style={{ display: 'flex', gap: '8px' }}>
-            <span style={{ color: COLORS.muted, flexShrink: 0 }}>{evt.timestamp}</span>
-            <span style={{ color: COLORS.blue, flexShrink: 0 }}>[{evt.type}]</span>
-            <span style={{ color: COLORS.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {JSON.stringify(evt.payload).slice(0, 120)}
-            </span>
-          </div>
-        ))}
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: "3px 0",
+      }}
+    >
+      <span style={{ fontSize: 11, color: T.secondary }}>{label}</span>
+      <span
+        style={{
+          fontSize: 12,
+          fontWeight: 700,
+          color: color || T.text,
+          fontFamily: "'DM Mono',monospace",
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+const LogPanel = React.forwardRef(function LogPanel({ events }, ref) {
+  return (
+    <div
+      className="r3"
+      style={{
+        background: T.card,
+        borderRadius: "0 6px 0 6px",
+        border: `1px solid ${T.border}`,
+        maxHeight: 70,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          padding: "4px 14px 0",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <h2
+          style={{
+            fontFamily: "'Syne',sans-serif",
+            fontSize: 9,
+            fontWeight: 600,
+            color: T.muted,
+            textTransform: "uppercase",
+            letterSpacing: "2px",
+          }}
+        >
+          Event Log
+        </h2>
+        <span style={{ fontSize: 9, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
+          {events.length}
+        </span>
+      </div>
+      <div
+        ref={ref}
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "2px 14px 4px",
+          fontSize: 10.5,
+          fontFamily: "'DM Mono',monospace",
+          lineHeight: 1.8,
+          color: T.secondary,
+        }}
+      >
+        {events.length === 0 ? (
+          <span style={{ color: T.muted }}>Waiting for events…</span>
+        ) : (
+          events.map((evt) => (
+            <div key={evt.id} style={{ display: "flex", gap: 8 }}>
+              <span style={{ color: T.muted, flexShrink: 0 }}>{evt.timestamp}</span>
+              <span
+                style={{
+                  color:
+                    evt.type === "anomaly" ? T.coral : evt.type === "decay_alert" ? T.gold : T.teal,
+                  flexShrink: 0,
+                }}
+              >
+                [{evt.type}]
+              </span>
+              <span
+                style={{
+                  color: T.muted,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {JSON.stringify(evt.payload).slice(0, 180)}
+              </span>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
 });
 
-// ── Modal ──
-function Modal({ goal, setGoal, cycles, setCycles, iters, setIters, onStart, onClose }) {
-  const [inputGoal, setInputGoal] = useState(goal);
+// ════════════════════════════════════════════
+// DASHBOARD VIEW (New)
+// ════════════════════════════════════════════
+function DashboardView({ autonomousState, circuitBreaker, regimeSnapshot, positions, tokens }) {
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 1000,
-    }} onClick={onClose}>
-      <div className="card" style={{ width: '500px', maxWidth: '90vw' }} onClick={e => e.stopPropagation()}>
-        <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>Run New Research Goal</h2>
-
-        <label style={{ fontSize: '13px', color: COLORS.muted, marginBottom: '4px', display: 'block' }}>Goal Description</label>
-        <textarea className="input" rows={3} value={inputGoal} onChange={e => setInputGoal(e.target.value)} style={{ marginBottom: '16px', resize: 'vertical', fontFamily: 'inherit' }} />
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-          <div>
-            <label style={{ fontSize: '13px', color: COLORS.muted, marginBottom: '4px', display: 'block' }}>Max Cycles</label>
-            <select value={cycles} onChange={e => setCycles(Number(e.target.value))} style={{ width: '100%' }}>
-              {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={{ fontSize: '13px', color: COLORS.muted, marginBottom: '4px', display: 'block' }}>Max Iterations</label>
-            <select value={iters} onChange={e => setIters(Number(e.target.value))} style={{ width: '100%' }}>
-              {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </div>
+    <div
+      style={{
+        flex: 1,
+        minHeight: 0,
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 12,
+        overflow: "auto",
+        padding: "2px 0",
+      }}
+    >
+      {/* Top-left: Auto Loop Status */}
+      <div
+        className="r1"
+        style={{
+          background: T.card,
+          borderRadius: "0 8px 0 8px",
+          border: `1px solid ${T.border}`,
+          padding: 14,
+          position: "relative",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 2,
+            background: `linear-gradient(90deg,${T.amber},transparent)`,
+          }}
+        />
+        <h2
+          style={{
+            fontFamily: "'Syne',sans-serif",
+            fontSize: 10,
+            fontWeight: 600,
+            color: T.muted,
+            textTransform: "uppercase",
+            letterSpacing: "2px",
+            marginBottom: 10,
+          }}
+        >
+          ◈ Autonomous Loop
+        </h2>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <MiniStat
+            label="Status"
+            value={autonomousState?.is_running ? "Active" : "Standing by"}
+            color={autonomousState?.is_running ? T.sage : T.muted}
+          />
+          <MiniStat label="Regime" value={autonomousState?.last_regime || "—"} color={T.amber} />
+          <MiniStat label="Cycles" value={autonomousState?.total_cycles || 0} color={T.teal} />
+          <MiniStat
+            label="Goals"
+            value={autonomousState?.total_goals_generated || 0}
+            color={T.gold}
+          />
         </div>
+        {autonomousState?.current_goal && (
+          <div
+            style={{
+              marginTop: 8,
+              padding: "6px 8px",
+              background: T.surface,
+              borderRadius: 4,
+              border: `1px solid ${T.border}`,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 9,
+                color: T.muted,
+                fontFamily: "'DM Mono',monospace",
+                marginBottom: 2,
+              }}
+            >
+              Current goal
+            </div>
+            <div style={{ fontSize: 10.5, color: T.text, lineHeight: 1.4 }}>
+              {autonomousState.current_goal}
+            </div>
+          </div>
+        )}
+        {autonomousState?.last_error && (
+          <div
+            style={{
+              marginTop: 6,
+              padding: "4px 8px",
+              background: `${T.coral}10`,
+              borderRadius: 4,
+              border: `1px solid ${T.coral}30`,
+            }}
+          >
+            <div style={{ fontSize: 9, color: T.coral, fontFamily: "'DM Mono',monospace" }}>
+              Error: {autonomousState.last_error}
+            </div>
+          </div>
+        )}
+      </div>
 
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-          <button className="btn" style={{ background: '#475569' }} onClick={onClose}>Cancel</button>
-          <button className="btn" onClick={() => { setGoal(inputGoal); onStart(inputGoal); }}>Start Run</button>
+      {/* Top-right: Circuit Breaker + Risk */}
+      <div
+        className="r2"
+        style={{
+          background: T.card,
+          borderRadius: "0 8px 0 8px",
+          border: `1px solid ${T.border}`,
+          padding: 14,
+          position: "relative",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 2,
+            background: `linear-gradient(90deg,${T.coral},transparent)`,
+          }}
+        />
+        <h2
+          style={{
+            fontFamily: "'Syne',sans-serif",
+            fontSize: 10,
+            fontWeight: 600,
+            color: T.muted,
+            textTransform: "uppercase",
+            letterSpacing: "2px",
+            marginBottom: 10,
+          }}
+        >
+          ▣ Circuit Breaker
+        </h2>
+        <div
+          style={{
+            padding: "8px 12px",
+            borderRadius: 6,
+            background: circuitBreaker?.halted ? `${T.coral}15` : T.surface,
+            border: `1px solid ${circuitBreaker?.halted ? T.coral : T.border}`,
+            marginBottom: 10,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: circuitBreaker?.halted ? T.coral : T.sage,
+                animation: circuitBreaker?.halted ? "pulse 1.5s ease-in-out infinite" : "none",
+              }}
+            />
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: circuitBreaker?.halted ? T.coral : T.sage,
+                fontFamily: "'DM Mono',monospace",
+              }}
+            >
+              {circuitBreaker?.halted ? "HALTED" : "OPERATIONAL"}
+            </span>
+          </div>
+          {circuitBreaker?.reason && (
+            <div
+              style={{
+                fontSize: 10,
+                color: T.muted,
+                marginTop: 4,
+                fontFamily: "'DM Mono',monospace",
+              }}
+            >
+              {circuitBreaker.reason}
+            </div>
+          )}
+        </div>
+        {/* Regime Snapshot */}
+        <h2
+          style={{
+            fontFamily: "'Syne',sans-serif",
+            fontSize: 10,
+            fontWeight: 600,
+            color: T.muted,
+            textTransform: "uppercase",
+            letterSpacing: "2px",
+            marginBottom: 6,
+          }}
+        >
+          ◈ Regime Map
+        </h2>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+          {["strong_uptrend", "ranging", "volatile", "low_liquidity"].map((r) => {
+            const active = regimeSnapshot?.regime === r;
+            const c = active ? T.amber : T.muted;
+            return (
+              <div
+                key={r}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 4,
+                  background: `${c}08`,
+                  border: `1px solid ${active ? T.amber : T.border}`,
+                  opacity: active ? 1 : 0.5,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 8,
+                    color: T.muted,
+                    fontFamily: "'DM Mono',monospace",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {r.replace("_", " ")}
+                </div>
+                {active && (
+                  <div style={{ fontSize: 9, color: T.amber, fontWeight: 600 }}>● ACTIVE</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Bottom-left: Live Positions */}
+      <div
+        className="r3"
+        style={{
+          background: T.card,
+          borderRadius: "0 8px 0 8px",
+          border: `1px solid ${T.border}`,
+          padding: 14,
+          position: "relative",
+          gridRow: "2",
+          maxHeight: 250,
+          overflow: "auto",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 2,
+            background: `linear-gradient(90deg,${T.teal},transparent)`,
+          }}
+        />
+        <h2
+          style={{
+            fontFamily: "'Syne',sans-serif",
+            fontSize: 10,
+            fontWeight: 600,
+            color: T.muted,
+            textTransform: "uppercase",
+            letterSpacing: "2px",
+            marginBottom: 8,
+          }}
+        >
+          ◉ Live Positions
+        </h2>
+        {positions.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 24 }}>
+            <div style={{ fontSize: 11, color: T.muted }}>No open positions</div>
+            <div style={{ fontSize: 9, color: T.muted, marginTop: 4 }}>
+              Strategies will appear here when signals fire
+            </div>
+          </div>
+        ) : (
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              fontSize: 10.5,
+              fontFamily: "'DM Mono',monospace",
+            }}
+          >
+            <thead>
+              <tr style={{ color: T.muted }}>
+                {["Pair", "Side", "Entry", "PnL%", "Stop", "Time"].map((h) => (
+                  <th
+                    key={h}
+                    style={{
+                      textAlign: "left",
+                      padding: "4px 6px",
+                      borderBottom: `1px solid ${T.border}`,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {positions.map((p, i) => (
+                <tr key={i}>
+                  <td style={{ padding: "4px 6px", color: T.text }}>{p.pair || "—"}</td>
+                  <td style={{ padding: "4px 6px", color: p.side === "buy" ? T.sage : T.coral }}>
+                    {p.side || "—"}
+                  </td>
+                  <td style={{ padding: "4px 6px", color: T.text }}>${p.entry_price || "—"}</td>
+                  <td
+                    style={{ padding: "4px 6px", color: (p.pnl_pct || 0) >= 0 ? T.sage : T.coral }}
+                  >
+                    {p.pnl_pct != null ? `${(p.pnl_pct * 100).toFixed(1)}%` : "—"}
+                  </td>
+                  <td style={{ padding: "4px 6px", color: T.muted }}>—</td>
+                  <td style={{ padding: "4px 6px", color: T.muted }}>
+                    {p.entry_time ? new Date(p.entry_time).toLocaleTimeString() : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Bottom-right: Risk Dashboard */}
+      <div
+        className="r4"
+        style={{
+          background: T.card,
+          borderRadius: "0 8px 0 8px",
+          border: `1px solid ${T.border}`,
+          padding: 14,
+          position: "relative",
+          gridRow: "2",
+          maxHeight: 250,
+          overflow: "auto",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 2,
+            background: `linear-gradient(90deg,${T.gold},transparent)`,
+          }}
+        />
+        <h2
+          style={{
+            fontFamily: "'Syne',sans-serif",
+            fontSize: 10,
+            fontWeight: 600,
+            color: T.muted,
+            textTransform: "uppercase",
+            letterSpacing: "2px",
+            marginBottom: 8,
+          }}
+        >
+          ⟐ Portfolio Risk
+        </h2>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <MiniStat label="Daily PnL" value="—" color={T.text} />
+          <MiniStat label="Drawdown" value="—" color={T.muted} />
+          <MiniStat label="Open Pos" value={positions.length} color={T.teal} />
+          <MiniStat label="Kelly Cap" value="10%" color={T.gold} />
+        </div>
+        <div style={{ marginTop: 10, padding: "6px 8px", background: T.surface, borderRadius: 4 }}>
+          <div
+            style={{
+              fontSize: 9,
+              color: T.muted,
+              fontFamily: "'DM Mono',monospace",
+              marginBottom: 4,
+            }}
+          >
+            Token Usage
+          </div>
+          <div style={{ display: "flex", gap: 16 }}>
+            <span style={{ fontSize: 10, color: T.text, fontFamily: "'DM Mono',monospace" }}>
+              ↑ {fmtNum(tokens.prompt_tokens)}
+            </span>
+            <span style={{ fontSize: 10, color: T.text, fontFamily: "'DM Mono',monospace" }}>
+              ↓ {fmtNum(tokens.completion_tokens)}
+            </span>
+            <span style={{ fontSize: 10, color: T.gold, fontFamily: "'DM Mono',monospace" }}>
+              ∑ {fmtNum(tokens.total_tokens)}
+            </span>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Render ──
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+function MiniStat({ label, value, color }) {
+  return (
+    <div
+      style={{
+        background: T.surface,
+        borderRadius: "0 4px 0 4px",
+        padding: "6px 8px",
+        border: `1px solid ${T.border}`,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 8,
+          color: T.muted,
+          fontFamily: "'DM Mono',monospace",
+          textTransform: "uppercase",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 16,
+          fontWeight: 700,
+          color: color || T.text,
+          fontFamily: "'DM Mono',monospace",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════
+// STRATEGY LIBRARY VIEW (New)
+// ════════════════════════════════════════════
+function StrategyLibraryView({ strategies }) {
+  return (
+    <div
+      className="r1"
+      style={{
+        flex: 1,
+        minHeight: 0,
+        overflow: "auto",
+        background: T.card,
+        borderRadius: "0 8px 0 8px",
+        border: `1px solid ${T.border}`,
+        padding: 14,
+        position: "relative",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 2,
+          background: `linear-gradient(90deg,${T.teal},transparent)`,
+        }}
+      />
+      <h2
+        style={{
+          fontFamily: "'Syne',sans-serif",
+          fontSize: 10,
+          fontWeight: 600,
+          color: T.muted,
+          textTransform: "uppercase",
+          letterSpacing: "2px",
+          marginBottom: 10,
+        }}
+      >
+        ◉ Strategy Library
+      </h2>
+      {strategies.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 40 }}>
+          <div style={{ fontSize: 28, color: T.muted, opacity: 0.2, marginBottom: 8 }}>◉</div>
+          <div style={{ fontSize: 12, color: T.muted }}>No deployable strategies yet</div>
+          <div style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>
+            Run autonomous research to discover strategies
+          </div>
+        </div>
+      ) : (
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: 11,
+            fontFamily: "'DM Mono',monospace",
+          }}
+        >
+          <thead>
+            <tr style={{ color: T.muted }}>
+              {["Name", "Type", "Regime", "Sharpe", "Win Rate", "Max DD", "Status"].map((h) => (
+                <th
+                  key={h}
+                  style={{
+                    textAlign: "left",
+                    padding: "6px 8px",
+                    borderBottom: `1px solid ${T.border}`,
+                    fontWeight: 600,
+                  }}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {strategies.map((s, i) => {
+              const sharpe = s.sharpe || s.metadata?.sharpe || 0;
+              const wr = s.win_rate || s.metadata?.win_rate || 0;
+              const dd = s.max_drawdown || s.metadata?.max_drawdown || 0;
+              const status = dd != null && dd > 0.1 ? "⚠ DECAYING" : "● ACTIVE";
+              return (
+                <tr key={i}>
+                  <td style={{ padding: "5px 8px", color: T.text }}>
+                    {s.strategy_type || s.name || "—"}
+                  </td>
+                  <td style={{ padding: "5px 8px", color: T.secondary }}>
+                    {s.strategy_type || "—"}
+                  </td>
+                  <td style={{ padding: "5px 8px", color: T.amber }}>
+                    {s.regime || s.metadata?.regime || "—"}
+                  </td>
+                  <td style={{ padding: "5px 8px", color: sharpe >= 1 ? T.sage : T.coral }}>
+                    {typeof sharpe === "number" ? sharpe.toFixed(2) : "—"}
+                  </td>
+                  <td style={{ padding: "5px 8px", color: T.text }}>
+                    {typeof wr === "number" ? `${(wr * 100).toFixed(0)}%` : "—"}
+                  </td>
+                  <td style={{ padding: "5px 8px", color: dd < 0.05 ? T.sage : T.coral }}>
+                    {typeof dd === "number" ? `${(dd * 100).toFixed(1)}%` : "—"}
+                  </td>
+                  <td
+                    style={{
+                      padding: "5px 8px",
+                      color: status.includes("DECAY") ? T.gold : T.sage,
+                    }}
+                  >
+                    {status}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════
+// SIGNAL FEED VIEW (New)
+// ════════════════════════════════════════════
+function SignalFeedView({ signals }) {
+  return (
+    <div
+      className="r1"
+      style={{
+        flex: 1,
+        minHeight: 0,
+        overflow: "auto",
+        background: T.card,
+        borderRadius: "0 8px 0 8px",
+        border: `1px solid ${T.border}`,
+        padding: 14,
+        position: "relative",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 2,
+          background: `linear-gradient(90deg,${T.gold},transparent)`,
+        }}
+      />
+      <h2
+        style={{
+          fontFamily: "'Syne',sans-serif",
+          fontSize: 10,
+          fontWeight: 600,
+          color: T.muted,
+          textTransform: "uppercase",
+          letterSpacing: "2px",
+          marginBottom: 10,
+        }}
+      >
+        ○ Signal Feed
+      </h2>
+      {signals.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 40 }}>
+          <div style={{ fontSize: 28, color: T.muted, opacity: 0.2, marginBottom: 8 }}>○</div>
+          <div style={{ fontSize: 12, color: T.muted }}>No signals evaluated yet</div>
+          <div style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>
+            Signals appear here when the scanner detects opportunities
+          </div>
+        </div>
+      ) : (
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: 10.5,
+            fontFamily: "'DM Mono',monospace",
+          }}
+        >
+          <thead>
+            <tr style={{ color: T.muted }}>
+              {["Time", "Pair", "Signal", "Strategy", "Confidence", "Regime", "Status"].map((h) => (
+                <th
+                  key={h}
+                  style={{
+                    textAlign: "left",
+                    padding: "5px 8px",
+                    borderBottom: `1px solid ${T.border}`,
+                    fontWeight: 600,
+                  }}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[...signals]
+              .reverse()
+              .slice(0, 100)
+              .map((s, i) => {
+                const sig = s.signal || {};
+                return (
+                  <tr key={i}>
+                    <td style={{ padding: "4px 8px", color: T.muted }}>{s.time || "—"}</td>
+                    <td style={{ padding: "4px 8px", color: T.text }}>{sig.pair || "—"}</td>
+                    <td
+                      style={{
+                        padding: "4px 8px",
+                        color:
+                          sig.signal === "buy" ? T.sage : sig.signal === "sell" ? T.coral : T.muted,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {sig.signal || "hold"}
+                    </td>
+                    <td style={{ padding: "4px 8px", color: T.secondary }}>
+                      {sig.strategy_type || "—"}
+                    </td>
+                    <td
+                      style={{
+                        padding: "4px 8px",
+                        color: sig.confidence >= 0.6 ? T.sage : T.muted,
+                      }}
+                    >
+                      {sig.confidence != null ? `${(sig.confidence * 100).toFixed(0)}%` : "—"}
+                    </td>
+                    <td style={{ padding: "4px 8px", color: T.amber }}>{sig.regime || "—"}</td>
+                    <td
+                      style={{
+                        padding: "4px 8px",
+                        color: sig.type === "executed" ? T.sage : T.muted,
+                      }}
+                    >
+                      {sig.type || "evaluated"}
+                    </td>
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════
+// MODAL
+// ════════════════════════════════════════════
+function Modal({ goal, setGoal, cycles, setCycles, iters, setIters, onStart, onClose }) {
+  const [input, setInput] = useState(goal);
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 1000,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0,0,0,0.7)",
+        backdropFilter: "blur(3px)",
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 440,
+          maxWidth: "90vw",
+          animation: "stampIn 0.3s ease-out",
+          background: T.card,
+          borderRadius: "0 14px 0 14px",
+          border: `1px solid ${T.border}`,
+          padding: 26,
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: 36,
+            height: 36,
+            borderTop: `2px solid ${T.amber}`,
+            borderLeft: `2px solid ${T.amber}`,
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            right: 0,
+            width: 36,
+            height: 36,
+            borderBottom: `2px solid ${T.teal}`,
+            borderRight: `2px solid ${T.teal}`,
+          }}
+        />
+        <div style={{ marginBottom: 20 }}>
+          <div
+            style={{
+              fontFamily: "'Syne',sans-serif",
+              fontSize: 18,
+              fontWeight: 700,
+              color: T.text,
+            }}
+          >
+            New Research Run
+          </div>
+          <p style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>
+            Configure experiment parameters
+          </p>
+        </div>
+        <label
+          style={{
+            fontSize: 10,
+            color: T.muted,
+            fontWeight: 600,
+            marginBottom: 4,
+            display: "block",
+            textTransform: "uppercase",
+            letterSpacing: "1.5px",
+            fontFamily: "'Syne',sans-serif",
+          }}
+        >
+          Goal
+        </label>
+        <textarea
+          rows={3}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          style={{
+            width: "100%",
+            resize: "vertical",
+            fontFamily: "'Sora',sans-serif",
+            fontSize: 12,
+            padding: "10px 14px",
+            borderRadius: "0 6px 0 6px",
+            background: T.surface,
+            border: `1px solid ${T.border}`,
+            color: T.text,
+            marginBottom: 16,
+            outline: "none",
+          }}
+        />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 22 }}>
+          <div>
+            <label
+              style={{
+                fontSize: 10,
+                color: T.muted,
+                fontWeight: 600,
+                display: "block",
+                textTransform: "uppercase",
+                letterSpacing: "1.5px",
+                fontFamily: "'Syne',sans-serif",
+                marginBottom: 4,
+              }}
+            >
+              Cycles
+            </label>
+            <select
+              value={cycles}
+              onChange={(e) => setCycles(Number(e.target.value))}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                borderRadius: "0 6px 0 6px",
+                background: T.surface,
+                border: `1px solid ${T.border}`,
+                color: T.text,
+                fontSize: 12,
+                cursor: "pointer",
+                fontFamily: "'Sora',sans-serif",
+              }}
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label
+              style={{
+                fontSize: 10,
+                color: T.muted,
+                fontWeight: 600,
+                display: "block",
+                textTransform: "uppercase",
+                letterSpacing: "1.5px",
+                fontFamily: "'Syne',sans-serif",
+                marginBottom: 4,
+              }}
+            >
+              Iterations
+            </label>
+            <select
+              value={iters}
+              onChange={(e) => setIters(Number(e.target.value))}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                borderRadius: "0 6px 0 6px",
+                background: T.surface,
+                border: `1px solid ${T.border}`,
+                color: T.text,
+                fontSize: 12,
+                cursor: "pointer",
+                fontFamily: "'Sora',sans-serif",
+              }}
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button
+            style={{
+              padding: "8px 18px",
+              borderRadius: "0 6px 0 6px",
+              border: `1px solid ${T.border}`,
+              background: T.elevated,
+              color: T.text,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "'Sora',sans-serif",
+            }}
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            style={{
+              padding: "8px 18px",
+              borderRadius: "0 6px 0 6px",
+              border: `1px solid ${T.amber}`,
+              background: T.amber,
+              color: "#fff",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "'Sora',sans-serif",
+            }}
+            onClick={() => {
+              setGoal(input);
+              onStart(input);
+            }}
+          >
+            Start Run
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
-</body>
+  </body>
 </html>

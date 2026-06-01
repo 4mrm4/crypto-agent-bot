@@ -125,7 +125,12 @@ class HermesOrchestrator:
         # Inject memory context if a curator agent is registered
         curator = self.agents.get("curator")
         if curator and hasattr(curator, "inject_context"):
-            context = curator.inject_context(goal, k=3)
+            from backtesting.data_split import DATA_SPLIT
+            context = curator.inject_context(
+                goal, k=3,
+                current_research_window=DATA_SPLIT.research_timerange(),
+                contamination_guard=True,
+            )
             if context:
                 self.board.add_task(
                     description=f"Review past research context for: {goal}\nPast insights:\n{context}",
@@ -512,6 +517,53 @@ class HermesOrchestrator:
             logger.debug("Persisted research iteration %d to memory", iteration.iteration)
         except Exception as exc:
             logger.warning("Failed to persist research iteration: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Autonomous goal runner
+    # ------------------------------------------------------------------
+
+    def run_from_autonomous_goal(self, research_goal: "ResearchGoal") -> Dict[str, Any]:
+        """
+        Like run_research_loop() but takes a ResearchGoal dataclass.
+        Automatically constructs the hypothesis from regime + strategy_type_hint.
+        Logs the motivation and triggered_by to experiment tracker.
+        """
+        from orchestration.research import ResearchGoal
+
+        # Build the research text from structured goal
+        goal_text = (
+            f"Autonomous research for {research_goal.regime} regime. "
+            f"Focus strategy type: {research_goal.strategy_type_hint}. "
+            f"Trigger: {research_goal.triggered_by}. "
+            f"{research_goal.motivation}"
+        )
+
+        logger.info(
+            "=== Autonomous goal: [%s] %s (triggered_by=%s, priority=%.2f) ===",
+            research_goal.regime,
+            research_goal.strategy_type_hint,
+            research_goal.triggered_by,
+            research_goal.priority_score,
+        )
+
+        # Run the existing research loop
+        result = self.run_research_loop(
+            goal=goal_text,
+            max_iterations=3,
+            max_cycles=4,
+        )
+
+        # Attach autonomous metadata to result
+        if isinstance(result, dict):
+            result["autonomous_goal"] = {
+                "regime": research_goal.regime,
+                "strategy_type_hint": research_goal.strategy_type_hint,
+                "motivation": research_goal.motivation,
+                "triggered_by": research_goal.triggered_by,
+                "priority_score": research_goal.priority_score,
+            }
+
+        return result
 
     # ------------------------------------------------------------------
     # Compatibility: run_research_goal still works as before

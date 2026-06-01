@@ -2,13 +2,24 @@
 
 Modular crypto trading bot with 5 LangGraph ReAct agents, Freqtrade backtesting, ChromaDB strategy memory, and a real-time Web UI.
 
-**Latest updates (May 2026 — v6):**
+**Latest updates (June 2026 — v8: Anti-Overfitting & Data Integrity):**
 
 ### Core Infrastructure
 - **DeepSeek Chat API** — migrated from OpenRouter to direct DeepSeek API (`api.deepseek.com/v1`, model `deepseek-chat`)
 - **Live token usage** — real-time token counter in Web UI showing prompt/completion/total per run
 - **EventBus WebSocket streaming** — `monkey_patch_hermes` for auto-research mode, real-time agent activity pushed to UI
 - **Auto data download** — checks BTC/USDT 1h data ≥500KB on startup, auto-downloads latest 2 years if missing
+
+### Anti-Overfitting System
+- **Hard data holdout** (`backtesting/data_split.py`) — frozen `DataSplitConfig` singleton defines research window (2017–2023) and holdout (2024–2026). All backtests raise `ValueError` on holdout overlap. Walk-forward validation stays strictly within research bounds.
+- **Blind parameter search** (`backtesting/blind_search.py`) — 5-phase protocol: LLM defines search space blind → batch backtest → aggregate stats only → directional guidance → quantitative selection. No individual variant results leak to the LLM.
+- **Out-of-sample validation** (`backtesting/oos_validator.py`) — `OOSValidator` runs on holdout data only. Results written to `oos_results.jsonl`, never to ChromaDB. Four thresholds: Sharpe≥0.8, WR≥0.42, DD≤0.15, trades≥10.
+- **Synthetic data sanity** (`backtesting/synthetic_validator.py`) — random walk checker (max Sharpe 0.3 on noise) + Monte Carlo permutation test (p<0.05 for statistical significance).
+- **Conservative Kelly sizing** (`agents/risk_manager.py`) — `PositionSizingTier` enum (VALIDATION 2% → CAUTIOUS 5% → NORMAL 10%). `kelly_position_size_conservative()` applies `BACKTEST_OPTIMISM_FACTOR=0.55` haircut and OOS degradation penalty.
+- **Validation mode** (`execution/validation_mode.py`) — 90-day conservative execution: 2% position cap, tight circuit breakers (-1.5% daily / -4% weekly), separate audit log. Requires Sharp≥0.6 + 50 trades for graduation.
+- **11-gate deployment pipeline** (`orchestration/deployment_pipeline.py`) — 9 automated gates + 2 manual OOS gates. Tracks strategy state from `explored` → `promising` → `validated` → `pending_oos` → `deployable`.
+- **Performance monitoring** (`monitoring/performance_monitor.py`) — statistical significance testing (≥30 trades required), expected degradation ranges, regime mismatch detection with 3-day suspension threshold.
+- **ChromaDB contamination guard** (`memory/vector_store.py`, `agents/curator.py`) — strategies tagged with `discovered_on_window` metadata. Cross-window exclusion queries prevent data leakage between research cycles.
 
 ### Smart Backtesting
 - **Metrics parsing** — handles multiple Freqtrade output schemas with multi-field-name fallback; debug JSON dump on each run
@@ -37,7 +48,7 @@ Modular crypto trading bot with 5 LangGraph ReAct agents, Freqtrade backtesting,
 
 ### Data Sources
 - **Market data**: CCXT (Binance), OHLCV via `fetch_ohlcv()`
-- **Sentiment**: Fear & Greed Index (alternative.me), CoinGecko news (optional key)
+- **Sentiment**: Fear & Greed Index (alternative.me), CoinGecko news (requires `COINGECKO_API_KEY`), CryptoPanic (requires `CRYPTOPANIC_API_KEY`)
 - **Patterns**: 13 TA-Lib candlestick patterns (hammer, engulfing, morning star, etc.)
 - **Regime**: ADX/ATR/SMA200 classification → strong_uptrend/downtrend, ranging, volatile, weak_trend
 - **On-chain**: Whale Alert (requires `WHALE_ALERT_API_KEY`), CoinGecko volume proxy — gated by `ENABLE_ONCHAIN` flag
@@ -80,7 +91,7 @@ graph TD
 | Component | File | Role |
 |---|---|---|
 | **MarketDataFetcher** | `data/fetcher.py` | Live OHLCV + price via CCXT |
-| **BacktestEngine** | `backtesting/engine.py` | Strategy backtesting via Freqtrade, 12 strategy types + hyperopt + walk-forward |
+| **BacktestEngine** | `backtesting/engine.py` | Strategy backtesting via Freqtrade, 11 strategy types + hyperopt + walk-forward |
 | **AutoSetupData** | `backtesting/setup_data.py` | Auto-downloads historical data on startup |
 | **VectorStore** | `memory/vector_store.py` | ChromaDB vector store with strategy memory (Sharpe-filtered, regime-aware) |
 | **OnChainFetcher** | `data/onchain.py` | Whale Alert + CoinGecko volume proxy (gated) |
@@ -101,9 +112,16 @@ graph TD
 | **EventBus** | `api/event_bus.py` | Async event streaming for Web UI |
 | **Web UI** | `ui/index.html` | Single-file React dashboard with 6 metric cards |
 | **TokenTracker** | `agents/token_tracker.py` | Thread-safe token usage accumulator with live UI counter |
-| **SentimentFetcher** | `data/sentiment.py` | Fear & Greed + CoinGecko news |
+| **SentimentFetcher** | `data/sentiment.py` | Fear & Greed + CoinGecko news (with API key support) |
 | **PatternDetector** | `data/patterns.py` | 13 candlestick patterns via TA-Lib |
 | **MarketRegimeDetector** | `data/regime.py` | ADX/ATR/SMA200 regime classification |
+| **DataSplitConfig** | `backtesting/data_split.py` | Frozen singleton defining research/holdout split |
+| **BlindParameterSearch** | `backtesting/blind_search.py` | Blind 5-phase parameter search |
+| **OOSValidator** | `backtesting/oos_validator.py` | Holdout-only strategy validation |
+| **SyntheticValidator** | `backtesting/synthetic_validator.py` | Random walk + permutation sanity checks |
+| **DeploymentPipeline** | `orchestration/deployment_pipeline.py` | 11-gate strategy deployment gauntlet |
+| **ValidationMode** | `execution/validation_mode.py` | 90-day conservative execution with tight CB |
+| **PerformanceMonitor** | `monitoring/performance_monitor.py` | Live vs backtest degradation tracking |
 
 ## Setup
 
@@ -148,6 +166,89 @@ python main.py run
 python main.py new-goal "Find optimal SMA crossover for BTC/USDT"
 ```
 
+## v7 — Autonomous Trading System
+
+> **Upgraded June 2026**: AutonomousResearchLoop + LiveExecutor + SignalScanner + full risk management
+
+### New Architecture
+
+```mermaid
+graph TD
+    AL[AutonomousResearchLoop] -->|"self-generates goals"| HERMES
+    AL -->|"regime"| REGIME[MarketRegimeDetector]
+    AL -->|"decay"| SM[StrategyManager]
+    SC[SignalScanner] -->|"scans pairs"| PE[LiveExecutor]
+    SC -->|"regime filter"| REGIME
+    PE -->|"paper/live"| EXCH[Exchange/CCXT]
+    PE -->|"audit"| ALG[AuditLog]
+    PE -->|"risk gate"| RM[RiskManagerAgent]
+    RM -->|"kelly"| KELLY[Kelly Criterion]
+    RM -->|"circuit breaker"| CB[CircuitBreaker]
+    AD[AnomalyDetector] -->|"7 checks"| CB
+    WS[MarketDataStream] -->|"WebSocket"| EXCH
+    MEF[MultiExchangeFetcher] -->|"fallback"| BYBIT[Bybit/OKX]
+```
+
+### New CLI Commands
+
+```bash
+# Fully autonomous mode (self-directing, no human goals needed)
+python main.py --autonomous
+
+# Autonomous mode with web UI dashboard
+python main.py --autonomous --ui
+
+# Legacy modes still work
+python main.py --ui
+python main.py --auto-research "BTC momentum strategies"
+```
+
+### Key New Components
+
+| Component | File | Role |
+|-----------|------|------|
+| **AutonomousResearchLoop** | `orchestration/autonomous_loop.py` | Self-directing research engine |
+| **RegimeSnapshot** | `data/regime.py` | Rich regime classification with confidence + strategy map |
+| **RiskManagerAgent** | `agents/risk_manager.py` | Kelly sizing, correlation gate, circuit breaker, pre-trade approval |
+| **CircuitBreaker** | `agents/risk_manager.py` | Global halt switch — stops all trading on critical conditions |
+| **LiveExecutor** | `execution/live_executor.py` | Bridges approved strategies to exchange orders |
+| **TradeSignal** | `execution/trade_signal.py` | Structured trade proposal with full provenance |
+| **AuditLog** | `execution/audit_log.py` | Append-only JSONL log of every trade decision |
+| **SignalScanner** | `execution/signal_scanner.py` | Scans all pairs × approved strategies every 60s |
+| **MarketDataStream** | `data/stream.py` | Live Binance WebSocket feeds |
+| **AnomalyDetector** | `monitoring/anomaly_detector.py` | 7 anomaly checks: rapid drawdown, stuck positions, API errors |
+| **StrategyManager** | `orchestration/strategy_manager.py` | Strategy decay detection + auto-retire |
+| **MultiExchangeFetcher** | `data/fetcher.py` | Best-price routing + Binance/Bybit fallback |
+| **ResearchGoal** | `orchestration/research.py` | Structured goal dataclass |
+
+### Safety Features
+
+| Feature | Description | Threshold |
+|---------|-------------|-----------|
+| **Kelly Sizing** | Fractional Kelly (25% default) caps position size | Max 10% of portfolio per trade |
+| **Correlation Gate** | Rejects over-concentrated positions | Max correlation 0.7 |
+| **Circuit Breaker** | Halts all trading on critical conditions | Daily -3%, Weekly -8% |
+| **Rapid Drawdown** | >2% in <10 minutes triggers halt | Automatic |
+| **Signal Flood** | >10 signals in 60 seconds (likely bug) | Auto-halt |
+| **Strategy Decay** | Auto-retires strategies with score < 0.5 | Live/backtest ratio |
+| **Paper Mode** | Always starts in paper mode | `EXECUTION_MODE=paper` |
+
+### New .env Variables
+
+```ini
+AUTONOMOUS_INTERVAL_MINUTES=30
+DECAY_THRESHOLD=0.20
+COVERAGE_GAP_SHARPE=0.80
+MAX_DAYS_WITHOUT_REGIME_RESEARCH=7
+EXECUTION_MODE=paper
+LIVE_MAX_POSITION_USDT=100
+TWAP_THRESHOLD_USDT=500
+STOP_LOSS_DEFAULT=0.04
+TAKE_PROFIT_DEFAULT=0.08
+EXCHANGES=binance,bybit
+FUTURES_ENABLED=false
+```
+
 ### Auto-Research from Web UI
 Submit a goal in the modal starting with `Auto-research:`:
 ```
@@ -185,11 +286,13 @@ Opens at `http://127.0.0.1:8765`. Features:
 | `ENABLE_PATTERNS` | `true` | Enable candlestick pattern detection |
 | `ENABLE_ONCHAIN` | `false` | Enable on-chain data (requires Whale Alert key) |
 | `CRYPTOPANIC_API_KEY` | — | Optional CryptoPanic news key |
+| `COINGECKO_API_KEY` | — | Optional CoinGecko Pro API key (for news) |
+| `HF_TOKEN` | — | Optional HuggingFace token (suppresses model download warning) |
 | `WHALE_ALERT_API_KEY` | — | Optional Whale Alert key |
 
 ## Strategy Types
 
-The strategist supports 12 strategy types:
+The strategist supports 11 strategy types:
 
 | Type | Description | Indicators |
 |---|---|---|
@@ -204,7 +307,6 @@ The strategist supports 12 strategy types:
 | `volatility_squeeze` | BB width contraction then MACD expansion | `ta.BBANDS`, `ta.MACD` |
 | `sentiment_driven` | RSI + SMA when fear/greed < 30 | `ta.RSI`, `ta.SMA` |
 | `multi_timeframe` | SMA20/50 crossover + SMA200 + ADX | `ta.SMA`, `ta.ADX` |
-| `custom` | User-defined TA code | Any `ta.*` expressions |
 
 ## Strategist Tools (13 total)
 
@@ -213,17 +315,23 @@ The strategist supports 12 strategy types:
 ## Running Tests
 
 ```bash
-# Existing tests (21 tests)
+# Existing tests (v6 + v7)
 python -m pytest test_phase2.py test_sentiment.py test_patterns.py test_regime.py -v
-
-# New tests (10 tests)
 python test_experiment_tracker.py
 python test_walk_forward.py
+
+# Anti-overfitting tests (87 tests)
+python -m pytest test_data_split.py test_blind_search.py test_oos_validator.py -v
+python -m pytest test_deployment_pipeline.py test_kelly_conservative.py -v
+python -m pytest test_synthetic_validator.py test_validation_mode.py -v
+python -m pytest test_performance_monitor.py -v
 
 # All tests
-python -m pytest test_phase2.py test_sentiment.py test_patterns.py test_regime.py -v
-python test_experiment_tracker.py
-python test_walk_forward.py
+python -m pytest test_data_split.py test_blind_search.py test_oos_validator.py \
+  test_deployment_pipeline.py test_kelly_conservative.py \
+  test_synthetic_validator.py test_validation_mode.py \
+  test_performance_monitor.py \
+  test_phase2.py test_sentiment.py test_patterns.py test_regime.py -v
 ```
 
 ## How It Works

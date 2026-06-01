@@ -33,12 +33,36 @@ class Settings:
 
     # Optional API keys
     CRYPTOPANIC_API_KEY: str = os.getenv("CRYPTOPANIC_API_KEY", "")
+    COINGECKO_API_KEY: str = os.getenv("COINGECKO_API_KEY", "")
+    HF_TOKEN: str = os.getenv("HF_TOKEN", "")
     WHALE_ALERT_API_KEY: str = os.getenv("WHALE_ALERT_API_KEY", "")
 
     # Feature flags
     ENABLE_SENTIMENT: bool = os.getenv("ENABLE_SENTIMENT", "true").lower() == "true"
     ENABLE_PATTERNS: bool = os.getenv("ENABLE_PATTERNS", "true").lower() == "true"
     ENABLE_ONCHAIN: bool = os.getenv("ENABLE_ONCHAIN", "false").lower() == "true"
+
+    # Autonomous mode
+    AUTONOMOUS_INTERVAL_MINUTES: int = int(os.getenv("AUTONOMOUS_INTERVAL_MINUTES", "30"))
+    DECAY_THRESHOLD: float = float(os.getenv("DECAY_THRESHOLD", "0.20"))
+    COVERAGE_GAP_SHARPE: float = float(os.getenv("COVERAGE_GAP_SHARPE", "0.80"))
+    MAX_DAYS_WITHOUT_REGIME_RESEARCH: int = int(os.getenv("MAX_DAYS_WITHOUT_REGIME_RESEARCH", "7"))
+
+    # Live execution
+    EXECUTION_MODE: str = os.getenv("EXECUTION_MODE", "paper")
+    LIVE_MAX_POSITION_USDT: float = float(os.getenv("LIVE_MAX_POSITION_USDT", "100.0"))
+    TWAP_THRESHOLD_USDT: float = float(os.getenv("TWAP_THRESHOLD_USDT", "500.0"))
+    STOP_LOSS_DEFAULT: float = float(os.getenv("STOP_LOSS_DEFAULT", "0.04"))
+    TAKE_PROFIT_DEFAULT: float = float(os.getenv("TAKE_PROFIT_DEFAULT", "0.08"))
+
+    # Anti-overfitting and data integrity
+    BACKTEST_OPTIMISM_FACTOR: float = float(os.getenv("BACKTEST_OPTIMISM_FACTOR", "0.55"))
+    LIVE_START_DATE: str = os.getenv("LIVE_START_DATE", "")
+    VALIDATION_MODE_DAYS: int = int(os.getenv("VALIDATION_MODE_DAYS", "90"))
+
+    # Multi-exchange
+    EXCHANGES: str = os.getenv("EXCHANGES", "binance")
+    FUTURES_ENABLED: bool = os.getenv("FUTURES_ENABLED", "false").lower() == "true"
 
 
 settings = Settings()

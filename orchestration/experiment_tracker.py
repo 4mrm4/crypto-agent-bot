@@ -19,17 +19,51 @@ class Experiment:
     win_rate: float
     max_drawdown: float
     total_trades: int
-    verdict: str  # "kept" | "discarded"
+    profit_factor: float = 1.0
+    walk_forward_passed: bool = False
+    monte_carlo_dd_95pct: float = 0.0
+    synthetic_sanity_passed: bool = False  # Must pass random walk test
+    verdict: str = "discarded"
     iteration: int = 0
 
     def score(self) -> float:
-        """Composite score for ranking experiments."""
-        if self.total_trades < 5:
-            return -999.0
+        """Composite score for ranking experiments.
+
+        Uses tightened convergence criteria:
+        - Sharpe >= 1.2 (weight 0.30)
+        - Win rate >= 0.48 (weight 0.20)
+        - Max drawdown <= 0.10 (weight 0.25)
+        - Profit factor >= 1.5 (weight 0.15)
+        - Min trades >= 30 (weight 0.10)
+        - Walk-forward pass required (+0.15 bonus)
+        """
+        if self.total_trades < 30:
+            return -999.0  # insufficient data
+        if self.max_drawdown > 0.10:
+            return -998.0  # excessive drawdown
+        if self.sharpe < 0.5:
+            return -997.0  # too low sharpe to consider
+
         return (
-            self.sharpe * 0.5 +
-            self.win_rate * 0.3 +
-            (1 - abs(self.max_drawdown) * 10) * 0.2
+            min(self.sharpe / 1.2, 2.0) * 0.30 +
+            min(self.win_rate / 0.48, 2.0) * 0.20 +
+            max(0, 1 - self.max_drawdown / 0.10) * 0.25 +
+            min(self.profit_factor / 1.5, 2.0) * 0.15 +
+            min(self.total_trades / 30, 2.0) * 0.10 +
+            (0.15 if self.walk_forward_passed else 0)
+        )
+
+    def meets_deploy_criteria(self) -> bool:
+        """Check if this experiment meets the deployable strategy criteria."""
+        return (
+            self.sharpe >= 1.2
+            and self.win_rate >= 0.48
+            and self.max_drawdown <= 0.10
+            and self.profit_factor >= 1.5
+            and self.total_trades >= 30
+            and self.walk_forward_passed
+            and self.monte_carlo_dd_95pct <= 0.20
+            and self.synthetic_sanity_passed
         )
 
     def to_dict(self) -> dict:

@@ -15,6 +15,10 @@ def _get_embedding_function():
     """Return a sentence-transformer embedding function (no API key needed)."""
     global _embedding_function
     if _embedding_function is None:
+        # Pass HF_TOKEN if configured (suppresses unauthenticated warning)
+        if settings.HF_TOKEN:
+            import os as _os
+            _os.environ["HF_TOKEN"] = settings.HF_TOKEN
         try:
             from chromadb.utils import embedding_functions
             _embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
@@ -120,6 +124,7 @@ class VectorStore:
             f"Regime={regime} Sentiment={sentiment_score:.2f} "
             f"Timerange={timerange}"
         )
+        from backtesting.data_split import DATA_SPLIT
         metadata = {
             "type": "strategy_result",
             "strategy_type": strategy_type,
@@ -129,6 +134,8 @@ class VectorStore:
             "total_trades": str(metrics.get("total_trades", 0)),
             "regime": regime,
             "timerange": timerange,
+            "discovered_on_window": DATA_SPLIT.research_timerange(),
+            "research_end_date": DATA_SPLIT.research_end,
         }
         doc_id = f"strategy_{uuid.uuid4().hex[:12]}"
         self._collection.add(
@@ -177,3 +184,60 @@ class VectorStore:
         # Sort by Sharpe descending and return top k
         filtered.sort(key=lambda x: x[0], reverse=True)
         return [r for _, r in filtered[:k]]
+
+    def query_strategies_excluding_window(
+        self,
+        query: str,
+        exclude_window: str,
+        k: int = 5,
+    ) -> list:
+        """Return strategies from a DIFFERENT window than exclude_window.
+        Prevents contamination from the current research window."""
+        results = self.query_similar(query, k=k * 5)
+        filtered = []
+        for r in results:
+            meta = r.get('metadata', {})
+            discovered = meta.get('discovered_on_window', '')
+            if discovered != exclude_window:
+                filtered.append(r)
+        return filtered[:k]
+
+    def tag_as_deployable(self, strategy_id: str, approval_result: dict):
+        """Tag a strategy as deployable in ChromaDB."""
+        import uuid
+        text = f"DEPLOYABLE: {strategy_id}"
+        metadata = {
+            "type": "strategy_result",
+            "strategy_id": strategy_id,
+            "status": "deployable",
+            "deployable": True,
+            "approval_reason": str(approval_result.get("reasons", "")),
+            "position_size_usdt": str(approval_result.get("position_size_usdt", 0)),
+            "confidence": str(approval_result.get("confidence", 0)),
+        }
+        doc_id = f"deploy_{uuid.uuid4().hex[:12]}"
+        self._collection.add(documents=[text], metadatas=[metadata], ids=[doc_id])
+
+    def query_deployable_by_regime(self, regime: str) -> list:
+        """Return deployable strategies for a specific regime."""
+        results = self.query_similar(f"DEPLOYABLE strategy {regime}", k=25)
+        if not results:
+            results = self.query_similar("DEPLOYABLE", k=25)
+        return [r for r in results if r.get("metadata", {}).get("deployable", False)]
+
+    def update_live_performance(self, strategy_id: str, audit_metrics: dict):
+        """Update rolling live performance for a strategy in ChromaDB."""
+        import uuid
+        metadata = {
+            "type": "live_performance",
+            "strategy_id": strategy_id,
+            "live_sharpe": str(audit_metrics.get("sharpe", 0)),
+            "live_win_rate": str(audit_metrics.get("win_rate", 0)),
+            "live_trades": str(audit_metrics.get("trade_count", 0)),
+        }
+        doc_id = f"live_{uuid.uuid4().hex[:12]}"
+        self._collection.add(
+            documents=[f"live_performance_{strategy_id}"],
+            metadatas=[metadata],
+            ids=[doc_id],
+        )

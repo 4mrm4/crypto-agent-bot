@@ -1,7 +1,19 @@
 """Research iteration dataclass for the AutoResearch outer hypothesis loop."""
 
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from datetime import datetime
+from typing import Any, Dict, Optional
+
+
+@dataclass
+class ResearchGoal:
+    """Autonomously generated research goal — no human input needed."""
+    regime: str                          # e.g. "ranging", "strong_uptrend"
+    strategy_type_hint: str              # e.g. "mean_reversion", "momentum"
+    motivation: str                      # Human-readable why this was chosen
+    priority_score: float                # 0.0–1.0, higher = more urgent
+    triggered_by: str                    # "decay" | "coverage_gap" | "regime_change" | "scheduled" | "exploration"
+    created_at: datetime = field(default_factory=datetime.utcnow)
 
 
 @dataclass
