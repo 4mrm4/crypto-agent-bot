@@ -93,7 +93,9 @@ def _normalize(symbol: str) -> str:
 
 # ── Conservative position sizing ──
 
-BACKTEST_OPTIMISM_FACTOR = 0.55  # Assume live metrics = 55% of backtest metrics
+from config import settings
+
+BACKTEST_OPTIMISM_FACTOR = settings.BACKTEST_OPTIMISM_FACTOR  # Live metrics = X% of backtest
 
 
 class PositionSizingTier(Enum):

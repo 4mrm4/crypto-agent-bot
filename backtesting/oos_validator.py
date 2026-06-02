@@ -29,6 +29,7 @@ class OOSResult:
     strategy_type: str
     research_sharpe: float
     oos_sharpe: float
+    net_sharpe: float  # Sharpe after transaction cost drag
     research_win_rate: float
     oos_win_rate: float
     degradation_pct: float
@@ -55,6 +56,9 @@ class OOSValidator:
     def __init__(self, engine: Optional[BacktestEngine] = None):
         self._engine = engine or BacktestEngine()
         self.OOS_RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        from config import settings
+        from data.database import TradingDatabase
+        self._db = TradingDatabase(legacy_backup=settings.LEGACY_JSONL_BACKUP)
 
     def validate_strategy(
         self,
@@ -89,14 +93,21 @@ class OOSValidator:
         research_sharpe = float(research_metrics.get("sharpe_ratio", 0))
         research_win_rate = float(research_metrics.get("win_rate", 0))
 
+        # ── Net-of-costs metrics ──
+        from backtesting.engine import TransactionCostModel
+        cost_model = TransactionCostModel.from_settings()
+        profit = float(holdout_result.get("profit_ratio", 0))
+        avg_return = profit / max(oos_trades, 1)
+        net_sharpe = cost_model.net_sharpe(oos_sharpe, avg_return)
+
         # Compute degradation
         degradation_pct = 0.0
         if research_sharpe > 0:
             degradation_pct = (research_sharpe - oos_sharpe) / research_sharpe
 
-        # Pass criteria (lower bar for unseen data)
+        # Pass criteria on NET metrics (costs already baked in)
         passed = (
-            oos_sharpe >= 0.8
+            net_sharpe >= 0.8
             and oos_win_rate >= 0.42
             and oos_dd <= 0.15
             and oos_trades >= 10
@@ -120,6 +131,7 @@ class OOSValidator:
             strategy_type=strategy_type,
             research_sharpe=research_sharpe,
             oos_sharpe=oos_sharpe,
+            net_sharpe=round(max(net_sharpe, 0), 2),
             research_win_rate=research_win_rate,
             oos_win_rate=oos_win_rate,
             degradation_pct=round(degradation_pct, 4),
@@ -183,9 +195,24 @@ class OOSValidator:
         return (research_sharpe - oos_sharpe) / research_sharpe
 
     def _log_result(self, result: OOSResult) -> None:
-        """Append to oos_results.jsonl ONLY. NEVER writes to ChromaDB."""
+        """Append to oos_results.jsonl + SQLite. NEVER writes to ChromaDB."""
         with open(self.OOS_RESULTS_PATH, "a") as f:
             f.write(json.dumps(result.to_dict()) + "\n")
+        # Mirror to SQLite
+        try:
+            self._db.insert_oos_result({
+                "strategy_id": result.strategy_id,
+                "strategy_type": result.strategy_type,
+                "sharpe": result.oos_sharpe,
+                "net_sharpe": result.net_sharpe,
+                "win_rate": result.oos_win_rate,
+                "max_drawdown": result.oos_max_drawdown,
+                "trade_count": result.oos_trades,
+                "passed": result.passed,
+                "recommendation": result.recommendation,
+            })
+        except Exception as exc:
+            logger.warning("Failed to mirror OOS result to SQLite: %s", exc)
 
     def get_results(self) -> List[OOSResult]:
         """Read all OOS results from the log file (NOT ChromaDB)."""

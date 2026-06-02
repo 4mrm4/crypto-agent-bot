@@ -5,6 +5,7 @@ import logging
 from typing import Any, Dict
 
 from agents.base import BaseAgent
+from config import settings
 from langchain_core.tools import Tool
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,8 @@ class ResearcherAgent(BaseAgent):
         def web_search(query_json: str = "{}") -> str:
             """Search the web for trading strategy ideas, papers, or articles.
             Pass JSON: {"query": "momentum strategy crypto Bollinger Bands", "max_results": 5}
-            Returns a markdown list of results with titles, snippets, and URLs."""
+            Returns a markdown list of results with titles, snippets, and URLs.
+            Uses Tavily search when available, falls back to DuckDuckGo."""
             import json
             try:
                 params = json.loads(query_json)
@@ -56,9 +58,83 @@ class ResearcherAgent(BaseAgent):
             if not query:
                 return "Error: empty query"
 
+            # ── Try Tavily first ──
+            if settings.TAVILY_ENABLED and settings.TAVILY_API_KEY:
+                try:
+                    from tavily import TavilyClient
+                    client = TavilyClient(api_key=settings.TAVILY_API_KEY)
+                    resp = client.search(
+                        query=query,
+                        max_results=max_results,
+                        search_depth="advanced",
+                    )
+                    results = resp.get("results", [])
+                    if not results:
+                        return "No results found from Tavily search."
+
+                    lines = [f"Tavily search results for '{query}':"]
+                    for r in results[:max_results]:
+                        title = r.get("title", "")
+                        content = r.get("content", "")[:200]
+                        url = r.get("url", "")
+                        lines.append(f"\n**{title}**")
+                        lines.append(f"  {content}")
+                        if url:
+                            lines.append(f"  ([link]({url}))")
+
+                    # Strategy relevance scoring
+                    strategy_keywords = [
+                        "strategy", "indicator", "entry", "exit", "crossover",
+                        "RSI", "MACD", "SMA", "EMA", "breakout", "backtest",
+                        "win rate", "sharpe", "drawdown"
+                    ]
+                    relevant = []
+                    for r in results[:max_results]:
+                        text = (r.get("content", "") + " " + r.get("title", "")).lower()
+                        score = sum(1 for kw in strategy_keywords if kw.lower() in text)
+                        if score >= 2:
+                            relevant.append({
+                                "title": r.get("title", ""),
+                                "snippet": r.get("content", ""),
+                                "relevance_score": score,
+                            })
+                    relevant.sort(key=lambda x: x["relevance_score"], reverse=True)
+                    if relevant:
+                        lines.append(f"\nFound {len(relevant)} strategy-relevant results:")
+                        for r in relevant[:5]:
+                            lines.append(f"\n[Score={r['relevance_score']}] {r['title']}")
+                            lines.append(f"  {r['snippet'][:200]}")
+                        lines.append(
+                            "\nNext step: Use generate_custom_strategy_spec to convert "
+                            "the most relevant result into a testable strategy spec."
+                        )
+
+                    # Cache results in ChromaDB (best-effort)
+                    try:
+                        from memory.vector_store import VectorStore
+                        cache_store = VectorStore(collection_name="search_cache")
+                        for r in results[:max_results]:
+                            text = f"Search result: {r.get('title', '')} - {r.get('content', '')[:300]}"
+                            cache_store.store_insight(
+                                text=text,
+                                metadata={
+                                    "type": "search_cache",
+                                    "query": query,
+                                    "url": r.get("url", ""),
+                                },
+                            )
+                    except Exception:
+                        pass  # Cache is optional
+
+                    return "\n".join(lines)
+                except ImportError:
+                    pass  # Tavily not installed, fall through to DuckDuckGo
+                except Exception as exc:
+                    return f"Tavily search error: {exc}"
+
+            # ── Fallback: DuckDuckGo ──
             try:
                 import httpx
-                # Use DuckDuckGo instant answer API (no API key needed)
                 url = "https://api.duckduckgo.com/"
                 resp = httpx.get(
                     url,
@@ -69,13 +145,11 @@ class ResearcherAgent(BaseAgent):
                 data = resp.json()
 
                 results = []
-                # Abstract text
                 abstract = data.get("AbstractText", "")
                 if abstract:
                     source = data.get("Source", "web")
                     results.append(f"- **{source}**: {abstract[:300]}")
 
-                # Related topics
                 for topic in data.get("RelatedTopics", [])[:max_results]:
                     if "Text" in topic:
                         text = topic["Text"][:200]
@@ -85,8 +159,7 @@ class ResearcherAgent(BaseAgent):
                 if not results:
                     return "No results found for that query."
 
-                # ── 7B: Extract strategy-relevant content from snippets ──
-                # Re-fetch with raw data to score relevance
+                # Strategy relevance scoring
                 try:
                     strategy_keywords = [
                         "strategy", "indicator", "entry", "exit", "crossover",
@@ -113,19 +186,18 @@ class ResearcherAgent(BaseAgent):
                             })
 
                     relevant.sort(key=lambda x: x["relevance_score"], reverse=True)
-
                     if relevant:
                         lines = [f"Found {len(relevant)} strategy-relevant results:"]
                         for r in relevant[:5]:
                             lines.append(f"\n[Score={r['relevance_score']}] {r['title']}")
                             lines.append(f"  {r['snippet'][:200]}")
                         lines.append(
-                            "\nNext step: Use generate_custom_strategy_spec to convert the "
-                            "most relevant result into a testable strategy spec."
+                            "\nNext step: Use generate_custom_strategy_spec to convert "
+                            "the most relevant result into a testable strategy spec."
                         )
                         return "\n".join(lines)
                 except Exception:
-                    pass  # Fall back to basic results below
+                    pass
 
                 return f"Search results for '{query}':\n" + "\n".join(results)
 

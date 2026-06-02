@@ -43,13 +43,17 @@ class AuditEntry:
 
 
 class AuditLog:
-    """Append-only JSONL audit log. One JSON object per line."""
+    """Append-only JSONL audit log with SQLite mirror. One JSON object per line."""
 
     def __init__(self, save_path: str = "./workspace/audit_log.jsonl"):
         self._save_path = Path(save_path)
         self._save_path.parent.mkdir(parents=True, exist_ok=True)
         self._entries: List[AuditEntry] = []
         self._load()
+        # SQLite mirror
+        from config import settings
+        from data.database import TradingDatabase
+        self._db = TradingDatabase(legacy_backup=settings.LEGACY_JSONL_BACKUP)
         logger.info("AuditLog loaded: %d entries", len(self._entries))
 
     def _load(self):
@@ -63,10 +67,34 @@ class AuditLog:
                         pass
 
     def record(self, entry: AuditEntry):
-        """Append an entry to the log (memory + disk)."""
+        """Append an entry to the log (memory + disk + SQLite)."""
         self._entries.append(entry)
         with open(self._save_path, "a") as f:
             f.write(json.dumps(entry.to_dict()) + "\n")
+        # Mirror to SQLite
+        try:
+            self._db.insert_trade({
+                "strategy_id": entry.strategy_name,
+                "pair": entry.pair,
+                "side": entry.side,
+                "entry_price": entry.entry_price,
+                "exit_price": entry.exit_price,
+                "quantity": entry.position_size_usdt / entry.entry_price if entry.entry_price else 0,
+                "pnl": entry.pnl_usdt,
+                "pnl_pct": entry.pnl_pct,
+                "fee_total": 0,
+                "regime": entry.regime,
+                "timestamp_open": int(entry.timestamp.timestamp()) if hasattr(entry.timestamp, 'timestamp') else 0,
+                "metadata": {
+                    "strategy_type": entry.strategy_type,
+                    "confidence": entry.confidence,
+                    "status": entry.status,
+                    "risk_verdict": entry.risk_verdict,
+                    "kelly_result": entry.kelly_result,
+                },
+            })
+        except Exception as exc:
+            logger.warning("Failed to mirror audit entry to SQLite: %s", exc)
 
     def query_by_strategy(self, strategy_name: str) -> List[AuditEntry]:
         """Return all entries for a given strategy name."""

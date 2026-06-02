@@ -17,11 +17,14 @@ logger = logging.getLogger(__name__)
 
 
 # Expected degradation ranges (empirically realistic for crypto)
+# NOTE: These assume TransactionCostModel is already applied to backtest results.
+# With costs already modelled, residual live degradation is from market impact,
+# timing differences, and fill quality — not fee drag.
 EXPECTED_DEGRADATION = {
-    "sharpe":    (0.30, 0.50),  # Live Sharpe expected to be 30-50% lower
-    "win_rate":  (0.05, 0.15),  # Win rate expected to drop 5-15 percentage points
-    "avg_win":   (0.10, 0.25),  # Average win smaller due to slippage
-    "max_dd":    (0.10, 0.30),  # Drawdown expected to be 10-30% worse
+    "sharpe":    (0.20, 0.40),  # Live Sharpe expected to be 20-40% lower (was 30-50%)
+    "win_rate":  (0.03, 0.10),  # Win rate expected to drop 3-10 percentage points (was 5-15pp)
+    "avg_win":   (0.10, 0.25),  # Average win smaller due to slippage (unchanged)
+    "max_dd":    (0.10, 0.30),  # Drawdown expected to be 10-30% worse (unchanged)
 }
 
 

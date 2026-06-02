@@ -71,13 +71,17 @@ class Experiment:
 
 
 class ExperimentTracker:
-    """Tracks all backtest experiments this session with structured data."""
+    """Tracks all backtest experiments this session with structured data (JSONL + SQLite)."""
 
     def __init__(self, save_path: str = "./workspace/experiments.jsonl"):
         self._experiments: List[Experiment] = []
         self._save_path = Path(save_path)
         self._save_path.parent.mkdir(parents=True, exist_ok=True)
         self._load_existing()
+        # SQLite mirror
+        from config import settings
+        from data.database import TradingDatabase
+        self._db = TradingDatabase(legacy_backup=settings.LEGACY_JSONL_BACKUP)
 
     def _load_existing(self):
         if self._save_path.exists():
@@ -94,6 +98,25 @@ class ExperimentTracker:
         self._experiments.append(experiment)
         with open(self._save_path, "a") as f:
             f.write(json.dumps(experiment.to_dict()) + "\n")
+        # Mirror to SQLite
+        try:
+            self._db.insert_experiment({
+                "strategy_id": f"{experiment.strategy_type}_{experiment.iteration}",
+                "strategy_type": experiment.strategy_type,
+                "params": experiment.params,
+                "metrics": {
+                    "sharpe": experiment.sharpe,
+                    "win_rate": experiment.win_rate,
+                    "max_drawdown": experiment.max_drawdown,
+                    "total_trades": experiment.total_trades,
+                    "profit_factor": experiment.profit_factor,
+                },
+                "regime": experiment.regime,
+                "status": "completed",
+                "verdict": experiment.verdict,
+            })
+        except Exception as exc:
+            logger.warning("Failed to mirror experiment to SQLite: %s", exc)
 
     def get_best(self, strategy_type: str = "", regime: str = "", k: int = 5) -> List[Experiment]:
         candidates = self._experiments

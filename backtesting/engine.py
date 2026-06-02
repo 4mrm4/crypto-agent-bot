@@ -15,8 +15,9 @@ import string
 import subprocess
 import tempfile
 import time
+from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import pandas as pd
 
@@ -24,6 +25,69 @@ from config import settings
 from backtesting.data_split import DATA_SPLIT
 
 logger = logging.getLogger(__name__)
+
+
+# ── Transaction cost model ──
+
+@dataclass
+class TransactionCostModel:
+    """Realistic transaction cost assumptions for backtest fidelity.
+
+    Defaults reflect Binance spot tier-0 (30-day volume < 1M BTC):
+      - maker_fee:   0.10%   (limit order, adds liquidity)
+      - taker_fee:   0.075%  (market order, removes liquidity) — note: Binance spot
+                             taker is typically higher than maker; this 0.075 is a
+                             blended estimate for the bot's typical execution mix
+      - slippage_pct: 0.05%  (fixed estimate — scales with order size / volume)
+      - slippage_model: "fixed" (future: "volume_scaled")
+    """
+    maker_fee: float = 0.001       # 0.10%
+    taker_fee: float = 0.00075     # 0.075%
+    slippage_pct: float = 0.0005   # 0.05%
+    slippage_model: Literal["fixed", "volume_scaled"] = "fixed"
+
+    def total_cost_per_trade(self) -> float:
+        """Combined cost for a round-trip trade (entry + exit).
+
+        Assumes entry at taker rate, exit at maker rate (typical for signal-based bots
+        that need immediate entry but can set limit exits).
+        """
+        return self.taker_fee + self.maker_fee + self.slippage_pct * 2
+
+    def annual_cost_drag(self, trades_per_year: int) -> float:
+        """Estimate of total cost drag as a fraction of notional per year."""
+        return trades_per_year * self.total_cost_per_trade()
+
+    def to_freqtrade_fee(self) -> float:
+        """Return a single fee rate for Freqtrade's ``--fee`` flag.
+
+        Freqtrade applies this as a flat per-trade fee (both entry and exit).
+        We use the blended rate (max of maker/taker + slippage) as a conservative
+        simplification.
+        """
+        return max(self.maker_fee, self.taker_fee) + self.slippage_pct
+
+    @classmethod
+    def from_settings(cls) -> "TransactionCostModel":
+        """Construct from config/settings."""
+        return cls(
+            maker_fee=settings.MAKER_FEE,
+            taker_fee=settings.TAKER_FEE,
+            slippage_pct=settings.SLIPPAGE_PCT,
+            slippage_model=settings.SLIPPAGE_MODEL,  # type: ignore
+        )
+
+    def net_sharpe(self, gross_sharpe: float, avg_return_per_trade: float) -> float:
+        """Estimate net Sharpe after cost drag.
+
+        This is a linear approximation: costs reduce returns directly.
+        For a strategy with consistent returns, net Sharpe scales roughly as:
+          net = gross * (1 - cost_per_trade / avg_return_per_trade)
+        """
+        cost_per_trade = self.total_cost_per_trade()
+        if avg_return_per_trade <= 0 or cost_per_trade <= 0:
+            return gross_sharpe
+        return gross_sharpe * max(0, 1 - cost_per_trade / avg_return_per_trade)
 
 
 # ── Timerange sanitizer ──
@@ -737,6 +801,9 @@ class BacktestEngine:
         config["timerange"] = timerange
         config["timeframe"] = settings.TIMEFRAME
         config["dry_run"] = True
+        # Inject transaction cost model
+        cost_model = TransactionCostModel.from_settings()
+        config["fee"] = cost_model.to_freqtrade_fee()
         # Required pricing sections for Freqtrade 2026.4
         config.setdefault("entry_pricing", {"price_side": "same", "use_order_book": False})
         config.setdefault("exit_pricing", {"price_side": "same", "use_order_book": False})
@@ -765,6 +832,7 @@ class BacktestEngine:
             "--strategy", strategy_name,
             "--export", "trades",
             "--backtest-directory", str(export_path),
+            "--fee", str(TransactionCostModel.from_settings().to_freqtrade_fee()),
         ]
 
         logger.info("Running backtest: %s", " ".join(cmd))
@@ -857,6 +925,13 @@ class BacktestEngine:
                 total_trades, sharpe, win_rate, drawdown, profit
             )
 
+            # ── Net-of-costs metrics ──
+            cost_model = TransactionCostModel.from_settings()
+            # Estimate avg return per trade from profit ratio
+            avg_return = profit / max(total_trades, 1)
+            net_sharpe = cost_model.net_sharpe(sharpe, avg_return)
+            net_win_rate = win_rate  # Win rate doesn't change with proportional costs
+
             metrics = {}
             if not trades.empty:
                 metrics = self.get_performance_metrics(trades)
@@ -867,7 +942,9 @@ class BacktestEngine:
                 "profit_ratio": profit or metrics.get("total_profit", 0),
                 "max_drawdown": drawdown or metrics.get("max_drawdown", 0),
                 "sharpe_ratio": sharpe or metrics.get("sharpe_ratio", 0),
+                "net_sharpe_ratio": round(max(net_sharpe, 0), 2),
                 "win_rate": win_rate or metrics.get("win_rate", 0),
+                "cost_model": asdict(cost_model),
                 "trades_df": trades,
                 "raw": raw,
             }

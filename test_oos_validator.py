@@ -17,6 +17,7 @@ class TestOOSValidator:
             strategy_type="sma_crossover",
             research_sharpe=1.5,
             oos_sharpe=1.0,
+            net_sharpe=0.85,
             research_win_rate=0.5,
             oos_win_rate=0.45,
             degradation_pct=0.33,
@@ -36,6 +37,7 @@ class TestOOSValidator:
             strategy_type="sma_crossover",
             research_sharpe=2.0,
             oos_sharpe=0.5,
+            net_sharpe=0.4,
             research_win_rate=0.6,
             oos_win_rate=0.3,
             degradation_pct=0.75,
@@ -53,6 +55,7 @@ class TestOOSValidator:
             strategy_type="sma_crossover",
             research_sharpe=1.0,
             oos_sharpe=0.8,
+            net_sharpe=0.7,
             research_win_rate=0.5,
             oos_win_rate=0.4,
             degradation_pct=0.2,
@@ -82,7 +85,7 @@ class TestOOSValidator:
 
         result = OOSResult(
             strategy_id="test_log", strategy_type="sma_crossover",
-            research_sharpe=1.0, oos_sharpe=0.8,
+            research_sharpe=1.0, oos_sharpe=0.8, net_sharpe=0.7,
             research_win_rate=0.5, oos_win_rate=0.4,
             degradation_pct=0.2, passed=True, recommendation="deploy",
             validated_at="2025-01-01T00:00:00",
@@ -103,7 +106,7 @@ class TestOOSValidator:
         with open(validator.OOS_RESULTS_PATH, "w") as f:
             f.write(json.dumps({
                 "strategy_id": "get_test", "strategy_type": "sma_crossover",
-                "research_sharpe": 1.0, "oos_sharpe": 0.8,
+                "research_sharpe": 1.0, "oos_sharpe": 0.8, "net_sharpe": 0.7,
                 "research_win_rate": 0.5, "oos_win_rate": 0.4,
                 "degradation_pct": 0.2, "passed": True, "recommendation": "deploy",
                 "validated_at": "2025-01-01T00:00:00",

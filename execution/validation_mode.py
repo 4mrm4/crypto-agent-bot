@@ -56,6 +56,9 @@ class ValidationMode:
     def __init__(self, live_start_date: Optional[datetime] = None):
         self.live_start_date = live_start_date or datetime.utcnow()
         self.VALIDATION_TRADES_PATH.parent.mkdir(parents=True, exist_ok=True)
+        from config import settings
+        from data.database import TradingDatabase
+        self._db = TradingDatabase(legacy_backup=settings.LEGACY_JSONL_BACKUP)
 
     @property
     def is_active(self) -> bool:
@@ -150,10 +153,22 @@ class ValidationMode:
         return False
 
     def log_validation_trade(self, trade: dict) -> None:
-        """Append to validation_trades.jsonl separately from main audit log."""
+        """Append to validation_trades.jsonl + SQLite."""
         trade["logged_at"] = datetime.utcnow().isoformat()
         with open(self.VALIDATION_TRADES_PATH, "a") as f:
             f.write(json.dumps(trade) + "\n")
+        # Mirror to SQLite
+        try:
+            self._db.insert_validation_trade({
+                "strategy_id": trade.get("strategy_id", trade.get("strategy_name", "unknown")),
+                "pair": trade.get("pair", ""),
+                "pnl": trade.get("pnl", trade.get("pnl_pct", 0)),
+                "position_size": trade.get("position_size", trade.get("position_size_usdt", 0)),
+                "timestamp": int(datetime.utcnow().timestamp()),
+                "metadata": trade,
+            })
+        except Exception as exc:
+            logger.warning("Failed to mirror validation trade to SQLite: %s", exc)
 
     def get_validation_trades(self) -> list:
         """Read validation trades from log."""

@@ -64,5 +64,18 @@ class Settings:
     EXCHANGES: str = os.getenv("EXCHANGES", "binance")
     FUTURES_ENABLED: bool = os.getenv("FUTURES_ENABLED", "false").lower() == "true"
 
+    # Transaction cost model
+    MAKER_FEE: float = float(os.getenv("MAKER_FEE", "0.001"))
+    TAKER_FEE: float = float(os.getenv("TAKER_FEE", "0.00075"))
+    SLIPPAGE_PCT: float = float(os.getenv("SLIPPAGE_PCT", "0.0005"))
+    SLIPPAGE_MODEL: str = os.getenv("SLIPPAGE_MODEL", "fixed")
+
+    # Tavily search
+    TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY", "")
+    TAVILY_ENABLED: bool = os.getenv("TAVILY_ENABLED", "true").lower() == "true"
+
+    # Legacy JSONL backup (keep for 30 days after SQLite migration, then disable)
+    LEGACY_JSONL_BACKUP: bool = os.getenv("LEGACY_JSONL_BACKUP", "true").lower() == "true"
+
 
 settings = Settings()

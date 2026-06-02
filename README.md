@@ -2,7 +2,7 @@
 
 Modular crypto trading bot with 5 LangGraph ReAct agents, Freqtrade backtesting, ChromaDB strategy memory, and a real-time Web UI.
 
-**Latest updates (June 2026 — v8: Anti-Overfitting & Data Integrity):**
+**Latest updates (June 2026 — v9: Transaction Costs, Tavily Search, SQLite Storage):**
 
 ### Core Infrastructure
 - **DeepSeek Chat API** — migrated from OpenRouter to direct DeepSeek API (`api.deepseek.com/v1`, model `deepseek-chat`)
@@ -10,7 +10,32 @@ Modular crypto trading bot with 5 LangGraph ReAct agents, Freqtrade backtesting,
 - **EventBus WebSocket streaming** — `monkey_patch_hermes` for auto-research mode, real-time agent activity pushed to UI
 - **Auto data download** — checks BTC/USDT 1h data ≥500KB on startup, auto-downloads latest 2 years if missing
 
-### Anti-Overfitting System
+### Anti-Overfitting System (v8, continued)
+
+### Transaction Cost Realism (`backtesting/engine.py`)
+- **TransactionCostModel** — dataclass with maker fee (0.1%), taker fee (0.075%), slippage (0.05%) derived from config
+- **Fee injection** — `--fee` flag passed to every Freqtrade subprocess call; fee baked into `config.fee`
+- **Net-of-costs metrics** — `net_sharpe_ratio` computed in parsed results using cost drag estimation
+- **OOSValidator pass criteria** — now uses `net_sharpe` (after cost model), not gross Sharpe. Strategies must clear 0.8 after costs
+- **PerformanceMonitor thresholds** — tightened to 20-40% Sharpe degradation (costs already modelled)
+- **BACKTEST_OPTIMISM_FACTOR** — no longer hardcoded at 0.55; imported from `config.settings`
+- Config vars: `MAKER_FEE`, `TAKER_FEE`, `SLIPPAGE_PCT`, `SLIPPAGE_MODEL`
+
+### Web Search Upgrade (`agents/researcher.py`)
+- **Tavily primary search** — when `TAVILY_API_KEY` is set and `TAVILY_ENABLED=true`, uses Tavily API (advanced search depth)
+- **DuckDuckGo fallback** — falls back automatically when Tavily is uninstalled, disabled, or errors
+- **Result caching** — search results stored in ChromaDB (`search_cache` collection) to avoid redundant API calls
+- Config vars: `TAVILY_API_KEY`, `TAVILY_ENABLED`
+
+### SQLite Database (`data/database.py`)
+- **TradingDatabase** — SQLite-backed persistent storage replacing JSONL as primary data store
+- **5 tables**: `trades`, `experiments`, `oos_results`, `pipeline_results`, `validation_trades` — all with indexed columns
+- **WAL mode** — concurrent read/write safe, no corruption on crash
+- **Context manager** — `with db.transaction() as conn:` for safe, atomic transactions
+- **Migration** — `migrate_jsonl()` reads existing JSONL files and populates SQLite (idempotent)
+- **Dual write** — all 5 modules write to both SQLite and JSONL; JSONL writes disabled via `LEGACY_JSONL_BACKUP=false`
+- Config var: `LEGACY_JSONL_BACKUP`
+- Single file: `workspace/trading.db`
 - **Hard data holdout** (`backtesting/data_split.py`) — frozen `DataSplitConfig` singleton defines research window (2017–2023) and holdout (2024–2026). All backtests raise `ValueError` on holdout overlap. Walk-forward validation stays strictly within research bounds.
 - **Blind parameter search** (`backtesting/blind_search.py`) — 5-phase protocol: LLM defines search space blind → batch backtest → aggregate stats only → directional guidance → quantitative selection. No individual variant results leak to the LLM.
 - **Out-of-sample validation** (`backtesting/oos_validator.py`) — `OOSValidator` runs on holdout data only. Results written to `oos_results.jsonl`, never to ChromaDB. Four thresholds: Sharpe≥0.8, WR≥0.42, DD≤0.15, trades≥10.
@@ -36,7 +61,7 @@ Modular crypto trading bot with 5 LangGraph ReAct agents, Freqtrade backtesting,
 
 ### Researchers & Agents
 - **Concept-aware strategy specs** — `generate_custom_strategy_spec` auto-maps concepts to strategy types using keyword matching
-- **Strategy-relevant web search** — post-processes DuckDuckGo results, scores by trading keyword relevance
+- **Strategy-relevant web search** — Tavily search (primary) with DuckDuckGo fallback, results scored by trading keyword relevance, cached in ChromaDB
 - **Strategy memory** — ChromaDB stores backtest results (type, params, metrics, regime); past winners inform future LLM runs
 
 ### Web UI
@@ -73,7 +98,7 @@ graph TD
     STRATEGIST --> ENGINE[BacktestEngine / Freqtrade]
     STRATEGIST --> TRACKER[ExperimentTracker]
     CURATOR --> MEMORY[VectorStore / ChromaDB]
-    RESEARCHER --> WEB[Web Search / DDG]
+    RESEARCHER --> WEB[Web Search / Tavily + DDG]
     RESEARCHER --> CONCEPTS[Strategy Concepts]
     HERMES -.-> UIWS[Web UI / WebSocket]
 
@@ -125,7 +150,7 @@ graph TD
 | **StrategyConcepts** | `data/strategy_concepts.py` | 10 structured concepts with regime mappings |
 | **AnalystAgent** | `agents/analyst.py` | Market analysis with live data tools |
 | **StrategistAgent** | `agents/strategist.py` | 13 tools: strategy gen, backtest, hyperopt, walk-forward, memory-aware |
-| **ResearcherAgent** | `agents/researcher.py` | Web search, paper reading, concept-mapped strategy specs |
+| **ResearcherAgent** | `agents/researcher.py` | Web search (Tavily + DDG fallback), paper reading, concept-mapped strategy specs |
 | **RiskManagerAgent** | `agents/risk_manager.py` | Risk metrics + go/no-go verdict |
 | **MemoryCuratorAgent** | `agents/curator.py` | Cross-session memory retrieval from ChromaDB |
 | **HermesOrchestrator** | `orchestration/hermes.py` | Multi-agent LangGraph orchestration + outer research loop |
@@ -159,6 +184,7 @@ graph TD
 | **StrategyManager** | `orchestration/strategy_manager.py` | Strategy decay detection + auto-retire |
 | **ValidationMode** | `execution/validation_mode.py` | 90-day conservative execution with tight CB |
 | **PerformanceMonitor** | `monitoring/performance_monitor.py` | Live vs backtest degradation tracking |
+| **TradingDatabase** | `data/database.py` | SQLite-backed storage (5 tables, WAL mode) replacing JSONL as primary store |
 
 ## Setup
 
@@ -326,6 +352,13 @@ Opens at `http://127.0.0.1:8765`. Features:
 | `COINGECKO_API_KEY` | — | Optional CoinGecko Pro API key (for news) |
 | `HF_TOKEN` | — | Optional HuggingFace token (suppresses model download warning) |
 | `WHALE_ALERT_API_KEY` | — | Optional Whale Alert key |
+| `MAKER_FEE` | `0.001` | Maker fee rate (0.1%) for backtest cost model |
+| `TAKER_FEE` | `0.00075` | Taker fee rate (0.075%) for backtest cost model |
+| `SLIPPAGE_PCT` | `0.0005` | Slippage estimate (0.05%) per trade leg |
+| `SLIPPAGE_MODEL` | `fixed` | Slippage model type (`fixed` or `volume_scaled`) |
+| `TAVILY_API_KEY` | — | Optional Tavily API key for web search |
+| `TAVILY_ENABLED` | `true` | Enable Tavily search (falls back to DuckDuckGo) |
+| `LEGACY_JSONL_BACKUP` | `true` | Keep JSONL file writes alongside SQLite |
 
 ## Strategy Types
 
@@ -363,11 +396,15 @@ python -m pytest test_deployment_pipeline.py test_kelly_conservative.py -v
 python -m pytest test_synthetic_validator.py test_validation_mode.py -v
 python -m pytest test_performance_monitor.py -v
 
+# v9 — Transaction costs, Tavily, SQLite (38 tests)
+python -m pytest test_transaction_costs.py test_tavily_search.py test_database.py -v
+
 # All tests
 python -m pytest test_data_split.py test_blind_search.py test_oos_validator.py \
   test_deployment_pipeline.py test_kelly_conservative.py \
   test_synthetic_validator.py test_validation_mode.py \
-  test_performance_monitor.py \
+  test_performance_monitor.py test_transaction_costs.py \
+  test_tavily_search.py test_database.py \
   test_phase2.py test_sentiment.py test_patterns.py test_regime.py -v
 ```
 

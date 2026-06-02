@@ -74,7 +74,7 @@ GATE_NAMES = [
 
 
 class DeploymentPipeline:
-    """Orchestrates the full strategy gauntlet from blind search to deploy.
+    """Orchestrates the full strategy gauntlet from blind search to deploy (JSONL + SQLite).
 
     Steps 1-9 are automated and can be called in sequence via run_full_pipeline().
     Steps 10-11 require explicit human action via API.
@@ -84,6 +84,9 @@ class DeploymentPipeline:
         self._vector_store = vector_store
         self._engine = engine
         self._results_path = "./workspace/pipeline_results.jsonl"
+        from config import settings
+        from data.database import TradingDatabase
+        self._db = TradingDatabase(legacy_backup=settings.LEGACY_JSONL_BACKUP)
 
     def run_full_pipeline(
         self,
@@ -457,10 +460,26 @@ class DeploymentPipeline:
         return mapping.get(status, 0)
 
     def _log_result(self, result: PipelineResult) -> None:
-        """Append pipeline result to log file."""
+        """Append pipeline result to JSONL + SQLite."""
         import json
         from pathlib import Path
         log_path = Path(self._results_path)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_path, "a") as f:
             f.write(json.dumps(result.to_dict()) + "\n")
+        # Mirror to SQLite
+        try:
+            self._db.insert_pipeline_result({
+                "strategy_id": result.strategy_id,
+                "strategy_type": result.strategy_type,
+                "gate": result.failed_at_name if result.failed_at else "all_passed",
+                "passed": result.passed_all_automated,
+                "details": {
+                    "passed_gates": result.passed_gates,
+                    "total_gates": result.total_gates,
+                    "reason": result.reason,
+                    "oos_passed": result.oos_passed,
+                },
+            })
+        except Exception as exc:
+            logger.warning("Failed to mirror pipeline result to SQLite: %s", exc)
