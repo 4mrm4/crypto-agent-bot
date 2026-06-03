@@ -3,13 +3,18 @@ SignalScanner — continuously scans all pairs × approved strategies for entry 
 
 Runs every N seconds. Only fires signals for strategies whose regime matches
 the current detected regime. Passes approved signals to LiveExecutor.
+
+Regime-Conditioned Gating (v10):
+- Validated-regime matching: each strategy lists which regimes it was validated in
+- Transition cooldown: regime shifts freeze signals for a configurable window
+- Confidence gating: low regime confidence raises the signal confidence floor
 """
 
 import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional
 
 import pandas as pd
@@ -19,10 +24,89 @@ from data.fetcher import MarketDataFetcher
 from data.regime import MarketRegimeDetector, RegimeSnapshot
 from execution.live_executor import LiveExecutor
 from execution.trade_signal import TradeSignal
+from state.state_broker import StateBroker
 
 logger = logging.getLogger(__name__)
 
 SCAN_INTERVAL_SECONDS = 60  # Check every minute
+
+# ── Regime transition cooldown ──
+TRANSITION_COOLDOWN_MINUTES = 30  # No signals for N minutes after regime shift
+LOW_CONFIDENCE_THRESHOLD = 0.5    # Below this, raise signal floor
+LOW_CONFIDENCE_SIGNAL_FLOOR = 0.75  # Harder entry when regime is uncertain
+
+
+@dataclass
+class RegimeTransition:
+    """Record of a regime change event."""
+    from_regime: str
+    to_regime: str
+    timestamp: datetime
+    confidence: float
+
+
+class RegimeTransitionTracker:
+    """Tracks regime history and enforces cooldown on transitions."""
+
+    def __init__(self, cooldown_minutes: int = TRANSITION_COOLDOWN_MINUTES):
+        self._cooldown = timedelta(minutes=cooldown_minutes)
+        self._history: List[RegimeTransition] = []
+        self._current_regime: str = "unknown"
+        self._current_confidence: float = 0.0
+
+    def update(self, regime: str, confidence: float) -> Optional[RegimeTransition]:
+        """Register a regime update. Returns a RegimeTransition if regime changed."""
+        if regime != self._current_regime and self._current_regime != "unknown":
+            transition = RegimeTransition(
+                from_regime=self._current_regime,
+                to_regime=regime,
+                timestamp=datetime.utcnow(),
+                confidence=confidence,
+            )
+            self._history.append(transition)
+            if len(self._history) > 50:
+                self._history = self._history[-50:]
+            self._current_regime = regime
+            self._current_confidence = confidence
+            return transition
+        self._current_regime = regime
+        self._current_confidence = confidence
+        return None
+
+    def is_in_cooldown(self) -> bool:
+        """True if a recent transition is still within the cooldown window."""
+        if not self._history:
+            return False
+        last_transition = self._history[-1]
+        elapsed = datetime.utcnow() - last_transition.timestamp
+        return elapsed < self._cooldown
+
+    @property
+    def current_regime(self) -> str:
+        return self._current_regime
+
+    @property
+    def current_confidence(self) -> float:
+        return self._current_confidence
+
+    def last_transition(self) -> Optional[RegimeTransition]:
+        return self._history[-1] if self._history else None
+
+    def transition_count(self, window_hours: int = 24) -> int:
+        """Count regime transitions in the last N hours. High counts indicate instability."""
+        cutoff = datetime.utcnow() - timedelta(hours=window_hours)
+        return sum(1 for t in self._history if t.timestamp >= cutoff)
+
+    def effective_signal_floor(self, base_floor: float = 0.6) -> float:
+        """Return the effective signal confidence floor adjusted for regime conditions."""
+        if self.is_in_cooldown():
+            return max(base_floor, LOW_CONFIDENCE_SIGNAL_FLOOR)
+        if self._current_confidence < LOW_CONFIDENCE_THRESHOLD:
+            return max(base_floor, LOW_CONFIDENCE_SIGNAL_FLOOR)
+        # Flapping regime: many shifts in recent hours
+        if self.transition_count(24) >= 5:
+            return max(base_floor, 0.7)
+        return base_floor
 
 
 @dataclass
@@ -52,6 +136,7 @@ class SignalScanner:
         vector_store=None,
         event_bus=None,
         scan_interval: int = SCAN_INTERVAL_SECONDS,
+        state_broker: Optional[StateBroker] = None,
     ):
         self._pairs = pairs or ["BTC/USDT", "ETH/USDT"]
         self._approved_strategies = approved_strategies or []
@@ -60,9 +145,18 @@ class SignalScanner:
         self._fetcher = fetcher or MarketDataFetcher()
         self._vector_store = vector_store
         self._event_bus = event_bus
+        self._state_broker = state_broker
         self._scan_interval = scan_interval
         self._signal_history: List[SignalResult] = []
         self._regime_cache: Dict[str, str] = {}
+        self._regime_tracker = RegimeTransitionTracker()
+
+    def _update_approved_strategy_validated_regimes(self):
+        """Ensure every approved strategy has a validated_regimes field."""
+        for s in self._approved_strategies:
+            if "validated_regimes" not in s:
+                regime = s.get("regime", "unknown")
+                s["validated_regimes"] = [regime] if regime != "unknown" else []
 
     async def scan_loop(self):
         """Main loop. Runs every scan_interval seconds."""
@@ -87,8 +181,19 @@ class SignalScanner:
                             "regime": signal_result.regime,
                         })
 
-                        # Execute if buy/sell with sufficient confidence
-                        if signal_result.signal in ("buy", "sell") and signal_result.confidence >= 0.6:
+                        # Publish signal to StateBroker
+                        if self._state_broker:
+                            await self._state_broker.set_signal(signal_result.pair, {
+                                "signal": signal_result.signal,
+                                "confidence": signal_result.confidence,
+                                "strategy_type": signal_result.strategy_type,
+                                "regime": signal_result.regime,
+                                "timestamp": datetime.utcnow().isoformat(),
+                            })
+
+                        # Execute if buy/sell with regime-adjusted confidence floor
+                        signal_floor = self._regime_tracker.effective_signal_floor(0.6)
+                        if signal_result.signal in ("buy", "sell") and signal_result.confidence >= signal_floor:
                             await self._execute_signal(signal_result)
 
             except Exception as exc:
@@ -231,27 +336,66 @@ class SignalScanner:
         return None
 
     async def _detect_pair_regime(self, pair: str) -> str:
-        """Detect current regime for a specific pair."""
+        """Detect current regime for a specific pair and update the regime tracker."""
         try:
             ohlcv = self._fetcher.fetch_ohlcv(pair, "1h", limit=250)
             if ohlcv is not None and len(ohlcv) > 200:
-                regime = self._regime_detector.classify_regime(ohlcv)
+                snapshot = self._regime_detector.classify_regime_snapshot(ohlcv)
+                regime = snapshot.regime
+                confidence = snapshot.confidence
                 self._regime_cache[pair] = regime
+
+                # Update regime tracker and emit transition events
+                transition = self._regime_tracker.update(regime, confidence)
+                if transition:
+                    logger.info(
+                        "Regime transition: %s → %s (confidence=%.2f)",
+                        transition.from_regime, transition.to_regime, transition.confidence,
+                    )
+                    asyncio.ensure_future(self._emit("regime_transition", {
+                        "from_regime": transition.from_regime,
+                        "to_regime": transition.to_regime,
+                        "confidence": transition.confidence,
+                        "timestamp": transition.timestamp.isoformat(),
+                        "cooldown_minutes": TRANSITION_COOLDOWN_MINUTES,
+                    }))
                 return regime
         except Exception:
             pass
         return self._regime_cache.get(pair, "unknown")
 
     def _get_strategies_for_regime(self, regime: str) -> List[dict]:
-        """Filter approved strategies to those matching the current regime."""
+        """Filter approved strategies to those matching the current regime.
+
+        Two-layer gating:
+        1. Strategy type must be in REGIME_STRATEGY_MAP[regime]["use"]
+        2. Strategy must have the current regime in its validated_regimes list
+        """
+        self._update_approved_strategy_validated_regimes()
+
         from data.regime import REGIME_STRATEGY_MAP
         recommended = REGIME_STRATEGY_MAP.get(regime, {}).get("use", [])
 
         if not recommended:
             return []
 
-        matched = [s for s in self._approved_strategies
-                   if s.get("strategy_type") in recommended]
+        matched = []
+        for s in self._approved_strategies:
+            s_type = s.get("strategy_type", "")
+            if s_type not in recommended:
+                continue
+            # Check validated_regimes gate
+            validated = s.get("validated_regimes")
+            if validated is not None:
+                # validated_regimes key is present: empty = not validated, skip
+                if regime not in validated:
+                    logger.debug(
+                        "Strategy %s validated for %s, not current regime %s — skipping",
+                        s_type, validated, regime,
+                    )
+                    continue
+            matched.append(s)
+
         return matched or self._approved_strategies[:1]  # fallback to first
 
     async def _execute_signal(self, signal_result: SignalResult):
@@ -291,4 +435,5 @@ class SignalScanner:
     def update_approved_strategies(self, strategies: List[dict]):
         """Update the list of approved strategies (called by StrategyManager)."""
         self._approved_strategies = strategies
+        self._update_approved_strategy_validated_regimes()
         logger.info("SignalScanner: %d approved strategies loaded", len(strategies))

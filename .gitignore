@@ -19,6 +19,13 @@ ft_userdata/*.json
 # Workspace registry (keep tracked, ignore is fine)
 #workspace_registry.json
 
+# Runtime workspace files
+workspace/trading.db
+workspace/autonomous_state.json
+
+# Generated strategy artifacts
+ft_userdata/strategies/Strategy_*.py
+
 # IDE
 .vscode/
 .idea/

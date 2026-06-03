@@ -132,7 +132,6 @@ def _run_autonomous(ui: bool = False):
     from agents.risk_manager import RiskManagerAgent
     from agents.curator import CuratorAgent
     from agents.researcher import ResearcherAgent
-    from backtesting.engine import BacktestEngine
     from memory.vector_store import VectorStore
     from orchestration.autonomous_loop import AutonomousResearchLoop
     from orchestration.experiment_tracker import ExperimentTracker
@@ -146,10 +145,9 @@ def _run_autonomous(ui: bool = False):
     console.print(f"[white]Interval: {settings.AUTONOMOUS_INTERVAL_MINUTES} minutes[/white]")
     console.print("=" * 60 + "\n")
 
-    engine = BacktestEngine()
     agents = {
         "analyst": AnalystAgent(),
-        "strategist": StrategistAgent(engine=engine),
+        "strategist": StrategistAgent(),
         "risk_manager": RiskManagerAgent(),
         "curator": CuratorAgent(),
         "researcher": ResearcherAgent(),

@@ -77,5 +77,14 @@ class Settings:
     # Legacy JSONL backup (keep for 30 days after SQLite migration, then disable)
     LEGACY_JSONL_BACKUP: bool = os.getenv("LEGACY_JSONL_BACKUP", "true").lower() == "true"
 
+    # Fast pre-filter (SignalFactory + FastMetrics)
+    VECTORBT_PREFILTER_ENABLED: bool = os.getenv("VECTORBT_PREFILTER_ENABLED", "true").lower() == "true"
+    VECTORBT_PREFILTER_MIN_SHARPE: float = float(os.getenv("VECTORBT_PREFILTER_MIN_SHARPE", "0.5"))
+    VECTORBT_PREFILTER_MIN_WIN_RATE: float = float(os.getenv("VECTORBT_PREFILTER_MIN_WIN_RATE", "0.40"))
+    VECTORBT_PREFILTER_MIN_TRADES: int = int(os.getenv("VECTORBT_PREFILTER_MIN_TRADES", "3"))
+
+    # Redis (optional — StateBroker uses in-memory by default)
+    REDIS_URL: str = os.getenv("REDIS_URL", "")
+
 
 settings = Settings()

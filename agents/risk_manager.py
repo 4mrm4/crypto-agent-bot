@@ -3,6 +3,12 @@ correlation checks, circuit breaker, and pre-trade approval.
 
 This is a complete rewrite of the original risk manager with quantitative
 tools that block bad trades rather than just producing text assessments.
+
+Bayesian Kelly (v8+ upgrade):
+- Models win rate as a Beta posterior: Beta(α_prior + wins, β_prior + losses)
+- Uses lower bound of 90% credible interval as conservative win rate input
+- Automatically shrinks position size when few trades are observed
+- Converges to observed rate as trade count grows
 """
 
 import json
@@ -30,6 +36,8 @@ any trade that doesn't meet risk thresholds.
 Available tools:
 - kelly_position_size: Compute optimal position size using fractional Kelly
 - kelly_position_size_conservative: Compute position size with pessimism-adjusted Kelly (degradation haircut applied)
+- bayesian_kelly: Compute position size using Bayesian Kelly with Beta posterior (recommended)
+- bayesian_kelly_conservative: Bayesian Kelly + degradation haircut for maximum conservatism (recommended for new strategies)
 - check_position_correlation: Prevent over-concentration across positions
 - circuit_breaker_check: Verify global trading is allowed
 - assess_strategy_risk: Get full risk report for a strategy
@@ -37,7 +45,8 @@ Available tools:
 
 Always run ALL tools before approving a trade. One veto = no trade.
 Be conservative. Capital preservation is priority #1.
-Prefer kelly_position_size_conservative over standard kelly_position_size — it accounts for backtest optimism.
+Prefer bayesian_kelly_conservative over other sizing methods — it accounts for
+both backtest optimism and win-rate uncertainty from limited trade samples.
 
 IMPORTANT: Use ONLY plain ASCII text. No emoji, no Unicode symbols.
 """
@@ -203,6 +212,145 @@ def kelly_position_size_conservative(
             f"Position=${final_position:.0f} ({final_position/portfolio_value*100:.1f}% of portfolio)."
         ),
     }
+
+
+# ── Bayesian Kelly Position Sizing ──
+
+BETA_PRIOR_ALPHA = 2.0  # Weakly informative prior
+BETA_PRIOR_BETA = 2.0
+BAYESIAN_CI_LOWER = 0.05  # 90% CI lower bound
+BAYESIAN_CI_UPPER = 0.95  # 90% CI upper bound
+
+
+def _beta_posterior_win_rate(wins: float, losses: float) -> dict:
+    from scipy.stats import beta as beta_dist
+    alpha_post = BETA_PRIOR_ALPHA + wins
+    beta_post = BETA_PRIOR_BETA + losses
+    if alpha_post > 1 and beta_post > 1:
+        map_win_rate = (alpha_post - 1) / (alpha_post + beta_post - 2)
+    else:
+        map_win_rate = alpha_post / (alpha_post + beta_post)
+    ci_lower = beta_dist.ppf(BAYESIAN_CI_LOWER, alpha_post, beta_post)
+    ci_upper = beta_dist.ppf(BAYESIAN_CI_UPPER, alpha_post, beta_post)
+    return {
+        "map_win_rate": round(map_win_rate, 4),
+        "ci_lower": round(float(ci_lower), 4),
+        "ci_upper": round(float(ci_upper), 4),
+        "total_trades": int(wins + losses),
+        "posterior_alpha": round(alpha_post, 2),
+        "posterior_beta": round(beta_post, 2),
+    }
+
+
+def _estimate_wins_losses(win_rate: float, total_trades: int) -> tuple:
+    wins = win_rate * total_trades
+    losses = total_trades - wins
+    return wins, losses
+
+
+def bayesian_kelly_position_size(
+    win_rate: float,
+    avg_win_pct: float,
+    avg_loss_pct: float,
+    portfolio_value: float,
+    total_trades: int = 50,
+    max_kelly_fraction: float = 0.25,
+    sizing_tier: "PositionSizingTier" = None,
+) -> dict:
+    if win_rate <= 0 or avg_loss_pct <= 0:
+        return {"kelly_fraction": 0.0, "position_size_usdt": 0.0, "portfolio_pct": 0.0,
+                "rationale": "Invalid inputs: win_rate or avg_loss must be positive", "error": True}
+    if sizing_tier is None:
+        sizing_tier = PositionSizingTier.CAUTIOUS
+    wins, losses = _estimate_wins_losses(win_rate, total_trades)
+    posterior = _beta_posterior_win_rate(wins, losses)
+    bayesian_win_rate = posterior["ci_lower"]
+    b = avg_win_pct / avg_loss_pct if avg_loss_pct > 0 else 0
+    p = bayesian_win_rate
+    q = 1.0 - p
+    raw_kelly = (p * b - q) / b if b > 0 else 0
+    kelly_used = raw_kelly * max_kelly_fraction
+    max_pct = sizing_tier.max_position_pct()
+    max_position = portfolio_value * max_pct
+    kelly_position = portfolio_value * kelly_used
+    final_position = min(max(kelly_position, 0.0), max_position)
+    if raw_kelly <= 0:
+        return {"kelly_fraction": 0.0, "position_size_usdt": 0.0, "portfolio_pct": 0.0,
+                "full_kelly": round(raw_kelly, 4), "bayesian_posterior": posterior,
+                "rationale": "Negative Bayesian Kelly: no position recommended.",
+                "method": "bayesian"}
+    return {
+        "kelly_fraction": round(kelly_used, 4),
+        "full_kelly": round(raw_kelly, 4),
+        "position_size_usdt": round(final_position, 2),
+        "portfolio_pct": round(final_position / portfolio_value * 100, 2),
+        "max_position_usdt": round(max_position, 2),
+        "sizing_tier": sizing_tier.value,
+        "bayesian_posterior": posterior,
+        "bayesian_used_wr": round(bayesian_win_rate, 4),
+        "observed_wr": round(win_rate, 4),
+        "method": "bayesian",
+        "rationale": "Bayesian Kelly used.",
+    }
+
+
+def bayesian_kelly_position_size_conservative(
+    win_rate: float,
+    avg_win_pct: float,
+    avg_loss_pct: float,
+    portfolio_value: float,
+    total_trades: int = 50,
+    oos_degradation_pct: float = 0.40,
+    max_kelly_fraction: float = 0.25,
+    sizing_tier: "PositionSizingTier" = None,
+) -> dict:
+    if win_rate <= 0 or avg_loss_pct <= 0:
+        return {"kelly_fraction": 0.0, "position_size_usdt": 0.0, "portfolio_pct": 0.0,
+                "rationale": "Invalid inputs: win_rate or avg_loss must be positive", "error": True}
+    if sizing_tier is None:
+        sizing_tier = PositionSizingTier.CAUTIOUS
+    degradation_factor = max(0.0, 1.0 - oos_degradation_pct)
+    adj_win_rate = win_rate * degradation_factor
+    adj_avg_win = avg_win_pct * degradation_factor
+    adj_avg_loss = avg_loss_pct
+    wins, losses = _estimate_wins_losses(adj_win_rate, total_trades)
+    posterior = _beta_posterior_win_rate(wins, losses)
+    bayesian_win_rate = posterior["ci_lower"]
+    b = adj_avg_win / adj_avg_loss if adj_avg_loss > 0 else 0
+    p = bayesian_win_rate
+    q = 1.0 - p
+    raw_kelly = (p * b - q) / b if b > 0 else 0
+    kelly_used = raw_kelly * max_kelly_fraction
+    max_pct = sizing_tier.max_position_pct()
+    max_position = portfolio_value * max_pct
+    kelly_position = portfolio_value * kelly_used
+    final_position = min(max(kelly_position, 0.0), max_position)
+    if raw_kelly <= 0:
+        return {"kelly_fraction": 0.0, "position_size_usdt": 0.0, "portfolio_pct": 0.0,
+                "full_kelly": round(raw_kelly, 4), "bayesian_posterior": posterior,
+                "haircut_applied": "degradation={:.0%}, tier={}".format(oos_degradation_pct, sizing_tier.value),
+                "rationale": "Negative conservative Bayesian Kelly: no position.",
+                "method": "bayesian_conservative"}
+    return {
+        "kelly_fraction": round(kelly_used, 4),
+        "full_kelly": round(raw_kelly, 4),
+        "position_size_usdt": round(final_position, 2),
+        "portfolio_pct": round(final_position / portfolio_value * 100, 2),
+        "max_position_usdt": round(max_position, 2),
+        "sizing_tier": sizing_tier.value,
+        "bayesian_posterior": posterior,
+        "bayesian_used_wr": round(bayesian_win_rate, 4),
+        "degraded_wr": round(adj_win_rate, 4),
+        "observed_wr": round(win_rate, 4),
+        "oos_degradation_pct": oos_degradation_pct,
+        "method": "bayesian_conservative",
+        "haircut_applied": "degradation={:.0%}, tier={}, posterior Beta({:.1f},{:.1f})".format(
+            oos_degradation_pct, sizing_tier.value, posterior["posterior_alpha"], posterior["posterior_beta"]),
+        "rationale": "Conservative Bayesian Kelly used.",
+    }
+
+
+
 
 
 
@@ -635,6 +783,50 @@ class RiskManagerAgent(BaseAgent):
                 "reasons": reasons,
             })
 
+
+        def bayesian_kelly_wrapper(params_json: str = "{}") -> str:
+            """Compute position size using Bayesian Kelly with Beta posterior."""
+            try:
+                params = json.loads(params_json) if isinstance(params_json, str) else params_json
+            except json.JSONDecodeError:
+                return json.dumps({"error": "invalid JSON"})
+            try:
+                tier = PositionSizingTier(params.get("sizing_tier", "cautious"))
+            except ValueError:
+                tier = PositionSizingTier.CAUTIOUS
+            result = bayesian_kelly_position_size(
+                win_rate=float(params.get("win_rate", 0.5)),
+                avg_win_pct=float(params.get("avg_win_pct", 0.05)),
+                avg_loss_pct=float(params.get("avg_loss_pct", 0.03)),
+                portfolio_value=float(params.get("portfolio_value", 10000.0)),
+                total_trades=int(params.get("total_trades", 50)),
+                max_kelly_fraction=float(params.get("max_kelly_fraction", 0.25)),
+                sizing_tier=tier,
+            )
+            return json.dumps({k: round(v, 4) if isinstance(v, float) else v for k, v in result.items()})
+
+        def bayesian_kelly_conservative_wrapper(params_json: str = "{}") -> str:
+            """Compute position size with Bayesian Kelly + degradation haircut."""
+            try:
+                params = json.loads(params_json) if isinstance(params_json, str) else params_json
+            except json.JSONDecodeError:
+                return json.dumps({"error": "invalid JSON"})
+            try:
+                tier = PositionSizingTier(params.get("sizing_tier", "cautious"))
+            except ValueError:
+                tier = PositionSizingTier.CAUTIOUS
+            result = bayesian_kelly_position_size_conservative(
+                win_rate=float(params.get("win_rate", 0.5)),
+                avg_win_pct=float(params.get("avg_win_pct", 0.05)),
+                avg_loss_pct=float(params.get("avg_loss_pct", 0.03)),
+                portfolio_value=float(params.get("portfolio_value", 10000.0)),
+                total_trades=int(params.get("total_trades", 50)),
+                oos_degradation_pct=float(params.get("oos_degradation_pct", 0.40)),
+                max_kelly_fraction=float(params.get("max_kelly_fraction", 0.25)),
+                sizing_tier=tier,
+            )
+            return json.dumps({k: round(v, 4) if isinstance(v, float) else v for k, v in result.items()})
+
         return [
             Tool(name="kelly_position_size", func=kelly_position_size,
                  description="Compute optimal position size using fractional Kelly Criterion. "
@@ -644,6 +836,18 @@ class RiskManagerAgent(BaseAgent):
                              "to backtest metrics before calculation. Args: JSON with win_rate, avg_win_pct, "
                              "avg_loss_pct, portfolio_value, oos_degradation_pct (default 0.40), "
                              "max_kelly_fraction (default 0.25), sizing_tier ('validation'|'cautious'|'normal')"),
+            Tool(name="bayesian_kelly", func=bayesian_kelly_wrapper,
+                 description="(RECOMMENDED) Compute position size using Bayesian Kelly with Beta posterior "
+                             "for win-rate uncertainty. Uses lower bound of 90% credible interval as "
+                             "conservative win rate. Args: JSON with win_rate, avg_win_pct, avg_loss_pct, "
+                             "portfolio_value, total_trades (default 50), max_kelly_fraction (default 0.25), "
+                             "sizing_tier ('validation'|'cautious'|'normal')"),
+            Tool(name="bayesian_kelly_conservative", func=bayesian_kelly_conservative_wrapper,
+                 description="(RECOMMENDED) Most conservative sizing: Bayesian Kelly + degradation haircut "
+                             "applied to backtest metrics before Beta posterior calculation. "
+                             "Args: JSON with win_rate, avg_win_pct, avg_loss_pct, portfolio_value, "
+                             "total_trades (default 50), oos_degradation_pct (default 0.40), "
+                             "max_kelly_fraction (default 0.25), sizing_tier"),
             Tool(name="check_position_correlation", func=check_position_correlation,
                  description="Check if a proposed pair is too correlated with open positions. "
                              "Args: JSON with proposed_pair, open_positions list, max_correlation threshold"),

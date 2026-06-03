@@ -1,8 +1,8 @@
 # crypto_agent_bot
 
-Modular crypto trading bot with 5 LangGraph ReAct agents, Freqtrade backtesting, ChromaDB strategy memory, and a real-time Web UI.
+Modular crypto trading bot with 7 LangGraph ReAct agents, Freqtrade backtesting, ChromaDB strategy memory, and a real-time Web UI.
 
-**Latest updates (June 2026 — v9: Transaction Costs, Tavily Search, SQLite Storage):**
+**Latest updates (June 2026 — v10: Batch 2 + CPCV + Pre-filter + State Broker + Agent Split):**
 
 ### Core Infrastructure
 - **DeepSeek Chat API** — migrated from OpenRouter to direct DeepSeek API (`api.deepseek.com/v1`, model `deepseek-chat`)
@@ -40,11 +40,55 @@ Modular crypto trading bot with 5 LangGraph ReAct agents, Freqtrade backtesting,
 - **Blind parameter search** (`backtesting/blind_search.py`) — 5-phase protocol: LLM defines search space blind → batch backtest → aggregate stats only → directional guidance → quantitative selection. No individual variant results leak to the LLM.
 - **Out-of-sample validation** (`backtesting/oos_validator.py`) — `OOSValidator` runs on holdout data only. Results written to `oos_results.jsonl`, never to ChromaDB. Four thresholds: Sharpe≥0.8, WR≥0.42, DD≤0.15, trades≥10.
 - **Synthetic data sanity** (`backtesting/synthetic_validator.py`) — random walk checker (max Sharpe 0.3 on noise) + Monte Carlo permutation test (p<0.05 for statistical significance).
-- **Conservative Kelly sizing** (`agents/risk_manager.py`) — `PositionSizingTier` enum (VALIDATION 2% → CAUTIOUS 5% → NORMAL 10%). `kelly_position_size_conservative()` applies `BACKTEST_OPTIMISM_FACTOR=0.55` haircut and OOS degradation penalty.
+- **Conservative Kelly sizing** (`agents/risk_manager.py`) — `PositionSizingTier` enum (VALIDATION 2% → CAUTIOUS 5% → NORMAL 10%). Bayesian Kelly using Beta(2,2) posterior with 90% CI lower bound as win rate. `kelly_position_size_conservative()` applies degradation haircut + Bayesian CI lower bound.
 - **Validation mode** (`execution/validation_mode.py`) — 90-day conservative execution: 2% position cap, tight circuit breakers (-1.5% daily / -4% weekly), separate audit log. Requires Sharp≥0.6 + 50 trades for graduation.
-- **11-gate deployment pipeline** (`orchestration/deployment_pipeline.py`) — 9 automated gates + 2 manual OOS gates. Tracks strategy state from `explored` → `promising` → `validated` → `pending_oos` → `deployable`.
+- **11-gate deployment pipeline** (`orchestration/deployment_pipeline.py`) — 9 automated gates + 2 manual OOS gates. Gate 6 replaced with CPCV (combinatorial purged cross-validation). Tracks strategy state from `explored` → `promising` → `validated` → `pending_oos` → `deployable`.
 - **Performance monitoring** (`monitoring/performance_monitor.py`) — statistical significance testing (≥30 trades required), expected degradation ranges, regime mismatch detection with 3-day suspension threshold.
 - **ChromaDB contamination guard** (`memory/vector_store.py`, `agents/curator.py`) — strategies tagged with `discovered_on_window` metadata. Cross-window exclusion queries prevent data leakage between research cycles.
+
+### Regime-Conditioned Gating (`execution/signal_scanner.py`)
+- **RegimeTransitionTracker** — tracks regime changes with timestamps, 30-minute cooldown on transitions
+- **Validated regimes** — each strategy lists which regimes it was validated in; gating blocks mismatched signals
+- **Confidence gating** — low regime confidence raises signal floor from 0.6 to 0.75
+
+### 5-Level Strategy Decay (`orchestration/strategy_manager.py`)
+- HEALTHY (>=0.90), WARNING (>=0.75), DECAYING (>=0.50), CRITICAL (<0.50), RETIRED
+- **Auto-recovery** — DECAYING->WARNING after 3+ improvements; CRITICAL->DECAYING on single improvement
+- **Critical counter** — auto-retire after 5 consecutive critical evaluations
+
+### Portfolio VaR (`risk/portfolio_var.py`)
+- Variance-covariance VaR (95%/99%), historical simulation, marginal VaR per position
+- Correlation matrix with high-correlation warnings (>0.7)
+- Exposure limits: 50% total portfolio cap, 15% single position cap
+
+### Telegram Alerter (`monitoring/telegram_alerter.py`)
+- Inline approve/reject buttons on trade signals with 5-minute timeout
+- Critical alerts forwarded from anomaly detector, circuit breaker, strategy retirement
+- Event bus subscriber — automatic forwarding of anomaly_detected, circuit_breaker_halt events
+- No-op without TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID
+
+### Fast Pre-filter (`backtesting/signal_factory.py`)
+- **SignalFactory** — 11 vectorized signal functions mirroring Freqtrade templates (same TA-Lib, same params)
+- **FastMetrics** — vectorized Sharpe, win rate, max DD, trade count (<1s per strategy)
+- Runs inside BacktestEngine before Freqtrade subprocess — zero agent changes
+- Loose thresholds (Sharpe>=0.5, WR>=40%, trades>=3) — noise filter, not quality gate
+
+### CPCV Validation (`backtesting/cpcv_validator.py`)
+- **CPCVSplitter** — generates all C(n_folds, k_test) combinatorial train/test splits with purge + embargo
+- **CPCVValidator** — evaluates strategy across all combinatorial paths via SignalFactory
+- Paths with <5 trades = NaN (excluded); >30% NaN = validation fails
+- Gate 6 in deployment pipeline; walk_forward_validate preserved for research loop
+
+### State Broker (`state/state_broker.py`)
+- Key-value store with TTL expiry + pub/sub for real-time event distribution
+- In-memory by default, optional Redis backend via REDIS_URL
+- Integrated: LiveExecutor (position state), SignalScanner (signal state), Hermes (system heartbeat)
+
+### Strategist Agent Split
+- **StrategistAgent** — 4 tools: strategy design only (generate, concepts, params, research)
+- **BacktesterAgent** (new) — 7 tools: backtesting execution (run, hyperopt, WFV, blind search, compare, config, data)
+- **IterationTrackerAgent** (new) — 4 tools: strategy memory (best, history, store result, store insight)
+- 7 agents total, wired via HermesOrchestrator with keyword-based routing
 
 ### Smart Backtesting
 - **Metrics parsing** — handles multiple Freqtrade output schemas with multi-field-name fallback; debug JSON dump on each run
@@ -90,6 +134,8 @@ graph TD
     HERMES --> GRAPH[LangGraph State Graph]
     GRAPH --> ANALYST[Analyst Agent]
     GRAPH --> STRATEGIST[Strategist Agent]
+    GRAPH --> BT[Backtester Agent]
+    GRAPH --> IT[IterationTracker Agent]
     GRAPH --> CURATOR[MemoryCurator Agent]
     GRAPH --> RISK[RiskManager Agent]
     GRAPH --> RESEARCHER[Researcher Agent]
@@ -123,10 +169,16 @@ graph TD
     MEF[MultiExchangeFetcher] --> EXCH
 
     DP[DeploymentPipeline] --> ENGINE
+    DP --> CPCV[CPCVValidator]
     DP --> OOS
     DP --> SYNTH
+    ENGINE --> SF[SignalFactory Pre-filter]
     VM[ValidationMode] --> PE
     PM[PerformanceMonitor] --> RM
+    AD --> TA[TelegramAlerter]
+    PE --> SB[StateBroker]
+    SC --> SB
+    HERMES --> SB
 
     subgraph "AutoResearch Outer Loop"
         HYP[Generate Hypothesis] --> RESEARCH[Web Research]
@@ -149,12 +201,19 @@ graph TD
 | **OnChainFetcher** | `data/onchain.py` | Whale Alert + CoinGecko volume proxy (gated) |
 | **StrategyConcepts** | `data/strategy_concepts.py` | 10 structured concepts with regime mappings |
 | **AnalystAgent** | `agents/analyst.py` | Market analysis with live data tools |
-| **StrategistAgent** | `agents/strategist.py` | 13 tools: strategy gen, backtest, hyperopt, walk-forward, memory-aware |
+| **StrategistAgent** | `agents/strategist.py` | 4 tools: strategy design (generate, concepts, params, research) |
+| **BacktesterAgent** | `agents/backtester.py` | 7 tools: backtesting execution (run, hyperopt, WFV, blind search, compare, config, data) |
+| **IterationTrackerAgent** | `agents/iteration_tracker.py` | 4 tools: strategy memory (best, history, store result, store insight) |
 | **ResearcherAgent** | `agents/researcher.py` | Web search (Tavily + DDG fallback), paper reading, concept-mapped strategy specs |
 | **RiskManagerAgent** | `agents/risk_manager.py` | Risk metrics + go/no-go verdict |
 | **MemoryCuratorAgent** | `agents/curator.py` | Cross-session memory retrieval from ChromaDB |
 | **HermesOrchestrator** | `orchestration/hermes.py` | Multi-agent LangGraph orchestration + outer research loop |
 | **LangGraph Graph** | `orchestration/graph.py` | State-machine orchestration with 4 cycles |
+| **SignalFactory** | `backtesting/signal_factory.py` | 11 fast vectorized signal generators matching Freqtrade templates |
+| **CPCVValidator** | `backtesting/cpcv_validator.py` | Combinatorial Purged Cross-Validation (C(n,k) paths) |
+| **StateBroker** | `state/state_broker.py` | Shared key-value + pub/sub (in-memory or Redis) |
+| **PortfolioVaR** | `risk/portfolio_var.py` | Covariance & historical VaR (95%/99%), marginal VaR |
+| **TelegramAlerter** | `monitoring/telegram_alerter.py` | Human-in-the-loop alerts with inline approve/reject |
 | **AutoResearch** | `orchestration/auto_research.py` | Autonomous pipeline: regime → sentiment → research → backtest → converge |
 | **ExperimentTracker** | `orchestration/experiment_tracker.py` | JSONL-backed experiment store with composite scoring |
 | **ResearchIteration** | `orchestration/research.py` | Hypothesis/critique dataclass with convergence check |

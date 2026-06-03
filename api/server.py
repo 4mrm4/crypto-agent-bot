@@ -168,15 +168,13 @@ async def autonomous_start():
             from agents.risk_manager import RiskManagerAgent
             from agents.curator import CuratorAgent
             from agents.researcher import ResearcherAgent
-            from backtesting.engine import BacktestEngine
             from memory.vector_store import VectorStore
             from orchestration.autonomous_loop import AutonomousResearchLoop
             from orchestration.experiment_tracker import ExperimentTracker
             from orchestration.hermes import HermesOrchestrator
             from data.regime import MarketRegimeDetector
             from config import settings
-            engine = BacktestEngine()
-            agents = {"analyst": AnalystAgent(), "strategist": StrategistAgent(engine=engine), "risk_manager": RiskManagerAgent(), "curator": CuratorAgent(), "researcher": ResearcherAgent()}
+            agents = {"analyst": AnalystAgent(), "strategist": StrategistAgent(), "risk_manager": RiskManagerAgent(), "curator": CuratorAgent(), "researcher": ResearcherAgent()}
             orchestrator = HermesOrchestrator(agents=agents)
             vs = VectorStore(); et = ExperimentTracker(); rd = MarketRegimeDetector()
             loop = AutonomousResearchLoop(orchestrator=orchestrator, regime_detector=rd, experiment_tracker=et, vector_store=vs, interval_minutes=settings.AUTONOMOUS_INTERVAL_MINUTES, event_bus=getattr(app.state, "event_bus", None))
@@ -705,7 +703,7 @@ async def startup():
                 from config import settings
                 global _autonomous_loop_ref
                 engine = BacktestEngine()
-                agents = {"analyst": AnalystAgent(), "strategist": StrategistAgent(engine=engine), "risk_manager": RiskManagerAgent(), "curator": CuratorAgent(), "researcher": ResearcherAgent()}
+                agents = {"analyst": AnalystAgent(), "strategist": StrategistAgent(), "risk_manager": RiskManagerAgent(), "curator": CuratorAgent(), "researcher": ResearcherAgent()}
                 orchestrator = HermesOrchestrator(agents=agents)
                 vs = VectorStore(); et = ExperimentTracker(); rd = MarketRegimeDetector()
                 loop = AutonomousResearchLoop(orchestrator=orchestrator, regime_detector=rd, experiment_tracker=et, vector_store=vs, interval_minutes=settings.AUTONOMOUS_INTERVAL_MINUTES, event_bus=event_bus)

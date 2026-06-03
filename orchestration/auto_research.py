@@ -22,7 +22,6 @@ def run_auto_research(topic: str, max_rounds: int = 5, event_bus=None, loop=None
     from agents.strategist import StrategistAgent
     from agents.analyst import AnalystAgent
     from agents.curator import CuratorAgent
-    from backtesting.engine import BacktestEngine
     from data.regime import MarketRegimeDetector
     from data.sentiment import SentimentFetcher
     from data.fetcher import MarketDataFetcher
@@ -63,10 +62,9 @@ def run_auto_research(topic: str, max_rounds: int = 5, event_bus=None, loop=None
     )
 
     # 4. Build agents
-    engine = BacktestEngine()
     agents = {
         "analyst": AnalystAgent(),
-        "strategist": StrategistAgent(engine=engine),
+        "strategist": StrategistAgent(),
         "curator": CuratorAgent(),
         "researcher": ResearcherAgent(),
     }

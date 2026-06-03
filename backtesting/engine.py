@@ -2,6 +2,10 @@
 
 Generates temporary strategy files on the fly, runs backtests via the
 Freqtrade CLI, and parses results into pandas DataFrames.
+
+Includes a vectorized pre-filter (SignalFactory + FastMetrics) that runs
+before the Freqtrade subprocess to reject obviously worthless strategies
+in <1 second.
 """
 
 import ast
@@ -23,6 +27,7 @@ import pandas as pd
 
 from config import settings
 from backtesting.data_split import DATA_SPLIT
+from backtesting.signal_factory import FastMetrics, SignalFactory
 
 logger = logging.getLogger(__name__)
 
@@ -501,6 +506,55 @@ class BacktestEngine:
         self._freqtrade_cmd = self._find_freqtrade()
 
     # ------------------------------------------------------------------
+    # Pre-filter
+    # ------------------------------------------------------------------
+
+    def _run_prefilter(
+        self,
+        strategy_type: str,
+        strategy_params: dict,
+        timerange: str,
+        pairs: list,
+    ) -> Optional[dict]:
+        """Run the vectorized pre-filter. Returns None if pass-through (no filter)."""
+        if not settings.VECTORBT_PREFILTER_ENABLED:
+            return None
+        if strategy_type not in SignalFactory.supported_types():
+            logger.debug("Pre-filter: unknown type %s, passing through", strategy_type)
+            return None
+        try:
+            from data.fetcher import MarketDataFetcher
+            fetcher = MarketDataFetcher()
+            tf = strategy_params.get("timeframe", settings.TIMEFRAME)
+            pair = pairs[0] if pairs else settings.SYMBOL
+            raw = fetcher.fetch_ohlcv(pair, tf, limit=500)
+            if raw is None or (isinstance(raw, pd.DataFrame) and len(raw) < 100):
+                logger.debug("Pre-filter: insufficient data, passing through")
+                return None
+            df = raw.copy() if isinstance(raw, pd.DataFrame) else pd.DataFrame(raw)
+            signals = SignalFactory.generate(df, strategy_type, strategy_params)
+            metrics = FastMetrics.compute(df, signals)
+            if metrics.get("passed", False):
+                logger.debug(
+                    "Pre-filter passed %s: Sharpe=%.2f WR=%.1f%% trades=%d",
+                    strategy_type, metrics["sharpe_ratio"],
+                    metrics["win_rate"] * 100, metrics["total_trades"],
+                )
+                return None  # pass through to Freqtrade
+            logger.info(
+                "Pre-filter REJECTED %s: Sharpe=%.2f WR=%.1f%% trades=%d",
+                strategy_type, metrics["sharpe_ratio"],
+                metrics["win_rate"] * 100, metrics["total_trades"],
+            )
+            return {
+                "pre_filter_rejected": True,
+                **metrics,
+            }
+        except Exception as exc:
+            logger.warning("Pre-filter error (passing through): %s", exc)
+            return None
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
@@ -532,6 +586,12 @@ class BacktestEngine:
         """Generate a strategy from *params*, run a Freqtrade backtest,
         and return parsed results."""
         timerange = _sanitize_timerange(timerange)
+
+        # Fast pre-filter: reject obviously worthless strategies before Freqtrade
+        prefilter_result = self._run_prefilter(strategy_type, strategy_params or {},
+                                                timerange, pairs or [settings.SYMBOL])
+        if prefilter_result is not None:
+            return prefilter_result
 
         # HOLDOUT GUARD — never allow research backtests to touch holdout data
         if DATA_SPLIT.is_in_holdout(timerange):

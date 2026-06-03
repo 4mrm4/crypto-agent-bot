@@ -2,12 +2,14 @@
 
 import logging
 import uuid
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from orchestration.board import TaskBoard
 from orchestration.graph import build_orchestration_graph
 from orchestration.research import ResearchIteration, check_convergence
 from config import settings
+from state.state_broker import StateBroker
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +17,16 @@ logger = logging.getLogger(__name__)
 class HermesOrchestrator:
     """Multi-agent orchestrator using a Kanban board and a LangGraph loop."""
 
-    def __init__(self, agents: Dict[str, Any]):
+    def __init__(self, agents: Dict[str, Any], state_broker: Optional[StateBroker] = None):
         self._agent_capabilities: Dict[str, List[str]] = {
             "analyst": ["analysis", "market_research", "sentiment", "analyse", "market"],
-            "strategist": ["strategy", "strategies", "backtest", "backtesting", "optimization", "optimise"],
+            "strategist": ["strategy", "strategies", "generate", "concept",
+                           "parameter", "params", "design"],
+            "backtester": ["backtest", "backtesting", "walk_forward", "hyperopt",
+                           "optimization", "optimise", "compare", "benchmark",
+                           "download", "data"],
+            "iteration_tracker": ["iteration", "history", "best_strategy",
+                                  "store", "track", "record", "memory", "recall"],
             "risk_manager": ["risk", "assessment", "position_sizing"],
             "curator": ["memory", "context", "history"],
             "researcher": ["research", "web", "paper", "novel", "search", "literature"],
@@ -26,6 +34,7 @@ class HermesOrchestrator:
         self.agents = agents
         self.board = TaskBoard(agents, self._agent_capabilities)
         self._graph = build_orchestration_graph()
+        self._state_broker = state_broker
 
     # ------------------------------------------------------------------
     # Public API — outer research loop
@@ -89,6 +98,17 @@ class HermesOrchestrator:
                 metrics.get("win_rate", 0) * 100,
                 abs(metrics.get("max_drawdown", 0)) * 100,
             )
+
+            # Publish system heartbeat via StateBroker
+            if self._state_broker:
+                try:
+                    self._state_broker.set_system_status({
+                        "running": True,
+                        "mode": self.execution_mode if hasattr(self, 'execution_mode') else "research",
+                        "timestamp": datetime.utcnow().isoformat(),
+                    })
+                except Exception as exc:
+                    logger.warning("StateBroker heartbeat failed: %s", exc)
 
             # 7. Check convergence
             if verdict == "converged":
@@ -280,10 +300,10 @@ class HermesOrchestrator:
             logger.info("Stored goal results in memory.")
 
         # Persist strategist iteration history into memory
-        strategist = self.agents.get("strategist")
-        if strategist and hasattr(strategist, "_iteration_history") and strategist._iteration_history:
+        iteration_tracker = self.agents.get("iteration_tracker")
+        if iteration_tracker and hasattr(iteration_tracker, "_iteration_history") and iteration_tracker._iteration_history:
             persisted = 0
-            for rec in strategist._iteration_history:
+            for rec in iteration_tracker._iteration_history:
                 rec_dict = rec.to_dict()
                 text = (
                     f"Strategy {rec_dict['verdict'].upper()}: "
@@ -464,12 +484,12 @@ class HermesOrchestrator:
         if metrics["total_trades"]:
             return metrics
 
-        # Search task results for the strategist's backtest output dict
-        strategist = self.agents.get("strategist")
-        if strategist and hasattr(strategist, "_iteration_history") and strategist._iteration_history:
+        # Search task results for the iteration tracker's backtest output dict
+        iteration_tracker = self.agents.get("iteration_tracker")
+        if iteration_tracker and hasattr(iteration_tracker, "_iteration_history") and iteration_tracker._iteration_history:
             # Take the best Sharpe from iteration history
             best = max(
-                strategist._iteration_history,
+                iteration_tracker._iteration_history,
                 key=lambda r: r.metrics.get("sharpe_ratio", -999) if isinstance(r.metrics.get("sharpe_ratio"), (int, float)) else -999
             )
             return {

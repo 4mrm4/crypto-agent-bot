@@ -19,6 +19,7 @@ from execution.audit_log import AuditLog, AuditEntry
 from execution.paper_trader import PaperTrader
 from execution.trade_signal import TradeSignal
 from execution.validation_mode import ValidationMode
+from state.state_broker import StateBroker
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ class LiveExecutor:
         fetcher: Optional[MarketDataFetcher] = None,
         risk_manager: Optional[RiskManagerAgent] = None,
         event_bus=None,
+        state_broker: Optional[StateBroker] = None,
     ):
         self.exchange_id = exchange_id
         self.paper_mode = paper_mode
@@ -76,6 +78,7 @@ class LiveExecutor:
         self._fetcher = fetcher or MarketDataFetcher(exchange_id)
         self._risk_manager = risk_manager or RiskManagerAgent(fetcher=self._fetcher)
         self._event_bus = event_bus
+        self._state_broker = state_broker
         self._audit_log = AuditLog()
         self._paper_trader = PaperTrader(fetcher=self._fetcher) if paper_mode else None
         self._exchange: Optional[ccxt.Exchange] = None
@@ -170,6 +173,16 @@ class LiveExecutor:
                     "entry_time": datetime.utcnow().isoformat(),
                     "signal_id": signal.signal_id,
                 }
+
+            # 5b. Publish position state to StateBroker
+            if fill_result.success and self._state_broker:
+                await self._state_broker.set_position(signal.pair, {
+                    "side": signal.side,
+                    "size": signal.position_size_usdt,
+                    "entry_price": fill_result.fill_price,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "status": "open",
+                })
 
             # 6. Emit to UI
             await self._emit("trade_executed", {
@@ -354,6 +367,15 @@ class LiveExecutor:
                             "reason": "stop_loss",
                             "pnl_pct": round(pnl_pct * 100, 2),
                         })
+                        if self._state_broker:
+                            await self._state_broker.set_position(pair, {
+                                "side": pos.get("side", "unknown"),
+                                "size": 0,
+                                "exit_price": current_price,
+                                "pnl": round(pnl_pct * 100, 2),
+                                "timestamp": datetime.utcnow().isoformat(),
+                                "status": "closed",
+                            })
 
                 except Exception as exc:
                     logger.debug("Position monitoring error for %s: %s", pair, exc)

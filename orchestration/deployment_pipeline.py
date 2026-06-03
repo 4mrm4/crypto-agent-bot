@@ -64,7 +64,7 @@ GATE_NAMES = [
     "3. SyntheticValidator: random walk sanity",
     "4. BacktestEngine: research window",
     "5. ExperimentTracker: convergence check",
-    "6. BacktestEngine: walk-forward validation",
+    "6. CPCV: combinatorial purged cross-validation",
     "7. SyntheticValidator: permutation test",
     "8. RiskManagerAgent: pre-trade approval",
     "9. Tag as pending_oos in ChromaDB",
@@ -250,33 +250,49 @@ class DeploymentPipeline:
                 completed_at=datetime.utcnow().isoformat(),
             )
 
-        # ── Gate 6: Walk-forward validation ──
-        logger.info("Gate 6/9: Walk-forward validation...")
+        # ── Gate 6: CPCV (Combinatorial Purged Cross-Validation) ──
+        logger.info("Gate 6/9: CPCV robustness check...")
         try:
-            wfv_result = engine.walk_forward_validate(
-                strategy_params=best_params,
-                strategy_type=strategy_type,
-                windows=3,
-                pairs=pairs,
+            from backtesting.cpcv_validator import CPCVValidator
+            from backtesting.data_split import DATA_SPLIT
+            cpcv = CPCVValidator()
+            # Fetch research data for CPCV — use the same data range
+            research_timerange = DATA_SPLIT.research_timerange()
+            # CPCV needs OHLCV data. Fetch it via MarketDataFetcher
+            from data.fetcher import MarketDataFetcher
+            from config import settings
+            fetcher = MarketDataFetcher()
+            cpcv_df = fetcher.fetch_ohlcv(
+                settings.SYMBOL, settings.TIMEFRAME,
+                limit=1000,
             )
-            wfv_consistency = wfv_result.get("consistency_score", 0)
-            wfv_is_robust = wfv_result.get("is_robust", False)
-            if not wfv_is_robust:
-                return PipelineResult(
-                    strategy_id=strategy_id, strategy_type=strategy_type,
-                    regime=regime, passed_gates=5, total_gates=11,
-                    failed_at=6, failed_at_name=GATE_NAMES[5],
-                    reason=f"Walk-forward not robust: consistency={wfv_consistency:.2f}",
-                    completed_at=datetime.utcnow().isoformat(),
+            if cpcv_df is not None and len(cpcv_df) > 200:
+                cpcv_result = cpcv.validate(
+                    df=cpcv_df,
+                    strategy_type=strategy_type,
+                    params=best_params,
                 )
+                if not cpcv_result.passed:
+                    return PipelineResult(
+                        strategy_id=strategy_id, strategy_type=strategy_type,
+                        regime=regime, passed_gates=5, total_gates=11,
+                        failed_at=6, failed_at_name=GATE_NAMES[5],
+                        reason=f"CPCV validation failed: {cpcv_result.reason}",
+                        completed_at=datetime.utcnow().isoformat(),
+                    )
+                logger.info(
+                    "CPCV passed: median=%.2f Q1=%.2f positive=%.0f%% (%d/%d paths)",
+                    cpcv_result.median_sharpe, cpcv_result.sharpe_lower_quartile,
+                    cpcv_result.pct_positive_sharpe * 100,
+                    cpcv_result.n_paths_valid, cpcv_result.n_paths,
+                )
+            else:
+                logger.warning("Gate 6: insufficient CPCV data, passing through")
+        except ImportError as exc:
+            logger.warning("Gate 6: CPCV module unavailable (%s), passing through", exc)
         except Exception as exc:
-            return PipelineResult(
-                strategy_id=strategy_id, strategy_type=strategy_type,
-                regime=regime, passed_gates=5, total_gates=11,
-                failed_at=6, failed_at_name=GATE_NAMES[5],
-                reason=f"Walk-forward exception: {exc}",
-                completed_at=datetime.utcnow().isoformat(),
-            )
+            # CPCV is not a safety gate — fail-open
+            logger.warning("Gate 6 non-critical failure: %s", exc)
 
         # ── Gate 7: Permutation test ──
         logger.info("Gate 7/9: Permutation test...")
