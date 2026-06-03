@@ -20,7 +20,7 @@ from data.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
-MESSARI_BASE = "https://api.messari.io"
+MESSARI_BASE = "https://messari.io/api/v2"
 
 
 @dataclass
@@ -115,7 +115,7 @@ class MessariFetcher:
         """Fetch current metrics for an asset slug (e.g. 'bitcoin', 'ethereum')."""
         cache_key = f"messari:metrics:{slug}"
         data = await self._get(
-            f"/api/v2/assets/{slug}/metrics",
+            f"/assets/{slug}/metrics",
             cache_key=cache_key,
             ttl=settings.MESSARI_CACHE_METRICS_TTL,
         )
@@ -155,7 +155,7 @@ class MessariFetcher:
         """Fetch qualitative project profile."""
         cache_key = f"messari:profile:{slug}"
         data = await self._get(
-            f"/api/v1/assets/{slug}/profile",
+            f"/assets/{slug}/profile",
             cache_key=cache_key,
             ttl=settings.MESSARI_CACHE_PROFILE_TTL,
         )
@@ -167,7 +167,7 @@ class MessariFetcher:
         """Fetch AI-analysed trending topics."""
         cache_key = f"messari:trending:{limit}"
         data = await self._get(
-            f"/api/v1/news/topics?limit={limit}",
+            f"/news/topics?limit={limit}",
             cache_key=cache_key,
             ttl=1800,
         )

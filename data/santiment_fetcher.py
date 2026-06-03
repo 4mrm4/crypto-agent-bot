@@ -43,9 +43,8 @@ query($slug: String!, $metric: String!, $from: DateTime!, $to: DateTime!) {
       from: $from
       to: $to
       interval: "1d"
-      limit: 1
-      transform: {type: "last", value: "1d"}
     ) {
+      datetime
       value
     }
   }
@@ -128,10 +127,16 @@ class SantimentFetcher:
     async def _fetch_metric_value(
         self, slug: str, metric: str, days: int = 7,
     ) -> Optional[float]:
-        """Fetch the latest value for a single metric."""
+        """Fetch the latest value for a single metric.
+
+        Free tier has ~30 day data lag. Caps `to` at 35 days ago to stay
+        within the allowed interval.
+        """
         now = datetime.utcnow()
-        from_dt = (now - timedelta(days=days)).isoformat() + "Z"
-        to_dt = now.isoformat() + "Z"
+        # Free tier only has data up to ~30 days ago — cap to stay in allowed range
+        capped_to = now - timedelta(days=30)
+        from_dt = (capped_to - timedelta(days=days)).isoformat() + "Z"
+        to_dt = capped_to.isoformat() + "Z"
 
         cache_key = f"santiment:{slug}:{metric}:{days}"
         cached = self._cache.get_cached(cache_key)
@@ -170,9 +175,9 @@ class SantimentFetcher:
         """
         try:
             social_vol = await self._fetch_metric_value(slug, "social_volume_total", days)
-            sentiment = await self._fetch_metric_value(slug, "sentiment_balance", days)
+            sentiment = await self._fetch_metric_value(slug, "sentiment_balance_total", days)
             dev_activity = await self._fetch_metric_value(slug, "dev_activity", days)
-            dominance = await self._fetch_metric_value(slug, "social_dominance", days)
+            dominance = await self._fetch_metric_value(slug, "social_dominance_total", days)
             addresses = await self._fetch_metric_value(slug, "daily_active_addresses", days)
 
             if not any([social_vol, sentiment, dev_activity, dominance, addresses]):
