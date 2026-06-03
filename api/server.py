@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from api.event_bus import EventBus
+from data.api_health import APIHealthTracker
 from memory.vector_store import VectorStore
 from orchestration.factory import make_orchestrator
 
@@ -36,6 +37,7 @@ _startup_tasks: Dict[str, Dict[str, Any]] = {
     "anomaly_detector": {"status": "not_started", "error": None},
 }
 _autonomous_loop_ref = None
+_health_tracker = APIHealthTracker()
 
 AUTONOMOUS_STATE_PATH = Path("./workspace/autonomous_state.json")
 
@@ -73,6 +75,29 @@ class RunResponse(BaseModel):
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+
+
+@app.get("/api/data/health")
+async def get_api_health():
+    """Return health status for all external API sources."""
+    all_health = _health_tracker.get_all_health()
+    if not all_health:
+        return {"message": "No external API sources tracked yet", "sources": {}}
+    return {
+        name: {
+            "source": h.source,
+            "last_success": h.last_success.isoformat() if h.last_success else None,
+            "last_failure": h.last_failure.isoformat() if h.last_failure else None,
+            "consecutive_failures": h.consecutive_failures,
+            "is_healthy": h.is_healthy,
+        }
+        for name, h in all_health.items()
+    }
+
+
+def get_health_tracker() -> APIHealthTracker:
+    """Return the global health tracker instance for use by integration modules."""
+    return _health_tracker
 
 
 @app.get("/")
@@ -163,19 +188,17 @@ async def autonomous_start():
         global _autonomous_loop_ref
         try:
             logger.info("Building autonomous loop...")
-            from agents.analyst import AnalystAgent
-            from agents.strategist import StrategistAgent
-            from agents.risk_manager import RiskManagerAgent
-            from agents.curator import CuratorAgent
-            from agents.researcher import ResearcherAgent
+            from orchestration.factory import make_orchestrator
+            from api.event_bus import monkey_patch_hermes
             from memory.vector_store import VectorStore
             from orchestration.autonomous_loop import AutonomousResearchLoop
             from orchestration.experiment_tracker import ExperimentTracker
-            from orchestration.hermes import HermesOrchestrator
             from data.regime import MarketRegimeDetector
             from config import settings
-            agents = {"analyst": AnalystAgent(), "strategist": StrategistAgent(), "risk_manager": RiskManagerAgent(), "curator": CuratorAgent(), "researcher": ResearcherAgent()}
-            orchestrator = HermesOrchestrator(agents=agents)
+            orchestrator = make_orchestrator()
+            event_bus = getattr(app.state, "event_bus", None)
+            if event_bus:
+                monkey_patch_hermes(orchestrator, event_bus)
             vs = VectorStore(); et = ExperimentTracker(); rd = MarketRegimeDetector()
             loop = AutonomousResearchLoop(orchestrator=orchestrator, regime_detector=rd, experiment_tracker=et, vector_store=vs, interval_minutes=settings.AUTONOMOUS_INTERVAL_MINUTES, event_bus=getattr(app.state, "event_bus", None))
             _autonomous_loop_ref = loop
@@ -698,13 +721,14 @@ async def startup():
                 from memory.vector_store import VectorStore
                 from orchestration.autonomous_loop import AutonomousResearchLoop
                 from orchestration.experiment_tracker import ExperimentTracker
-                from orchestration.hermes import HermesOrchestrator
+                from orchestration.factory import make_orchestrator
+                from api.event_bus import monkey_patch_hermes
                 from data.regime import MarketRegimeDetector
                 from config import settings
                 global _autonomous_loop_ref
-                engine = BacktestEngine()
-                agents = {"analyst": AnalystAgent(), "strategist": StrategistAgent(), "risk_manager": RiskManagerAgent(), "curator": CuratorAgent(), "researcher": ResearcherAgent()}
-                orchestrator = HermesOrchestrator(agents=agents)
+                orchestrator = make_orchestrator()
+                if event_bus:
+                    monkey_patch_hermes(orchestrator, event_bus)
                 vs = VectorStore(); et = ExperimentTracker(); rd = MarketRegimeDetector()
                 loop = AutonomousResearchLoop(orchestrator=orchestrator, regime_detector=rd, experiment_tracker=et, vector_store=vs, interval_minutes=settings.AUTONOMOUS_INTERVAL_MINUTES, event_bus=event_bus)
                 _autonomous_loop_ref = loop

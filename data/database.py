@@ -15,6 +15,7 @@ import json
 import logging
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -38,9 +39,10 @@ class TradingDatabase:
     _lock = threading.Lock()
 
     def __init__(self, db_path: Optional[Path] = None, legacy_backup: bool = True):
-        self.db_path = db_path or DB_PATH
+        self.db_path = Path(db_path) if isinstance(db_path, str) else (db_path or DB_PATH)
         self.legacy_backup = legacy_backup
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        if str(self.db_path) != ":memory:":
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
 
     # ── Schema ──
@@ -134,6 +136,17 @@ class TradingDatabase:
     );
     """
 
+    SCHEMA_API_CACHE = """
+    CREATE TABLE IF NOT EXISTS api_cache (
+        cache_key TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        source TEXT NOT NULL,
+        cached_at INTEGER NOT NULL,
+        ttl_seconds INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_api_cache_source ON api_cache(source, cached_at);
+    """
+
     def _init_schema(self):
         """Create all tables and indexes if they don't exist."""
         with self._connect() as conn:
@@ -141,6 +154,7 @@ class TradingDatabase:
             conn.execute("PRAGMA foreign_keys=ON")
             for schema in [
                 self.SCHEMA_MIGRATIONS,
+                self.SCHEMA_API_CACHE,
                 self.SCHEMA_TRADES,
                 self.SCHEMA_EXPERIMENTS,
                 self.SCHEMA_OOS_RESULTS,
@@ -615,3 +629,34 @@ class TradingDatabase:
         with self.transaction() as conn:
             for table in ["trades", "experiments", "oos_results", "pipeline_results", "validation_trades", "_migrations"]:
                 conn.execute(f"DELETE FROM {table}")
+
+    # ── API Cache ──
+
+    def get_cached(self, cache_key: str) -> Optional[dict]:
+        """Return cached data dict, or None if missing/expired."""
+        with self.transaction() as conn:
+            row = conn.execute(
+                "SELECT data, cached_at, ttl_seconds FROM api_cache WHERE cache_key = ?",
+                (cache_key,),
+            ).fetchone()
+        if not row:
+            return None
+        if time.time() - row["cached_at"] > row["ttl_seconds"]:
+            with self.transaction() as conn:
+                conn.execute(
+                    "DELETE FROM api_cache WHERE cache_key = ?", (cache_key,)
+                )
+            return None
+        return json.loads(row["data"])
+
+    def set_cached(
+        self, cache_key: str, data: dict, source: str, ttl_seconds: int
+    ):
+        """Insert or replace a cached entry."""
+        with self.transaction() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO api_cache
+                   (cache_key, data, source, cached_at, ttl_seconds)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (cache_key, json.dumps(data), source, int(time.time()), ttl_seconds),
+            )
