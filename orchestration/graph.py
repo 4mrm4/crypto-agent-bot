@@ -258,16 +258,34 @@ def _pick_agent(description: str, capabilities: Dict[str, List[str]]) -> str:
 
 
 def _extract_child_tasks(parent: "Task", board: TaskBoard):
-    """Extract follow-up tasks from agent output marked with 'next: '."""
-    if parent.result and "next: " in str(parent.result):
-        lines = str(parent.result).split("\n")
-        for line in lines:
-            if line.strip().startswith("next: "):
-                desc = line.strip().replace("next: ", "")
-                board.add_task(description=desc, parent_id=parent.id, metadata={"auto": True})
+    """Extract follow-up tasks from agent output.
+    Looks for explicit 'next: ' lines, then falls back to detecting
+    strategy_type= references anywhere in the output."""
+    result_text = str(parent.result) if parent.result else ""
+    found_any = False
+    for line in result_text.split("\n"):
+        if line.strip().startswith("next: "):
+            desc = line.strip().replace("next: ", "")
+            board.add_task(description=desc, parent_id=parent.id, metadata={"auto": True})
+            found_any = True
+    if not found_any and "strategy_type=" in result_text:
+        m = re.search(r'strategy_type[=:]\s*(\w+)', result_text)
+        if m:
+            board.add_task(description="backtest strategy_type=" + m.group(1),
+                           parent_id=parent.id, metadata={"auto": True})
+            found_any = True
+    if not found_any and getattr(parent, "assigned_to", None) == "strategist" and parent.result:
+        lowered = result_text.lower()
+        for kw in ["multi_timeframe", "sma_crossover", "macd_crossover", "rsi_oversold",
+                    "bollinger_bands", "combined_sma_rsi", "momentum", "breakout",
+                    "mean_reversion", "volatility_squeeze", "sentiment_driven"]:
+            if kw in lowered:
+                board.add_task(description="backtest strategy_type=" + kw,
+                               parent_id=parent.id, metadata={"auto": True})
+                break
 
 
-# ── Graph builder ──
+
 
 def build_orchestration_graph() -> StateGraph:
     """Build and compile the LangGraph state graph."""
