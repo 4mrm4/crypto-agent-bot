@@ -243,16 +243,18 @@ def finalize(state: OrchestratorState) -> Dict[str, Any]:
 # ── Helper functions ──
 
 def _pick_agent(description: str, capabilities: Dict[str, List[str]]) -> str:
-    """Score each agent by how many of their keywords appear in the description."""
-    desc_lower = description.lower()
+    """Score each agent by how many of their keywords appear in the description.
+    Splits description into words so 'strategy' in 'strategy_type' is not a match."""
+    words = set(description.lower().split())
     best_agent = "analyst"
     best_score = 0
     for agent_name, keywords in capabilities.items():
-        score = sum(1 for kw in keywords if kw in desc_lower)
+        score = sum(1 for kw in keywords if kw in words)
         if score > best_score:
             best_score = score
             best_agent = agent_name
     return best_agent
+
 
 
 def _extract_child_tasks(parent: "Task", board: TaskBoard):

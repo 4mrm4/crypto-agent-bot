@@ -64,8 +64,15 @@ freqtrade_type and suggested_params as your starting point.
 
 IMPORTANT: Use ONLY plain ASCII text. No emoji, no Unicode symbols, no special characters.
 
-Use next: backtest [strategy_id] with BacktesterAgent to execute backtests
-Use next: record this result with IterationTrackerAgent to save outcomes
+At the END of your response, ALWAYS output a line in EXACTLY this format:
+next: backtest strategy_type=STRATEGY_TYPE params={"key": "value"}
+
+Replace STRATEGY_TYPE and params with the actual strategy you generated.
+Example:
+next: backtest strategy_type=sma_crossover params={"fast_ma": 10, "slow_ma": 30}
+
+The 'next: ' prefix is how the system creates follow-up tasks.
+If you do not output this line, the strategy will never be backtested.
 """
 
 # Minimum acceptable metrics — any result below these is flagged.

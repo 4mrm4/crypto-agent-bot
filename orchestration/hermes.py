@@ -21,10 +21,10 @@ class HermesOrchestrator:
         self._agent_capabilities: Dict[str, List[str]] = {
             "analyst": ["analysis", "market_research", "sentiment", "analyse", "market"],
             "strategist": ["strategy", "strategies", "generate", "concept",
-                           "parameter", "params", "design"],
+                           "design"],
             "backtester": ["backtest", "backtesting", "walk_forward", "hyperopt",
                            "optimization", "optimise", "compare", "benchmark",
-                           "download", "data"],
+                           "download", "data", "run_backtest", "run"],
             "iteration_tracker": ["iteration", "history", "best_strategy",
                                   "store", "track", "record", "memory", "recall"],
             "risk_manager": ["risk", "assessment", "position_sizing"],
@@ -242,7 +242,7 @@ class HermesOrchestrator:
         self.board.add_task(f"Analyse market conditions for: {enriched_goal}", assigned_to="analyst")
 
         # Strategist task includes research specs if available
-        strategist_task_desc = f"Generate and backtest strategies for: {enriched_goal}"
+        strategist_task_desc = f"Generate strategies for: {enriched_goal}"
         if research_specs:
             import json
             specs_text = json.dumps(research_specs, indent=2)[:800]
