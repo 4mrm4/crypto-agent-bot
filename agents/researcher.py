@@ -23,9 +23,11 @@ When generating strategy specs, output valid pandas/ta-lib Python expressions th
 - entry_condition: a pandas boolean expression (e.g. "(dataframe['ema_fast'] > dataframe['ema_slow'])")
 - exit_condition: a pandas boolean expression (e.g. "(dataframe['ema_fast'] < dataframe['ema_slow'])")
 
-Workflow:
-  web_search -> extract_ideas -> read_paper (if URLs found) -> generate_custom_strategy_spec
-  web_search -> if no papers, use generate_custom_strategy_spec directly from search findings
+Workflow (limit to 1-2 cycles):
+  1. web_search(1-2 queries max)
+  2. read_paper(best 1-2 results from search)
+  3. generate_custom_strategy_spec(produce exactly 1 spec)
+  Then output your final answer — do NOT search again after generating a spec.
 """
 
 

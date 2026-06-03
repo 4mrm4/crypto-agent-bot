@@ -62,7 +62,10 @@ class BaseAgent:
     def run(self, input_text: str) -> Dict[str, Any]:
         """Invoke the agent and return the structured result."""
         logger.info("[%s] Running with input: %.120s", self.name, input_text)
-        result = self._agent.invoke({"messages": [("user", input_text)]})
+        result = self._agent.invoke(
+            {"messages": [("user", input_text)]},
+            config={"recursion_limit": 50},
+        )
         raw_content = result.get("messages", [])[-1].content if result.get("messages") else ""
         # Handle content blocks (LangChain list format) or plain string
         if isinstance(raw_content, list):

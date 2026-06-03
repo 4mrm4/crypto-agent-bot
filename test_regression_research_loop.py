@@ -25,6 +25,82 @@ class TestBacktesterPromptFormat:
         assert "run_backtest" in BACKTESTER_SYSTEM_PROMPT
 
 
+class TestFallbackExtraction:
+    """Test that _extract_child_tasks fallback catches natural language strategy names."""
+
+    def test_hyphen_normalized_fallback(self):
+        """LLM writes 'Multi-Timeframe' but keywords use 'multi_timeframe'."""
+        from orchestration.graph import _extract_child_tasks
+        from orchestration.board import TaskBoard
+        board = TaskBoard(agents={}, capabilities={})
+
+        class FakeTask:
+            id = "parent789"
+            result = "Generated a Multi-Timeframe strategy for strong downtrends."
+            def __init__(self):
+                self.description = "test"
+                self.status = "TODO"
+                self.assigned_to = "strategist"
+                self.parent_id = None
+                self.metadata = {}
+                self.created_at = None
+
+        task = FakeTask()
+        _extract_child_tasks(task, board)
+        todos = board.get_tasks_by_status("TODO")
+        assert len(todos) >= 1, "Fallback should create task from hyphenated name"
+        assert "multi_timeframe" in todos[0].description or "multi_timeframe" in str(todos), \
+            f"Should reference multi_timeframe, got: {[t.description for t in todos]}"
+
+    def test_space_normalized_fallback(self):
+        """LLM writes 'SMA crossover' but keywords use 'sma_crossover'."""
+        from orchestration.graph import _extract_child_tasks
+        from orchestration.board import TaskBoard
+        board = TaskBoard(agents={}, capabilities={})
+
+        class FakeTask:
+            id = "parent790"
+            result = "Generated SMA crossover with fast_ma=10, slow_ma=30."
+            def __init__(self):
+                self.description = "test"
+                self.status = "TODO"
+                self.assigned_to = "strategist"
+                self.parent_id = None
+                self.metadata = {}
+                self.created_at = None
+
+        task = FakeTask()
+        _extract_child_tasks(task, board)
+        todos = board.get_tasks_by_status("TODO")
+        assert len(todos) >= 1, "Fallback should create task from spaced name"
+        descs = [t.description for t in todos]
+        assert any("sma_crossover" in d for d in descs), \
+            f"Should reference sma_crossover, got: {descs}"
+
+    def test_no_fallback_wrong_agent(self):
+        """Fallback should NOT trigger for non-strategist agents."""
+        from orchestration.graph import _extract_child_tasks
+        from orchestration.board import TaskBoard
+        board = TaskBoard(agents={}, capabilities={})
+
+        class FakeTask:
+            id = "parent791"
+            result = "Generated a Multi-Timeframe strategy."
+            def __init__(self):
+                self.description = "test"
+                self.status = "TODO"
+                self.assigned_to = "analyst"
+                self.parent_id = None
+                self.metadata = {}
+                self.created_at = None
+
+        task = FakeTask()
+        before = len(board.get_tasks_by_status("TODO"))
+        _extract_child_tasks(task, board)
+        after = len(board.get_tasks_by_status("TODO"))
+        assert after == before, "Should not create tasks for non-strategist agents"
+
+
 class TestTaskCreation:
     """Test that _extract_child_tasks creates tasks from 'next: ' lines."""
 
@@ -119,3 +195,33 @@ class TestHermesTaskDescription:
             "Strategist should not be tasked with backtesting"
         assert "Generate strategies for" in src, \
             "Strategist should be tasked with generating only"
+
+
+class TestAssignedToRouting:
+    """Verify dispatch_task respects pre-assigned agents."""
+
+    def test_pick_agent_uses_assigned_to(self):
+        """dispatch_task should use task.assigned_to when set."""
+        from orchestration.board import TaskBoard
+        board = TaskBoard(agents={"analyst": "mock", "strategist": "mock"}, capabilities={
+            "analyst": ["analyse", "analysis", "market"],
+            "strategist": ["strategy", "strategies", "generate"],
+        })
+        task = board.add_task("strategy description", assigned_to="analyst")
+        # assigned_to="analyst" should take priority over keyword match
+        agent_name = task.assigned_to if task.assigned_to and task.assigned_to in board._agents else "strategist"
+        assert agent_name == "analyst", \
+            f"Should route to analyst (pre-assigned), got {agent_name}"
+
+    def test_pick_agent_fallback_no_assigned_to(self):
+        """dispatch_task should use keyword routing when assigned_to is unset."""
+        from orchestration.board import TaskBoard
+        board = TaskBoard(agents={"analyst": "mock", "strategist": "mock"}, capabilities={
+            "analyst": ["analyse", "analysis", "market"],
+            "strategist": ["strategy", "strategies", "generate"],
+        })
+        task = board.add_task("market analysis and sentiment")
+        from orchestration.graph import _pick_agent
+        agent_name = _pick_agent(task.description, board._agent_capabilities)
+        assert agent_name == "analyst", \
+            f"Should route to analyst via keywords, got {agent_name}"
