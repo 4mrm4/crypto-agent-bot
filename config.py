@@ -99,5 +99,11 @@ class Settings:
     SANTIMENT_CACHE_TTL: int = int(os.getenv("SANTIMENT_CACHE_TTL", "1800"))  # 30 min
     SANTIMENT_SLUGS: str = os.getenv("SANTIMENT_SLUGS", "bitcoin,ethereum,solana")
 
+    # CoinCap v3 API (backup price feed)
+    COINCAP_API_KEY: str = os.getenv("COINCAP_API_KEY", "")
+    COINCAP_ENABLED: bool = os.getenv("COINCAP_ENABLED", "false").lower() == "true"
+    COINCAP_FALLBACK_ONLY: bool = os.getenv("COINCAP_FALLBACK_ONLY", "true").lower() == "true"
+    COINCAP_POLL_INTERVAL_SECONDS: int = int(os.getenv("COINCAP_POLL_INTERVAL_SECONDS", "10"))
+
 
 settings = Settings()
