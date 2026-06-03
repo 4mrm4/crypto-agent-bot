@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 
 import pandas as pd
 import talib
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +35,54 @@ class RegimeSnapshot:
     adx: float                          # ADX value
     atr_pct: float                      # ATR as % of price
     sma200_distance: float              # % above/below SMA200
+    social_dominance_zscore: float = 0.0  # Santiment social dominance z-score
     recommended_strategies: List[str] = field(default_factory=list)
     discouraged_strategies: List[str] = field(default_factory=list)
     timestamp: datetime = field(default_factory=datetime.utcnow)
 
 
 class MarketRegimeDetector:
+
+    def __init__(self):
+        # Rolling history of social dominance values for z-score computation
+        self._dominance_history: List[float] = []
+
+    # ── Social signal (Santiment integration) ──
+
+    def _compute_dominance_zscore(self, current_dominance: float) -> Optional[float]:
+        """Compute z-score of current social dominance vs rolling history."""
+        if len(self._dominance_history) < 2:
+            return None
+        import statistics
+        mean = statistics.mean(self._dominance_history)
+        std = statistics.stdev(self._dominance_history)
+        if std == 0:
+            return 0.0
+        return (current_dominance - mean) / std
+
+    def _get_social_signal(self, slug: str = "bitcoin") -> Optional[float]:
+        """Fetch Santiment social dominance and return its z-score.
+
+        Returns None if Santiment is disabled or data unavailable.
+        """
+        if not getattr(settings, "SANTIMENT_ENABLED", False):
+            return None
+        try:
+            from data.santiment_fetcher import SantimentFetcher
+            import asyncio
+            fetcher = SantimentFetcher()
+            signal = asyncio.run(fetcher.get_signal(slug))
+            if signal is None or signal.social_dominance_pct is None:
+                return None
+            # Record in history and compute z-score
+            self._dominance_history.append(signal.social_dominance_pct)
+            # Keep history bounded
+            if len(self._dominance_history) > 50:
+                self._dominance_history = self._dominance_history[-50:]
+            return self._compute_dominance_zscore(signal.social_dominance_pct)
+        except Exception as exc:
+            logger.warning("Social signal fetch failed: %s", exc)
+            return None
 
     def classify_regime(self, df: pd.DataFrame) -> str:
         """
