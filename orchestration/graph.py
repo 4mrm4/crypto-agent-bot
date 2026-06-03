@@ -5,6 +5,7 @@ import threading
 from typing import Any, Dict, List, Literal, Optional, TypedDict
 
 from langgraph.graph import END, StateGraph
+import re
 
 from orchestration.board import TaskBoard
 
@@ -276,10 +277,12 @@ def _extract_child_tasks(parent: "Task", board: TaskBoard):
             found_any = True
     if not found_any and getattr(parent, "assigned_to", None) == "strategist" and parent.result:
         lowered = result_text.lower()
+        # Normalize hyphens and spaces to underscores for matching
+        normalized = lowered.replace("-", "_").replace(" ", "_")
         for kw in ["multi_timeframe", "sma_crossover", "macd_crossover", "rsi_oversold",
                     "bollinger_bands", "combined_sma_rsi", "momentum", "breakout",
                     "mean_reversion", "volatility_squeeze", "sentiment_driven"]:
-            if kw in lowered:
+            if kw in lowered or kw in normalized:
                 board.add_task(description="backtest strategy_type=" + kw,
                                parent_id=parent.id, metadata={"auto": True})
                 break
