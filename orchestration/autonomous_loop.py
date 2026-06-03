@@ -67,6 +67,7 @@ class AutonomousResearchLoop:
         # Lazy imports (avoid circular deps at module level)
         self._sentiment_fetcher = None
         self._fetcher = None
+        self._santiment_fetcher = None
 
         self._shutdown = False
         self.state = AutonomousLoopState()
@@ -236,6 +237,28 @@ class AutonomousResearchLoop:
                 triggered_by="coverage_gap",
             )
 
+        # 1b. Check Santiment trending assets and boost priority if trending
+        try:
+            trending = await self._check_trending_assets()
+            if trending:
+                trending_slugs = ", ".join(trending[:3])
+                logger.info(
+                    "Trending assets: %s — boosting research priority",
+                    trending_slugs,
+                )
+                return ResearchGoal(
+                    regime=current_regime,
+                    strategy_type_hint="momentum",
+                    motivation=(
+                        f"Trending asset research: {trending_slugs} surging on social. "
+                        f"Researching momentum strategies for {current_regime}."
+                    ),
+                    priority_score=0.85,
+                    triggered_by="trending_assets",
+                )
+        except Exception as exc:
+            logger.debug("Trending assets check skipped: %s", exc)
+
         # 2. Check for decaying strategies
         decay_report = await self._detect_strategy_decay()
         if decay_report:
@@ -278,6 +301,21 @@ class AutonomousResearchLoop:
             priority_score=0.3,
             triggered_by="exploration",
         )
+
+    async def _check_trending_assets(self) -> List[str]:
+        """Fetch Santiment trending asset slugs. Returns empty list if disabled/unavailable."""
+        from config import settings
+        if not getattr(settings, "SANTIMENT_ENABLED", False):
+            return []
+        if self._santiment_fetcher is None:
+            from data.santiment_fetcher import SantimentFetcher
+            self._santiment_fetcher = SantimentFetcher()
+        try:
+            trending = await self._santiment_fetcher.get_trending_assets()
+            return trending or []
+        except Exception as exc:
+            logger.debug("Santiment trending fetch failed: %s", exc)
+            return []
 
     async def _detect_strategy_decay(self) -> List[Dict[str, Any]]:
         """
@@ -387,7 +425,7 @@ class AutonomousResearchLoop:
             lambda: self._orchestrator.run_research_loop(
                 goal=goal_text,
                 max_iterations=3,
-                max_cycles=4,
+                max_cycles=6,
             ),
         )
 
