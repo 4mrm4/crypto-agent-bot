@@ -86,5 +86,18 @@ class Settings:
     # Redis (optional — StateBroker uses in-memory by default)
     REDIS_URL: str = os.getenv("REDIS_URL", "")
 
+    # Messari API (fundamentals + on-chain metrics)
+    MESSARI_API_KEY: str = os.getenv("MESSARI_API_KEY", "")
+    MESSARI_ENABLED: bool = os.getenv("MESSARI_ENABLED", "false").lower() == "true"
+    MESSARI_RATE_LIMIT_RPM: int = int(os.getenv("MESSARI_RATE_LIMIT_RPM", "20"))
+    MESSARI_CACHE_METRICS_TTL: int = int(os.getenv("MESSARI_CACHE_METRICS_TTL", "900"))  # 15min
+    MESSARI_CACHE_PROFILE_TTL: int = int(os.getenv("MESSARI_CACHE_PROFILE_TTL", "86400"))  # 24h
+
+    # Santiment API (social volume + developer activity)
+    SANTIMENT_API_KEY: str = os.getenv("SANTIMENT_API_KEY", "")
+    SANTIMENT_ENABLED: bool = os.getenv("SANTIMENT_ENABLED", "false").lower() == "true"
+    SANTIMENT_CACHE_TTL: int = int(os.getenv("SANTIMENT_CACHE_TTL", "1800"))  # 30 min
+    SANTIMENT_SLUGS: str = os.getenv("SANTIMENT_SLUGS", "bitcoin,ethereum,solana")
+
 
 settings = Settings()
