@@ -1,7 +1,7 @@
 """Live market data fetcher using the CCXT exchange library."""
 
 import logging
-from typing import Optional
+from typing import Dict, Optional
 
 import ccxt
 import pandas as pd
@@ -93,12 +93,38 @@ class MarketDataFetcher:
 
 # ── Multi-exchange support ──
 
+# CoinCap interval mapping
+_INTERVAL_MAP = {
+    "1m": "m1", "5m": "m5", "15m": "m15",
+    "30m": "m30", "1h": "h1", "4h": "h4",
+    "1d": "d1", "1w": "w1",
+}
+
+
+def _interval_map(timeframe: str) -> str:
+    """Convert CCXT timeframe format to CoinCap interval format."""
+    return _INTERVAL_MAP.get(timeframe, "h1")
+
+
+def symbol_to_coincap_id(symbol: str) -> Optional[str]:
+    """Convert CCXT pair like 'BTC/USDT' to CoinCap asset ID like 'bitcoin'.
+
+    Uses the mapping from coincap_fetcher if available, else falls back to
+    stripping /USDT and lowercasing.
+    """
+    try:
+        from data.coincap_fetcher import SYMBOL_TO_COINCAP
+        return SYMBOL_TO_COINCAP.get(symbol)
+    except ImportError:
+        pass
+    return symbol.replace("/", "").lower().replace("usdt", "")
+
 
 class MultiExchangeFetcher:
     """Wraps multiple CCXT instances for best-price routing and fallback."""
 
     def __init__(self, exchange_ids: Optional[list] = None):
-        self._exchange_ids = exchange_ids or ["binance", "bybit"]
+        self._exchange_ids = exchange_ids or ["kraken", "binance"]
         self._fetchers: dict = {}
         for eid in self._exchange_ids:
             try:
@@ -124,8 +150,11 @@ class MultiExchangeFetcher:
         best = min(prices.items(), key=lambda x: x[1].get("spread_pct", float("inf")))
         return {"exchange": best[0], **best[1]}
 
-    def fetch_ohlcv_merged(self, symbol: str, timeframe: str = "1h", limit: int = 500) -> pd.DataFrame:
-        """Return OHLCV from primary exchange with fallback."""
+    async def fetch_ohlcv_merged(self, symbol: str, timeframe: str = "1h", limit: int = 500) -> pd.DataFrame:
+        """Return OHLCV with fallback chain: Binance -> Bybit -> CoinCap.
+
+        CoinCap is the tertiary fallback when both CCXT exchanges fail.
+        """
         primary = self._fetchers.get("binance")
         if primary:
             try:
@@ -138,4 +167,18 @@ class MultiExchangeFetcher:
                 return fallback.fetch_ohlcv(symbol, timeframe, limit)
             except Exception:
                 pass
+
+        # Tertiary fallback: CoinCap REST API
+        coincap_id = symbol_to_coincap_id(symbol)
+        if coincap_id:
+            from data.coincap_fetcher import CoinCapFetcher
+            cf = CoinCapFetcher()
+            df = await cf.get_ohlcv_fallback(
+                coincap_id, interval=_interval_map(timeframe),
+            )
+            if df is not None and not df.empty:
+                logger.info("Using CoinCap fallback for %s", symbol)
+                return df
+
+        logger.error("All data sources failed for %s", symbol)
         return pd.DataFrame()

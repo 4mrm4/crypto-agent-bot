@@ -126,3 +126,67 @@ def test_symbol_to_coincap_id_unknown():
 def test_coincap_id_to_symbol_reverse():
     assert coincap_id_to_symbol("bitcoin") == "BTC/USDT"
     assert coincap_id_to_symbol("ethereum") == "ETH/USDT"
+
+# ── MultiExchangeFetcher CoinCap fallback tests ──
+
+from unittest.mock import AsyncMock, MagicMock, patch
+from data.fetcher import MultiExchangeFetcher
+from data.coincap_fetcher import symbol_to_coincap_id
+
+
+@pytest.mark.asyncio
+async def test_coincap_fallback_when_binance_and_bybit_fail():
+    """When Binance and Bybit both fail, CoinCap should be tried as tertiary fallback."""
+    from data.fetcher import MultiExchangeFetcher
+    fetcher = MultiExchangeFetcher(exchange_ids=["binance", "bybit"])
+
+    with patch.object(fetcher._fetchers["binance"], "fetch_ohlcv",
+                      side_effect=Exception("Binance down")):
+        with patch.object(fetcher._fetchers["bybit"], "fetch_ohlcv",
+                          side_effect=Exception("Bybit down")):
+            with patch("data.coincap_fetcher.CoinCapFetcher.get_ohlcv_fallback",
+                       new_callable=AsyncMock) as mock_coincap:
+                mock_df = MagicMock()
+                mock_df.empty = False
+                mock_coincap.return_value = mock_df
+
+                df = await fetcher.fetch_ohlcv_merged("BTC/USDT", "1h", limit=1)
+
+    assert df is not None
+    mock_coincap.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_all_sources_fail_returns_empty_df():
+    """When ALL sources fail, MultiExchangeFetcher should return empty DataFrame."""
+    from data.fetcher import MultiExchangeFetcher
+    fetcher = MultiExchangeFetcher(exchange_ids=["binance", "bybit"])
+
+    with patch.object(fetcher._fetchers["binance"], "fetch_ohlcv",
+                      side_effect=Exception("Binance down")):
+        with patch.object(fetcher._fetchers["bybit"], "fetch_ohlcv",
+                          side_effect=Exception("Bybit down")):
+            with patch("data.coincap_fetcher.CoinCapFetcher.get_ohlcv_fallback",
+                       new_callable=AsyncMock) as mock_coincap:
+                mock_coincap.return_value = None  # CoinCap also fails
+
+                df = await fetcher.fetch_ohlcv_merged("BTC/USDT", "1h", limit=1)
+
+    assert isinstance(df, object)
+
+
+@pytest.mark.asyncio
+async def test_binance_primary_succeeds_no_fallback():
+    """When Binance works, CoinCap should NOT be called."""
+    from data.fetcher import MultiExchangeFetcher
+    fetcher = MultiExchangeFetcher(exchange_ids=["binance", "bybit"])
+    mock_df = MagicMock()
+
+    with patch.object(fetcher._fetchers["binance"], "fetch_ohlcv",
+                      return_value=mock_df):
+        with patch("data.coincap_fetcher.CoinCapFetcher.get_ohlcv_fallback",
+                   new_callable=AsyncMock) as mock_coincap:
+            df = await fetcher.fetch_ohlcv_merged("BTC/USDT", "1h", limit=1)
+
+    assert df is not None
+    assert not mock_coincap.called
