@@ -44,7 +44,7 @@ class HermesOrchestrator:
         self,
         goal: str,
         max_iterations: int = 5,
-        max_cycles: int = 5,
+        max_cycles: int = 6,
     ) -> Dict[str, Any]:
         """AutoResearch outer loop: hypothesis -> research -> critique -> repeat.
 
@@ -159,19 +159,36 @@ class HermesOrchestrator:
                 logger.info("Injected past insights from memory.")
 
         # Fetch market sentiment if enabled
-        sentiment_report = {}
+        sentiment_data = None
         if getattr(settings, "ENABLE_SENTIMENT", True):
             try:
                 from data.sentiment import SentimentFetcher
                 sf = SentimentFetcher()
                 symbol = settings.SYMBOL.replace("/USDT", "")
-                sentiment_report = sf.get_full_sentiment_report(symbol)
+                slug = symbol.lower()
+                combined = sf.get_combined_sentiment(slug=slug, currency=symbol)
+
+                # Build backward-compatible sentinel dict
+                fg_value = combined.fear_greed_index or 50
+                bias = (
+                    "bullish" if combined.overall_score > 0.55
+                    else "bearish" if combined.overall_score < 0.45
+                    else "neutral"
+                )
+                sentiment_data = {
+                    "fear_greed": {"value": fg_value, "classification": "Neutral"},
+                    "score": round(combined.overall_score, 3),
+                    "bias": bias,
+                    "signal_count": combined.signal_count,
+                }
+                if combined.santiment_social_volume is not None:
+                    sentiment_data["santiment_social_volume"] = combined.santiment_social_volume
+                if combined.santiment_sentiment_balance is not None:
+                    sentiment_data["santiment_sentiment_balance"] = combined.santiment_sentiment_balance
+
                 logger.info(
-                    "Sentiment: F&G=%d (%s), bias=%s, score=%.2f",
-                    sentiment_report["fear_greed"]["value"],
-                    sentiment_report["fear_greed"]["classification"],
-                    sentiment_report["bias"],
-                    sentiment_report["score"],
+                    "Sentiment: combined=%.3f bias=%s signals=%d",
+                    combined.overall_score, bias, combined.signal_count,
                 )
             except Exception as exc:
                 logger.warning("Sentiment fetch failed: %s", exc)
@@ -247,10 +264,10 @@ class HermesOrchestrator:
             import json
             specs_text = json.dumps(research_specs, indent=2)[:800]
             strategist_task_desc += f"\n\nUse these research specs as starting hypotheses:\n{specs_text}"
-        if sentiment_report:
+        if sentiment_data:
             strategist_task_desc += (
-                f"\n\nCurrent market sentiment: {sentiment_report['bias'].upper()} "
-                f"(Fear/Greed={sentiment_report['fear_greed']['value']}, score={sentiment_report['score']:.2f}). "
+                f"\n\nCurrent market sentiment: {sentiment_data['bias'].upper()} "
+                f"(Fear/Greed={sentiment_data['fear_greed']['value']}, score={sentiment_data['score']:.2f}). "
                 f"Consider sentiment when choosing strategy type."
             )
         if pattern_report and pattern_report.get("active_patterns"):
@@ -328,8 +345,8 @@ class HermesOrchestrator:
 
         # Attach sentiment/pattern data to output for Web UI emission
         if isinstance(output, dict):
-            if sentiment_report:
-                output["sentiment"] = sentiment_report
+            if sentiment_data:
+                output["sentiment"] = sentiment_data
             if pattern_report:
                 output["pattern_report"] = pattern_report
 
@@ -484,20 +501,23 @@ class HermesOrchestrator:
         if metrics["total_trades"]:
             return metrics
 
-        # Search task results for the iteration tracker's backtest output dict
-        iteration_tracker = self.agents.get("iteration_tracker")
-        if iteration_tracker and hasattr(iteration_tracker, "_iteration_history") and iteration_tracker._iteration_history:
-            # Take the best Sharpe from iteration history
+        # Search backtester's iteration history for raw (parsed) metrics
+        backtester = self.agents.get("backtester")
+        if backtester and hasattr(backtester, "_iteration_history") and backtester._iteration_history:
             best = max(
-                iteration_tracker._iteration_history,
-                key=lambda r: r.metrics.get("sharpe_ratio", -999) if isinstance(r.metrics.get("sharpe_ratio"), (int, float)) else -999
+                backtester._iteration_history,
+                key=lambda r: (
+                    r["metrics"].get("sharpe_ratio", -999)
+                    if isinstance(r["metrics"].get("sharpe_ratio"), (int, float))
+                    else -999
+                ),
             )
             return {
-                "sharpe_ratio": best.metrics.get("sharpe_ratio", 0),
-                "win_rate": best.metrics.get("win_rate", 0),
-                "max_drawdown": best.metrics.get("max_drawdown", 0),
-                "profit_ratio": best.metrics.get("profit_ratio", best.metrics.get("total_profit", 0)),
-                "total_trades": best.metrics.get("total_trades", 0),
+                "sharpe_ratio": best["metrics"].get("sharpe_ratio", 0),
+                "win_rate": best["metrics"].get("win_rate", 0),
+                "max_drawdown": best["metrics"].get("max_drawdown", 0),
+                "profit_ratio": best["metrics"].get("profit_ratio", best["metrics"].get("total_profit", 0)),
+                "total_trades": best["metrics"].get("total_trades", 0),
             }
 
         return metrics
@@ -570,7 +590,7 @@ class HermesOrchestrator:
         result = self.run_research_loop(
             goal=goal_text,
             max_iterations=3,
-            max_cycles=4,
+            max_cycles=6,
         )
 
         # Attach autonomous metadata to result
