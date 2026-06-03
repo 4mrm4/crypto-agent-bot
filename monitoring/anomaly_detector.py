@@ -65,6 +65,7 @@ class AnomalyDetector:
                 await self._check_stale_price()
                 await self._check_exchange_disconnect()
                 await self._check_negative_kelly()
+                await self._check_price_source()
             except Exception as exc:
                 logger.exception("Anomaly check cycle error: %s", exc)
 
@@ -165,6 +166,36 @@ class AnomalyDetector:
         """Check for strategies with negative Kelly (edge flipped)."""
         # This is checked during pre_trade_approval — no additional action needed
         pass
+
+    async def _check_price_source(self):
+        """Verify at least one price source is responding.
+
+        If Binance WebSocket is disconnected AND CoinCap REST is down,
+        trip circuit breaker with CRITICAL alert.
+        """
+        binance_ok = self._market_data_stream and self._market_data_stream.is_connected
+        if binance_ok:
+            return  # Primary source healthy
+
+        # Binance down — check CoinCap as backup
+        coincap_ok = False
+        from api.server import get_health_tracker
+        ht = get_health_tracker()
+        try:
+            from data.coincap_fetcher import CoinCapFetcher
+            cf = CoinCapFetcher(health_tracker=ht)
+            price = await cf.get_price("bitcoin")
+            coincap_ok = price is not None
+        except Exception:
+            pass
+
+        if not binance_ok and not coincap_ok:
+            logger.critical("ALL PRICE SOURCES DOWN — Binance WebSocket disconnected, CoinCap REST failed")
+            CircuitBreaker.halt("All price sources unavailable")
+            await self._alert(
+                "price_source_critical", "critical",
+                {"binance_ws": binance_ok, "coincap_rest": coincap_ok},
+            )
 
     def record_api_error(self):
         """Called by external components when an API error occurs."""

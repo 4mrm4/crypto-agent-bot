@@ -190,3 +190,40 @@ async def test_binance_primary_succeeds_no_fallback():
 
     assert df is not None
     assert not mock_coincap.called
+
+# ── AnomalyDetector price source check tests ──
+
+from unittest.mock import AsyncMock, MagicMock, patch
+from monitoring.anomaly_detector import AnomalyDetector
+from agents.risk_manager import CircuitBreakerState
+
+
+@pytest.mark.asyncio
+async def test_price_source_check_passes_when_binance_connected():
+    """When Binance WebSocket is connected, no alert needed."""
+    CircuitBreakerState.clear()
+    detector = AnomalyDetector()
+    mock_stream = MagicMock()
+    mock_stream.is_connected = True
+    detector._market_data_stream = mock_stream
+
+    await detector._check_price_source()
+
+    assert not CircuitBreakerState.is_halted()
+
+
+@pytest.mark.asyncio
+async def test_price_source_check_trips_when_all_down():
+    """When Binance AND CoinCap are down, circuit breaker trips."""
+    CircuitBreakerState.clear()
+    detector = AnomalyDetector()
+    mock_stream = MagicMock()
+    mock_stream.is_connected = False
+    detector._market_data_stream = mock_stream
+
+    with patch("data.coincap_fetcher.CoinCapFetcher.get_price",
+               new_callable=AsyncMock, return_value=None):
+        await detector._check_price_source()
+
+    assert CircuitBreakerState.is_halted()
+    CircuitBreakerState.clear()

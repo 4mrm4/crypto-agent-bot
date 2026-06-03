@@ -36,6 +36,12 @@ class MarketDataStream:
         self._connected = False
         self._pairs: List[str] = []
         self._streams: List[str] = []
+        self.reconnect_count = 0
+        self.max_reconnects = 3
+
+    @property
+    def is_connected(self) -> bool:
+        return self._connected
 
     async def connect(self, pairs: List[str], streams: Optional[List[str]] = None):
         """Open Binance WebSocket for all pair/stream combinations."""
@@ -59,6 +65,7 @@ class MarketDataStream:
         try:
             self._ws = await websockets.connect(url, ping_interval=30)
             self._connected = True
+            self.reconnect_count = 0
             logger.info("WebSocket connected: %s", url[:80])
         except Exception as exc:
             logger.warning("WebSocket connection failed: %s — will poll REST", exc)
@@ -115,6 +122,7 @@ class MarketDataStream:
             logger.warning("WebSocket read loop ended: %s", exc)
         finally:
             self._connected = False
+            self.reconnect_count += 1
 
     def get_latest_candle(self, pair: str, timeframe: str = "1h") -> Optional[dict]:
         """Return most recently closed candle from stream data."""
