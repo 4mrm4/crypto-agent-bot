@@ -534,6 +534,16 @@ class BacktestEngine:
             df = raw.copy() if isinstance(raw, pd.DataFrame) else pd.DataFrame(raw)
             signals = SignalFactory.generate(df, strategy_type, strategy_params)
             metrics = FastMetrics.compute(df, signals)
+            # Pass through if 0 trades: the pre-filter uses only 500 candles of live data,
+            # which is often too little data for strategies with long indicator windows
+            # (e.g. multi_timeframe needs SMA200). Zero trades does not mean the strategy
+            # is bad — it means the sample is too small. Let Freqtrade evaluate properly.
+            if metrics.get("total_trades", 0) < 1:
+                logger.debug(
+                    "Pre-filter: 0 trades for %s on sample data, passing through to Freqtrade",
+                    strategy_type,
+                )
+                return None
             if metrics.get("passed", False):
                 logger.debug(
                     "Pre-filter passed %s: Sharpe=%.2f WR=%.1f%% trades=%d",

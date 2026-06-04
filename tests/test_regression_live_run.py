@@ -355,6 +355,47 @@ def test_prefilter_low_sharpe_passes_through():
     )
 
 
+# ── Bug 6: Pre-filter blocks strategies on 0 trades from small sample ──
+
+
+def test_regression_prefilter_passes_through_on_zero_trades():
+    """Pre-filter must pass through (return None) when 0 trades are generated on sample data.
+
+    The pre-filter fetches only 500 candles of live data. Strategies like multi_timeframe
+    need more data (SMA200 needs 200 bars minimum) and will produce 0 trades on a small
+    sample. The pre-filter must NOT reject them — it must pass through so Freqtrade runs.
+    """
+    from backtesting.engine import BacktestEngine
+    from unittest.mock import patch
+    import pandas as pd
+    import numpy as np
+
+    engine = BacktestEngine()
+    # Steady downtrend data: multi_timeframe entry needs close > sma200, never triggers
+    mock_df = pd.DataFrame({
+        "timestamp": range(500),
+        "open": np.linspace(100, 90, 500),
+        "high": np.linspace(102, 92, 500),
+        "low": np.linspace(98, 88, 500),
+        "close": np.linspace(100, 90, 500),
+        "volume": np.ones(500) * 100,
+    })
+
+    with patch.object(engine, "_freqtrade_cmd", "freqtrade"):
+        with patch("data.fetcher.MarketDataFetcher") as MockFetcher:
+            mock_fetcher = MockFetcher.return_value
+            mock_fetcher.fetch_ohlcv.return_value = mock_df
+            result = engine._run_prefilter(
+                strategy_type="multi_timeframe",
+                strategy_params={},
+                timerange="20210101-",
+                pairs=["BTC/USDT"],
+            )
+    assert result is None, (
+        f"Pre-filter should pass through on 0 trades, got: {result}"
+    )
+
+
 # ── Bug 3: kelly_position_size_conservative with no arguments ──
 
 
