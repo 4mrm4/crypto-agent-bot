@@ -130,10 +130,10 @@ class PositionSizingTier(Enum):
 
 
 def kelly_position_size_conservative(
-    win_rate: float,
-    avg_win_pct: float,
-    avg_loss_pct: float,
-    portfolio_value: float,
+    win_rate: float = 0.5,
+    avg_win_pct: float = 0.02,
+    avg_loss_pct: float = 0.01,
+    portfolio_value: float = 10000.0,
     oos_degradation_pct: float = 0.40,
     max_kelly_fraction: float = 0.25,
     sizing_tier: PositionSizingTier = PositionSizingTier.CAUTIOUS,
@@ -142,6 +142,20 @@ def kelly_position_size_conservative(
 
     Applies a degradation haircut BEFORE Kelly calculation to account for
     the known optimism in backtest metrics.
+
+    Args:
+        win_rate: Historical win rate as decimal (0.0-1.0), e.g. 0.55 = 55%.
+        avg_win_pct: Average winning trade return as decimal, e.g. 0.02 = 2%.
+        avg_loss_pct: Average losing trade loss as decimal, e.g. 0.01 = 1%.
+        portfolio_value: Current portfolio value in USDT, e.g. 10000.0.
+        oos_degradation_pct: Out-of-sample degradation haircut (default 0.40 = 40%).
+        max_kelly_fraction: Fraction of full Kelly to use (default 0.25 = quarter Kelly).
+        sizing_tier: PositionSizingTier enum (validation/cautious/normal).
+
+    Example usage:
+        kelly_position_size_conservative(
+            win_rate=0.55, avg_win_pct=0.02, avg_loss_pct=0.01, portfolio_value=10000.0
+        )
 
     Adjusted inputs:
     - adj_win_rate = win_rate * (1 - oos_degradation_pct)
@@ -560,8 +574,10 @@ class RiskManagerAgent(BaseAgent):
 
             daily_pnl = float(params.get("daily_pnl_pct", 0.0))
             weekly_pnl = float(params.get("weekly_pnl_pct", 0.0))
-            daily_limit = float(params.get("daily_limit", -0.03))
-            weekly_limit = float(params.get("weekly_limit", -0.08))
+            daily_limit = abs(float(params.get("daily_limit", -0.03)))
+            weekly_limit = abs(float(params.get("weekly_limit", -0.08)))
+            assert 0 < daily_limit < 1.0, "Circuit breaker threshold must be a decimal fraction (e.g., 0.03 = 3%%)"
+            assert 0 < weekly_limit < 1.0, "Circuit breaker threshold must be a decimal fraction (e.g., 0.08 = 8%%)"
 
             # Check if already halted
             if CircuitBreakerState.is_halted():
@@ -573,28 +589,28 @@ class RiskManagerAgent(BaseAgent):
                     "triggered_by": "circuit_breaker",
                 })
 
-            # Check daily drawdown
-            if daily_pnl < daily_limit:
+            # Check daily drawdown — only halt on actual negative P&L exceeding limit
+            if daily_pnl < 0 and abs(daily_pnl) > daily_limit:
                 CircuitBreakerState.halt(
                     f"Daily drawdown {daily_pnl:.2%} exceeds limit {daily_limit:.2%}",
                     duration_minutes=60,
                 )
                 return json.dumps({
                     "trading_allowed": False,
-                    "reason": f"Daily drawdown {daily_pnl:.2%} < {daily_limit:.2%} limit",
+                    "reason": f"Daily drawdown {abs(daily_pnl):.2%} > {daily_limit:.2%} limit",
                     "triggered_by": "daily_drawdown",
                     "resume_after": CircuitBreakerState.status()["resume_after"],
                 })
 
             # Check weekly drawdown
-            if weekly_pnl < weekly_limit:
+            if weekly_pnl < 0 and abs(weekly_pnl) > weekly_limit:
                 CircuitBreakerState.halt(
                     f"Weekly drawdown {weekly_pnl:.2%} exceeds limit {weekly_limit:.2%}",
                     duration_minutes=360,  # 6 hours for weekly limit breach
                 )
                 return json.dumps({
                     "trading_allowed": False,
-                    "reason": f"Weekly drawdown {weekly_pnl:.2%} < {weekly_limit:.2%} limit",
+                    "reason": f"Weekly drawdown {abs(weekly_pnl):.2%} > {weekly_limit:.2%} limit",
                     "triggered_by": "weekly_drawdown",
                     "resume_after": CircuitBreakerState.status()["resume_after"],
                 })

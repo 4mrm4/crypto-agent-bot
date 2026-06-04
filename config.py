@@ -80,7 +80,7 @@ class Settings:
 
     # Fast pre-filter (SignalFactory + FastMetrics)
     VECTORBT_PREFILTER_ENABLED: bool = os.getenv("VECTORBT_PREFILTER_ENABLED", "true").lower() == "true"
-    VECTORBT_PREFILTER_MIN_SHARPE: float = float(os.getenv("VECTORBT_PREFILTER_MIN_SHARPE", "0.5"))
+    VECTORBT_PREFILTER_MIN_SHARPE: float = float(os.getenv("VECTORBT_PREFILTER_MIN_SHARPE", "-999"))
     VECTORBT_PREFILTER_MIN_WIN_RATE: float = float(os.getenv("VECTORBT_PREFILTER_MIN_WIN_RATE", "0.40"))
     VECTORBT_PREFILTER_MIN_TRADES: int = int(os.getenv("VECTORBT_PREFILTER_MIN_TRADES", "3"))
 

@@ -593,6 +593,11 @@ class BacktestEngine:
         if prefilter_result is not None:
             return prefilter_result
 
+        logger.info(
+            "Starting Freqtrade subprocess for strategy_type=%s params=%s",
+            strategy_type, strategy_params,
+        )
+
         # HOLDOUT GUARD — never allow research backtests to touch holdout data
         if DATA_SPLIT.is_in_holdout(timerange):
             raise ValueError(
