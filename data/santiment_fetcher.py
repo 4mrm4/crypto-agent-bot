@@ -132,6 +132,9 @@ class SantimentFetcher:
         Free tier has ~30 day data lag. Caps `to` at 35 days ago to stay
         within the allowed interval.
         """
+        if not self._enabled or not self._api_key:
+            return None
+
         now = datetime.utcnow()
         # Free tier only has data up to ~30 days ago — cap to stay in allowed range
         capped_to = now - timedelta(days=30)

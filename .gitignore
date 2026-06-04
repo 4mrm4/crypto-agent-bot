@@ -22,6 +22,7 @@ ft_userdata/*.json
 # Runtime workspace files
 workspace/trading.db
 workspace/autonomous_state.json
+workspace/experiments.jsonl
 
 # Generated strategy artifacts
 ft_userdata/strategies/Strategy_*.py
