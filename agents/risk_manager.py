@@ -166,6 +166,33 @@ def kelly_position_size_conservative(
     - PositionSizingTier.CAUTIOUS: max 5%
     - PositionSizingTier.NORMAL: max 10% (existing cap)
     """
+    # Type coercion: LLM may pass strings via LangChain tools.
+    # Also handle the case where the LLM passes a full JSON object as the first
+    # positional arg (because the tool description says "Args: JSON with ...").
+    if isinstance(win_rate, str) and win_rate.strip().startswith("{"):
+        import json as _json
+        try:
+            _parsed = _json.loads(win_rate)
+            win_rate = float(_parsed.get("win_rate", 0.5))
+            avg_win_pct = float(_parsed.get("avg_win_pct", 0.02))
+            avg_loss_pct = float(_parsed.get("avg_loss_pct", 0.01))
+            portfolio_value = float(_parsed.get("portfolio_value", 10000.0))
+            oos_degradation_pct = float(_parsed.get("oos_degradation_pct", 0.40))
+            max_kelly_fraction = float(_parsed.get("max_kelly_fraction", 0.25))
+            tier_name = _parsed.get("sizing_tier", "cautious")
+            sizing_tier = PositionSizingTier(tier_name) if tier_name in ("validation", "cautious", "normal") else PositionSizingTier.CAUTIOUS
+        except (_json.JSONDecodeError, ValueError):
+            pass
+    else:
+        win_rate = float(win_rate)
+        avg_win_pct = float(avg_win_pct)
+        avg_loss_pct = float(avg_loss_pct)
+        portfolio_value = float(portfolio_value)
+        oos_degradation_pct = float(oos_degradation_pct)
+        max_kelly_fraction = float(max_kelly_fraction)
+    if sizing_tier is None:
+        sizing_tier = PositionSizingTier.CAUTIOUS
+
     if win_rate <= 0 or avg_loss_pct <= 0:
         return {
             "kelly_fraction": 0.0,
@@ -263,14 +290,50 @@ def _estimate_wins_losses(win_rate: float, total_trades: int) -> tuple:
 
 
 def bayesian_kelly_position_size(
-    win_rate: float,
-    avg_win_pct: float,
-    avg_loss_pct: float,
-    portfolio_value: float,
+    win_rate: float = 0.5,
+    avg_win_pct: float = 0.02,
+    avg_loss_pct: float = 0.01,
+    portfolio_value: float = 10000.0,
     total_trades: int = 50,
     max_kelly_fraction: float = 0.25,
     sizing_tier: "PositionSizingTier" = None,
 ) -> dict:
+    """Bayesian Kelly position sizing using Beta posterior for win rate.
+
+    Args:
+        win_rate: Historical win rate as decimal (0.0-1.0), e.g. 0.55.
+        avg_win_pct: Average winning trade return as decimal, e.g. 0.02.
+        avg_loss_pct: Average losing trade loss as decimal, e.g. 0.01.
+        portfolio_value: Current portfolio value in USDT, e.g. 10000.0.
+        total_trades: Number of trades for Beta posterior (default 50).
+        max_kelly_fraction: Fraction of full Kelly (default 0.25).
+        sizing_tier: PositionSizingTier enum.
+    """
+    # Type coercion: LLM may pass strings via LangChain tools.
+    # Also handle JSON-object string passed as first positional arg.
+    if isinstance(win_rate, str) and win_rate.strip().startswith("{"):
+        import json as _json
+        try:
+            _parsed = _json.loads(win_rate)
+            win_rate = float(_parsed.get("win_rate", 0.5))
+            avg_win_pct = float(_parsed.get("avg_win_pct", 0.02))
+            avg_loss_pct = float(_parsed.get("avg_loss_pct", 0.01))
+            portfolio_value = float(_parsed.get("portfolio_value", 10000.0))
+            total_trades = int(_parsed.get("total_trades", 50))
+            max_kelly_fraction = float(_parsed.get("max_kelly_fraction", 0.25))
+            tier_name = _parsed.get("sizing_tier", "cautious")
+            sizing_tier = PositionSizingTier(tier_name) if tier_name in ("validation", "cautious", "normal") else PositionSizingTier.CAUTIOUS
+        except (_json.JSONDecodeError, ValueError):
+            pass
+    else:
+        win_rate = float(win_rate)
+        avg_win_pct = float(avg_win_pct)
+        avg_loss_pct = float(avg_loss_pct)
+        portfolio_value = float(portfolio_value)
+        total_trades = int(total_trades)
+        max_kelly_fraction = float(max_kelly_fraction)
+    if sizing_tier is None:
+        sizing_tier = PositionSizingTier.CAUTIOUS
     if win_rate <= 0 or avg_loss_pct <= 0:
         return {"kelly_fraction": 0.0, "position_size_usdt": 0.0, "portfolio_pct": 0.0,
                 "rationale": "Invalid inputs: win_rate or avg_loss must be positive", "error": True}
@@ -309,15 +372,40 @@ def bayesian_kelly_position_size(
 
 
 def bayesian_kelly_position_size_conservative(
-    win_rate: float,
-    avg_win_pct: float,
-    avg_loss_pct: float,
-    portfolio_value: float,
+    win_rate: float = 0.5,
+    avg_win_pct: float = 0.02,
+    avg_loss_pct: float = 0.01,
+    portfolio_value: float = 10000.0,
     total_trades: int = 50,
     oos_degradation_pct: float = 0.40,
     max_kelly_fraction: float = 0.25,
     sizing_tier: "PositionSizingTier" = None,
 ) -> dict:
+    # Type coercion: LLM may pass strings via LangChain tools.
+    # Also handle JSON-object string passed as first positional arg.
+    if isinstance(win_rate, str) and win_rate.strip().startswith("{"):
+        import json as _json
+        try:
+            _parsed = _json.loads(win_rate)
+            win_rate = float(_parsed.get("win_rate", 0.5))
+            avg_win_pct = float(_parsed.get("avg_win_pct", 0.02))
+            avg_loss_pct = float(_parsed.get("avg_loss_pct", 0.01))
+            portfolio_value = float(_parsed.get("portfolio_value", 10000.0))
+            total_trades = int(_parsed.get("total_trades", 50))
+            oos_degradation_pct = float(_parsed.get("oos_degradation_pct", 0.40))
+            max_kelly_fraction = float(_parsed.get("max_kelly_fraction", 0.25))
+            tier_name = _parsed.get("sizing_tier", "cautious")
+            sizing_tier = PositionSizingTier(tier_name) if tier_name in ("validation", "cautious", "normal") else PositionSizingTier.CAUTIOUS
+        except (_json.JSONDecodeError, ValueError):
+            pass
+    else:
+        win_rate = float(win_rate)
+        avg_win_pct = float(avg_win_pct)
+        avg_loss_pct = float(avg_loss_pct)
+        portfolio_value = float(portfolio_value)
+        total_trades = int(total_trades)
+        oos_degradation_pct = float(oos_degradation_pct)
+        max_kelly_fraction = float(max_kelly_fraction)
     if win_rate <= 0 or avg_loss_pct <= 0:
         return {"kelly_fraction": 0.0, "position_size_usdt": 0.0, "portfolio_pct": 0.0,
                 "rationale": "Invalid inputs: win_rate or avg_loss must be positive", "error": True}

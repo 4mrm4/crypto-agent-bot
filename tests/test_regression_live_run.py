@@ -406,3 +406,110 @@ def test_cryptopanic_no_key_returns_empty():
     assert result == [], (
         f"Should return [] when no CryptoPanic key, got: {result}"
     )
+
+
+# ── Bug 5: Kelly string type coercion ──
+
+
+def test_regression_kelly_conservative_coerces_string_inputs():
+    """kelly_position_size_conservative must not crash when LLM passes strings instead of floats."""
+    from agents.risk_manager import kelly_position_size_conservative
+
+    # All string values — exactly what the LLM sends via LangChain
+    # Use oos_degradation_pct=0 to avoid negative Kelly with defaults
+    result = kelly_position_size_conservative(
+        win_rate="0.55", avg_win_pct="0.02", avg_loss_pct="0.01",
+        portfolio_value="10000", oos_degradation_pct="0",
+        max_kelly_fraction="0.25",
+    )
+    assert result.get("error") is not True, (
+        f"Should coerce strings to floats, got: {result}"
+    )
+    assert isinstance(result.get("kelly_fraction"), (int, float))
+    assert result["kelly_fraction"] > 0
+
+
+def test_regression_kelly_conservative_string_win_rate_zero():
+    """String win_rate='0' must be treated as 0.0 and return error (not crash)."""
+    from agents.risk_manager import kelly_position_size_conservative
+
+    result = kelly_position_size_conservative(
+        win_rate="0", avg_win_pct="0.02", avg_loss_pct="0.01",
+    )
+    assert result.get("error") is True, (
+        f"Should return error for 0 win_rate, got: {result}"
+    )
+
+
+def test_regression_bayesian_kelly_coerces_string_inputs():
+    """bayesian_kelly_position_size must not crash when LLM passes strings."""
+    from agents.risk_manager import bayesian_kelly_position_size
+
+    result = bayesian_kelly_position_size(
+        win_rate="0.55", avg_win_pct="0.02", avg_loss_pct="0.01",
+        portfolio_value="10000", total_trades="50", max_kelly_fraction="0.25",
+    )
+    assert result.get("error") is not True, (
+        f"Should coerce strings to floats, got: {result}"
+    )
+    assert isinstance(result.get("kelly_fraction"), (int, float))
+
+
+def test_regression_bayesian_kelly_conservative_coerces_string_inputs():
+    """bayesian_kelly_position_size_conservative must not crash when LLM passes strings."""
+    from agents.risk_manager import bayesian_kelly_position_size_conservative
+
+    result = bayesian_kelly_position_size_conservative(
+        win_rate="0.55", avg_win_pct="0.02", avg_loss_pct="0.01",
+        portfolio_value="10000", total_trades="50",
+        oos_degradation_pct="0.40", max_kelly_fraction="0.25",
+    )
+    assert result.get("error") is not True, (
+        f"Should coerce strings to floats, got: {result}"
+    )
+    assert isinstance(result.get("kelly_fraction"), (int, float))
+
+
+def test_regression_kelly_conservative_parses_json_string():
+    """kelly_position_size_conservative must handle full JSON string as win_rate arg (LLM confusion)."""
+    from agents.risk_manager import kelly_position_size_conservative
+
+    # The LLM sometimes sends a JSON blob as the first positional arg
+    result = kelly_position_size_conservative(
+        '{"win_rate": 0.55, "avg_win_pct": 0.02, "avg_loss_pct": 0.01, '
+        '"portfolio_value": 10000, "oos_degradation_pct": 0, '
+        '"max_kelly_fraction": 0.25, "sizing_tier": "normal"}'
+    )
+    assert result.get("error") is not True, (
+        f"Should parse JSON string, got: {result}"
+    )
+    assert result["kelly_fraction"] > 0
+
+
+def test_regression_bayesian_kelly_parses_json_string():
+    """bayesian_kelly_position_size must handle full JSON string as win_rate arg."""
+    from agents.risk_manager import bayesian_kelly_position_size
+
+    result = bayesian_kelly_position_size(
+        '{"win_rate": 0.55, "avg_win_pct": 0.02, "avg_loss_pct": 0.01, '
+        '"portfolio_value": 10000, "total_trades": 50, '
+        '"max_kelly_fraction": 0.25, "sizing_tier": "normal"}'
+    )
+    assert result.get("error") is not True, (
+        f"Should parse JSON string, got: {result}"
+    )
+
+
+def test_regression_bayesian_kelly_conservative_parses_json_string():
+    """bayesian_kelly_position_size_conservative must handle full JSON string as win_rate arg."""
+    from agents.risk_manager import bayesian_kelly_position_size_conservative
+
+    result = bayesian_kelly_position_size_conservative(
+        '{"win_rate": 0.55, "avg_win_pct": 0.02, "avg_loss_pct": 0.01, '
+        '"portfolio_value": 10000, "total_trades": 50, '
+        '"oos_degradation_pct": 0, "max_kelly_fraction": 0.25, '
+        '"sizing_tier": "normal"}'
+    )
+    assert result.get("error") is not True, (
+        f"Should parse JSON string, got: {result}"
+    )
