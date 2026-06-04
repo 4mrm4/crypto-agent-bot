@@ -319,6 +319,49 @@ class ResearcherAgent(BaseAgent):
 
             return json.dumps(spec, indent=2)
 
+        def get_asset_fundamentals(asset_slug: str = "bitcoin") -> str:
+            """Fetch fundamental and on-chain data for a crypto asset.
+
+            Uses CoinGecko free API (no key required). Returns price, market cap,
+            developer activity (GitHub), and community metrics.
+
+            Args:
+                asset_slug: CoinGecko asset ID (e.g. "bitcoin", "ethereum", "solana")
+            """
+            import json as _json
+            import urllib.request as _req
+            try:
+                url = f"https://api.coingecko.com/api/v3/coins/{asset_slug}?localization=false&tickers=false&community_data=true&developer_data=true"
+                resp = _req.urlopen(url, timeout=10)
+                data = _json.loads(resp.read().decode())
+
+                md = data.get("market_data", {})
+                dd = data.get("developer_data", {})
+                cd = data.get("community_data", {})
+
+                lines = [f"=== Asset Fundamentals: {asset_slug} ==="]
+                lines.append(f"Price: ${md.get('current_price', {}).get('usd', 'N/A'):,}")
+                lines.append(f"Market Cap: ${md.get('market_cap', {}).get('usd', 0):,.0f}")
+                lines.append(f"24h Volume: ${md.get('total_volume', {}).get('usd', 0):,.0f}")
+                lines.append(f"24h Change: {md.get('price_change_percentage_24h', 0):.2f}%")
+                lines.append(f"7d Change: {md.get('price_change_percentage_7d', 0):.2f}%")
+
+                # Developer stats
+                gh_stars = dd.get("stars", None)
+                gh_forks = dd.get("forks", None)
+                commits_4w = dd.get("commit_count_4_weeks", None)
+                lines.append(f"GitHub Stars: {gh_stars:,}" if gh_stars is not None else "GitHub Stars: N/A")
+                lines.append(f"GitHub Forks: {gh_forks:,}" if gh_forks is not None else "GitHub Forks: N/A")
+                lines.append(f"Commits (4 weeks): {commits_4w}" if commits_4w is not None else "Commits: N/A")
+
+                # Community stats
+                reddit_subs = cd.get("reddit_subscribers", None)
+                lines.append(f"Reddit Subscribers: {reddit_subs:,}" if isinstance(reddit_subs, (int, float)) and reddit_subs > 0 else "Reddit: N/A")
+
+                return "\n".join(lines)
+            except Exception as exc:
+                return f"Fundamentals lookup failed for '{asset_slug}': {exc}"
+
         return [
             Tool(name="web_search", func=web_search,
                  description="Search the web for trading strategy ideas or papers. Args: JSON with query and max_results."),
@@ -326,6 +369,8 @@ class ResearcherAgent(BaseAgent):
                  description="Fetch and summarise a URL into strategy info. Args: JSON with url."),
             Tool(name="generate_custom_strategy_spec", func=generate_custom_strategy_spec,
                  description="Create a structured strategy spec that maps to a known strategy type. Pass JSON with name, concept, and optional regime. Returns a ready-to-use spec for generate_strategy."),
+            Tool(name="get_asset_fundamentals", func=get_asset_fundamentals,
+                 description="Fetch fundamental data for a CoinGecko asset (bitcoin, ethereum, solana). Returns price, market cap, volume, developer stats, and community metrics. No API key required."),
         ]
 
     def get_specs(self) -> Dict[str, Dict[str, Any]]:
