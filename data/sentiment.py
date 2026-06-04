@@ -77,30 +77,32 @@ class SentimentFetcher:
             return []
 
     def _get_coingecko_news(self, currency: str = "BTC") -> list:
-        """Fallback: CoinGecko news feed (requires COINGECKO_API_KEY in .env)."""
-        api_key = getattr(settings, "COINGECKO_API_KEY", "")
-        if not api_key:
-            logger.info(
-                "CoinGecko news skipped — set COINGECKO_API_KEY in .env to enable, "
-                "or set CRYPTOPANIC_API_KEY for CryptoPanic news instead."
-            )
-            return []
+        """Fallback: CoinGecko status updates (free endpoint, no API key required)."""
         try:
             symbol_map = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana"}
             coin_id = symbol_map.get(currency.upper(), currency.lower())
             r = httpx.get(
-                f"https://api.coingecko.com/api/v3/news",
-                params={"category": coin_id},
-                headers={"x_cg_pro_api_key": api_key},
+                f"https://api.coingecko.com/api/v3/coins/{coin_id}/status_updates",
+                params={"per_page": 10},
                 timeout=10
             )
-            items = r.json().get("data", [])[:10]
+            if r.status_code == 401:
+                logger.warning(
+                    "CoinGecko status_updates returned 401 (unavailable on free tier). "
+                    "This warning fires once per session."
+                )
+                return []
+            items = r.json().get("status_updates", [])[:10]
             return [
-                {"title": i.get("title", ""), "published_at": i.get("created_at", ""), "url": i.get("url", "")}
+                {
+                    "title": i.get("description", "")[:200],
+                    "published_at": i.get("created_at", ""),
+                    "url": "",
+                }
                 for i in items
             ]
         except Exception as e:
-            logger.warning("CoinGecko news fetch failed: %s", e)
+            logger.warning("CoinGecko status_updates fetch failed: %s", e)
             return []
 
     def score_sentiment(self, news_items: list, fear_greed: Optional[dict] = None) -> float:

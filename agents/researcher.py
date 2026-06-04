@@ -143,6 +143,16 @@ class ResearcherAgent(BaseAgent):
                     params={"q": query, "format": "json", "no_html": 1, "skip_disambig": 1},
                     timeout=15.0,
                 )
+                if resp.status_code == 202:
+                    logger.warning(
+                        "DuckDuckGo returned 202 for query: %s — retrying with simpler query", query
+                    )
+                    simple_query = query.replace('"', '').replace("'", '').replace(' AND ', ' ').replace(' OR ', ' ')
+                    resp = httpx.get(
+                        url,
+                        params={"q": simple_query, "format": "json", "no_html": 1, "skip_disambig": 1},
+                        timeout=15.0,
+                    )
                 resp.raise_for_status()
                 data = resp.json()
 

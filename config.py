@@ -57,6 +57,7 @@ class Settings:
 
     # Anti-overfitting and data integrity
     BACKTEST_OPTIMISM_FACTOR: float = float(os.getenv("BACKTEST_OPTIMISM_FACTOR", "0.55"))
+    REGIME_CONF_THRESHOLD: float = float(os.getenv("REGIME_CONF_THRESHOLD", "0.3"))
     LIVE_START_DATE: str = os.getenv("LIVE_START_DATE", "")
     VALIDATION_MODE_DAYS: int = int(os.getenv("VALIDATION_MODE_DAYS", "90"))
 

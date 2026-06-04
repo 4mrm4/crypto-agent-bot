@@ -1,5 +1,7 @@
 """LangGraph state graph for the Hermes multi-agent orchestration loop."""
 
+import ast
+import json
 import logging
 import threading
 from typing import Any, Dict, List, Literal, Optional, TypedDict
@@ -115,17 +117,20 @@ def dispatch_task(state: OrchestratorState) -> Dict[str, Any]:
                     snapshot.regime, snapshot.confidence, agent_name,
                 )
 
-                # Apply penalty for discouraged strategies
-                for discouraged in snapshot.discouraged_strategies:
-                    if discouraged.lower() in task.description.lower():
-                        logger.warning(
-                            "Task uses discouraged strategy '%s' for regime '%s'",
-                            discouraged, snapshot.regime,
-                        )
-                        task.description += (
-                            f"\n[WARNING: '{discouraged}' is discouraged in {snapshot.regime} regime. "
-                            f"Consider switching to: {', '.join(snapshot.recommended_strategies)}]"
-                        )
+                # Apply penalty for discouraged strategies — only check strategy_type=X param
+                strategy_type_match = re.search(r'strategy_type=(\w+)', task.description)
+                if strategy_type_match:
+                    requested_type = strategy_type_match.group(1)
+                    for discouraged in snapshot.discouraged_strategies:
+                        if discouraged.lower() == requested_type.lower():
+                            logger.warning(
+                                "Task uses discouraged strategy '%s' for regime '%s'",
+                                discouraged, snapshot.regime,
+                            )
+                            task.description += (
+                                f"\n[WARNING: '{discouraged}' is discouraged in {snapshot.regime} regime. "
+                                f"Consider switching to: {', '.join(snapshot.recommended_strategies)}]"
+                            )
         except Exception as exc:
             logger.debug("Regime injection skipped: %s", exc)
 
@@ -260,24 +265,38 @@ def _pick_agent(description: str, capabilities: Dict[str, List[str]]) -> str:
 
 def _extract_child_tasks(parent: "Task", board: TaskBoard):
     """Extract follow-up tasks from agent output.
-    Looks for explicit 'next: ' lines, then falls back to detecting
-    strategy_type= references anywhere in the output."""
+    First tries to parse 'next: backtest strategy_type=X params={...}' lines with
+    robust JSON extraction. Falls back to keyword-based strategy type detection."""
     result_text = str(parent.result) if parent.result else ""
     found_any = False
     for line in result_text.split("\n"):
-        if line.strip().startswith("next: "):
-            desc = line.strip().replace("next: ", "")
-            board.add_task(description=desc, parent_id=parent.id, metadata={"auto": True})
+        line = line.strip()
+        if line.startswith("next: "):
+            desc = line.replace("next: ", "")
+            board.add_task(description=desc, parent_id=parent.id,
+                           metadata={"auto": True})
             found_any = True
     if not found_any and "strategy_type=" in result_text:
         m = re.search(r'strategy_type[=:]\s*(\w+)', result_text)
         if m:
-            board.add_task(description="backtest strategy_type=" + m.group(1),
-                           parent_id=parent.id, metadata={"auto": True})
+            strategy_type = m.group(1)
+            # Try to extract params={...} JSON robustly using ast.literal_eval
+            params_match = re.search(r'params=(\{.*\})', result_text, re.DOTALL)
+            params_str = ""
+            if params_match:
+                try:
+                    parsed = ast.literal_eval(params_match.group(1))
+                    params_str = f" params={json.dumps(parsed)}"
+                except (ValueError, SyntaxError):
+                    # Fallback: use raw text between braces
+                    raw = params_match.group(1)
+                    params_str = f" params={raw}"
+            desc = f"backtest strategy_type={strategy_type}{params_str}"
+            board.add_task(description=desc, parent_id=parent.id,
+                           metadata={"auto": True})
             found_any = True
     if not found_any and getattr(parent, "assigned_to", None) == "strategist" and parent.result:
         lowered = result_text.lower()
-        # Normalize hyphens and spaces to underscores for matching
         normalized = lowered.replace("-", "_").replace(" ", "_")
         for kw in ["multi_timeframe", "sma_crossover", "macd_crossover", "rsi_oversold",
                     "bollinger_bands", "combined_sma_rsi", "momentum", "breakout",

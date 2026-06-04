@@ -20,14 +20,14 @@ class HermesOrchestrator:
     def __init__(self, agents: Dict[str, Any], state_broker: Optional[StateBroker] = None):
         self._agent_capabilities: Dict[str, List[str]] = {
             "analyst": ["analysis", "market_research", "sentiment", "analyse", "market"],
-            "strategist": ["strategy", "strategies", "generate", "concept",
-                           "design"],
+            "strategist": ["strategy", "generate", "concept", "design"],
             "backtester": ["backtest", "backtesting", "walk_forward", "hyperopt",
                            "optimization", "optimise", "compare", "benchmark",
                            "download", "data", "run_backtest", "run"],
             "iteration_tracker": ["iteration", "history", "best_strategy",
                                   "store", "track", "record", "memory", "recall"],
-            "risk_manager": ["risk", "assessment", "position_sizing"],
+            "risk_manager": ["risk", "assess", "assessment", "kelly", "circuit",
+                             "position", "sizing", "approval", "correlation"],
             "curator": ["memory", "context", "history"],
             "researcher": ["research", "web", "paper", "novel", "search", "literature"],
         }
@@ -245,6 +245,12 @@ class HermesOrchestrator:
                     research_specs = list(researcher.get_specs().values())
                 if research_text:
                     logger.info("Researcher produced %d chars of output", len(research_text))
+                    if len(research_text) < 100:
+                        logger.warning(
+                            "Researcher output too short (%d chars) — web search may be failing. "
+                            "Consider configuring Tavily API key for better results.",
+                            len(research_text),
+                        )
                     # Store research text in memory
                     if curator and hasattr(curator, "store_result"):
                         curator.store_result(

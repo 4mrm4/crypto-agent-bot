@@ -35,14 +35,27 @@ class TradingDatabase:
             conn.execute("INSERT INTO trades ...")
     """
 
-    _instance = None
+    _instances: Dict[str, "TradingDatabase"] = {}
     _lock = threading.Lock()
 
-    def __init__(self, db_path: Optional[Path] = None, legacy_backup: bool = True):
-        self.db_path = Path(db_path) if isinstance(db_path, str) else (db_path or DB_PATH)
-        self.legacy_backup = legacy_backup
-        if str(self.db_path) != ":memory:":
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+    def __new__(cls, db_path=None, legacy_backup=True):
+        path = Path(db_path) if isinstance(db_path, str) else (db_path or DB_PATH)
+        key = str(path)
+        with cls._lock:
+            if key not in cls._instances:
+                instance = super().__new__(cls)
+                instance.db_path = path
+                instance.legacy_backup = legacy_backup
+                if str(instance.db_path) != ":memory:":
+                    instance.db_path.parent.mkdir(parents=True, exist_ok=True)
+                instance._initialized = False
+                cls._instances[key] = instance
+            return cls._instances[key]
+
+    def __init__(self, db_path=None, legacy_backup=True):
+        if getattr(self, "_initialized", False):
+            return
+        self._initialized = True
         self._init_schema()
 
     # ── Schema ──

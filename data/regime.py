@@ -160,6 +160,17 @@ class MarketRegimeDetector:
         else:
             confidence = 0.5
 
+        logger.debug(
+            "Regime confidence: regime=%s adx=%.1f confidence=%.2f",
+            regime, last_adx, confidence,
+        )
+        if confidence < settings.REGIME_CONF_THRESHOLD:
+            logger.warning(
+                "Regime confidence (%.0f%%) below threshold (%.0f%%) for regime=%s — "
+                "regime-conditioned gating is in conservative mode",
+                confidence * 100, settings.REGIME_CONF_THRESHOLD * 100, regime,
+            )
+
         return RegimeSnapshot(
             regime=regime,
             confidence=confidence,

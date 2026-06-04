@@ -117,29 +117,26 @@ class BacktesterAgent(BaseAgent):
         # Tool: run_backtest
         # ------------------------------------------------------------------
 
-        def run_backtest(backtest_json: str = "{}") -> str:
-            """Backtest a previously-generated strategy.
-            Pass JSON: {"strategy_id": "abc123"} or just the strategy_id string.
-            Uses timerange and pairs from the strategy params or global backtest config.
-            Returns performance metrics and records keep/discard verdict."""
+        def run_backtest(strategy_type: str = "sma_crossover", params: str = "{}") -> str:
+            """Backtest a strategy by type and parameters.
+            Args:
+                strategy_type: One of sma_crossover, macd_crossover, rsi_oversold, etc.
+                params: JSON string of strategy parameters, e.g. '{"fast_ma": 10, "slow_ma": 30}'
+            Returns performance metrics with keep/discard verdict."""
             import json
             from config import settings
             try:
-                params = json.loads(backtest_json)
+                strat_params = json.loads(params)
             except json.JSONDecodeError:
-                params = {"strategy_id": backtest_json}
-
-            sid = params.get("strategy_id", "")
-            if not sid or sid not in self._generated_strategies:
-                return f"Error: unknown strategy_id '{sid}'. Use generate_strategy first."
-
-            strat_params = self._generated_strategies[sid].copy()
-            # Apply global config as defaults, then strategy-level overrides
+                strat_params = {}
+            if not isinstance(strat_params, dict):
+                strat_params = {}
+            strat_params["strategy_type"] = strategy_type
+            # Use global config for defaults
             global_cfg = getattr(self, "_backtest_config", {})
             timerange = strat_params.pop("timerange", global_cfg.get("timerange", "20210101-"))
             pairs = strat_params.pop("pairs", global_cfg.get("pairs", None))
             strat_params.setdefault("timeframe", global_cfg.get("timeframe", settings.TIMEFRAME))
-            strategy_type = strat_params.pop("strategy_type", "sma_crossover")
             try:
                 result = self._engine.run_backtest(
                     strat_params,
@@ -152,7 +149,7 @@ class BacktesterAgent(BaseAgent):
 
             metrics = {k: result.get(k, "N/A") for k in
                        ["total_trades", "profit_ratio", "win_rate", "sharpe_ratio", "max_drawdown"]}
-            lines = [f"Backtest result for [{sid}]:", f"  Total trades: {metrics['total_trades']}"]
+            lines = [f"Backtest result for [{strategy_type}]:", f"  Total trades: {metrics['total_trades']}"]
             for k, v in metrics.items():
                 if k != "total_trades":
                     lines.append(f"  {k}: {v}")
@@ -160,17 +157,17 @@ class BacktesterAgent(BaseAgent):
             if pairs:
                 lines.append(f"  Pairs: {pairs}")
 
-            # Auto-create iteration record for keep/discard tracking
+            # Auto-create iteration record
             verdict, reason = self._evaluate_metrics(result)
             record = {
-                "params": {**strat_params, "_strategy_id": sid},
+                "params": {**strat_params, "_strategy_id": strategy_type},
                 "metrics": result,
                 "verdict": verdict,
                 "reason": reason,
             }
             self._iteration_history.append(record)
 
-            # Persist result to strategy memory if verdict is kept
+            # Persist if kept
             if verdict == "kept":
                 try:
                     from memory.vector_store import VectorStore
@@ -185,7 +182,8 @@ class BacktesterAgent(BaseAgent):
                     )
                 except Exception as exc:
                     logger.debug("Could not persist strategy to memory: %s", exc)
-            # Record structured experiment for data-driven iteration
+
+            # Record experiment
             try:
                 from orchestration.experiment_tracker import Experiment
                 exp = Experiment(
@@ -206,8 +204,8 @@ class BacktesterAgent(BaseAgent):
                 self._tracker.record(exp)
             except Exception as exc:
                 logger.debug("Could not record experiment: %s", exc)
-            lines.append(f"  Verdict: {verdict.upper()} -- {reason}")
 
+            lines.append(f"  Verdict: {verdict.upper()} -- {reason}")
             return "\n".join(lines)
 
         # ------------------------------------------------------------------
@@ -531,7 +529,9 @@ class BacktesterAgent(BaseAgent):
             Tool(name="set_backtest_config", func=set_backtest_config,
                  description="Set global backtest config: timerange, pairs, timeframe. Applies to all subsequent backtests."),
             Tool(name="run_backtest", func=run_backtest,
-                 description="Backtest a generated strategy by ID. Args: JSON with strategy_id."),
+                 description="Backtest a strategy type with JSON parameters. "
+                 "Args: strategy_type (str), params (str JSON). "
+                 "Example params: '{\"fast_ma\": 10, \"slow_ma\": 30}'"),
             Tool(name="download_data", func=download_data,
                  description="Download historical data for backtesting. Args: JSON with pairs, timeframe, timerange."),
             Tool(name="compare_strategies", func=compare_strategies,
