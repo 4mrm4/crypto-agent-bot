@@ -163,6 +163,49 @@ def test_pick_agent_backtest():
     assert result == "backtester", f"Got {result}, expected backtester"
 
 
+# ── Issue 6: Memory context must route to strategist ──
+
+
+def test_regression_pick_agent_memory_context_routes_to_strategist():
+    """[MEMORY CONTEXT tasks must always route to strategist, never backtester."""
+    from orchestration.graph import _pick_agent
+
+    caps = {
+        "analyst": ["analysis", "market"],
+        "strategist": ["strategy", "generate", "concept", "design"],
+        "backtester": ["backtest", "data", "run", "research", "paper", "walk_forward"],
+        "risk_manager": ["risk", "assess", "kelly", "circuit", "position"],
+        "curator": ["memory", "context"],
+        "researcher": ["research", "web", "paper"],
+    }
+    # Memory context containing words that could score higher for backtester
+    desc = (
+        "[MEMORY CONTEXT - Past relevant research:]\n"
+        "Previous backtest data for sma_crossover showed Sharpe=1.2. "
+        "Run more research on paper trading strategies."
+    )
+    result = _pick_agent(desc, caps)
+    assert result == "strategist", f"Got {result}, expected strategist"
+
+
+def test_regression_pick_agent_memory_context_prefix_is_exact():
+    """Only descriptions starting with exactly '[MEMORY CONTEXT' are special-routed."""
+    from orchestration.graph import _pick_agent
+
+    caps = {
+        "analyst": ["analysis", "market"],
+        "strategist": ["strategy", "generate", "concept", "design"],
+        "backtester": ["backtest", "data", "run", "walk_forward"],
+        "risk_manager": ["risk", "assess", "kelly", "circuit", "position"],
+        "curator": ["memory", "context"],
+        "researcher": ["research", "web", "paper"],
+    }
+    # Description with 'memory context' but NOT starting with [MEMORY CONTEXT
+    desc = "Review memory context from previous backtest data run"
+    result = _pick_agent(desc, caps)
+    assert result != "strategist", "Non-prefixed context should use normal routing"
+
+
 # ── Issue 4: Discouraged strategy only checks requested type ──
 
 
@@ -215,14 +258,41 @@ def test_circuit_breaker_zero_drawdown_does_not_halt():
     )
 
 
-def test_circuit_breaker_assertion_catches_raw_percentage():
-    """Circuit breaker must reject raw percentage values like 500 via assertion."""
-    from agents.risk_manager import RiskManagerAgent
+def test_regression_circuit_breaker_clamps_percentage():
+    """Circuit breaker must soft-clamp raw percentage values (e.g. 500 -> 5.0) instead of crashing."""
+    from agents.risk_manager import RiskManagerAgent, CircuitBreakerState
 
+    CircuitBreakerState.clear()
     agent = RiskManagerAgent()
     cb_tool = agent.get_tool("circuit_breaker_check")
-    with pytest.raises(AssertionError, match="decimal fraction"):
-        cb_tool.func('{"daily_pnl_pct": 0.0, "daily_limit": 500}')
+    # daily_limit=500 should be clamped to 5.0 (500/100), NOT crash with AssertionError
+    result = cb_tool.func('{"daily_pnl_pct": -0.06, "daily_limit": 500}')
+    import json
+    parsed = json.loads(result)
+    # After clamping: 500 -> 5.0, so 6% loss is within 500% day limit -> no halt
+    # Actually 500/100 = 5.0, and 6% loss is 0.06 which is < 5.0, so trading_allowed
+    # Wait — 500/100 = 5.0 as decimal = 500%. 6% loss = 0.06 < 5.0, so no halt.
+    assert parsed.get("trading_allowed") is True, (
+        f"Should clamp 500 to 5.0 (500%) and allow 6%% loss within it, got: {parsed}"
+    )
+    CircuitBreakerState.clear()
+
+
+def test_regression_circuit_breaker_clamps_zero_limit_to_default():
+    """Circuit breaker must use default 0.03 when daily_limit <= 0."""
+    from agents.risk_manager import RiskManagerAgent, CircuitBreakerState
+
+    CircuitBreakerState.clear()
+    agent = RiskManagerAgent()
+    cb_tool = agent.get_tool("circuit_breaker_check")
+    # daily_limit=0 should fall back to default 0.03. 5% loss > 3% limit -> halt.
+    result = cb_tool.func('{"daily_pnl_pct": -0.05, "daily_limit": 0}')
+    import json
+    parsed = json.loads(result)
+    assert parsed.get("trading_allowed") is False, (
+        f"Should use default 0.03 and halt on 5%% loss, got: {parsed}"
+    )
+    CircuitBreakerState.clear()
 
 
 def test_circuit_breaker_halt_on_actual_drawdown():

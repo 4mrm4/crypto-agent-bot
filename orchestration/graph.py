@@ -250,7 +250,15 @@ def finalize(state: OrchestratorState) -> Dict[str, Any]:
 
 def _pick_agent(description: str, capabilities: Dict[str, List[str]]) -> str:
     """Score each agent by how many of their keywords appear in the description.
-    Splits description into words so 'strategy' in 'strategy_type' is not a match."""
+    Splits description into words so 'strategy' in 'strategy_type' is not a match.
+
+    Special case: memory context tasks starting with '[MEMORY CONTEXT' must
+    always route to strategist, never to backtester or any other agent.
+    """
+    # Memory context must always go to strategist
+    if description.strip().startswith("[MEMORY CONTEXT"):
+        return "strategist"
+
     words = set(description.lower().split())
     best_agent = "analyst"
     best_score = 0

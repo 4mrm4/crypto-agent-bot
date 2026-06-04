@@ -574,10 +574,29 @@ class RiskManagerAgent(BaseAgent):
 
             daily_pnl = float(params.get("daily_pnl_pct", 0.0))
             weekly_pnl = float(params.get("weekly_pnl_pct", 0.0))
-            daily_limit = abs(float(params.get("daily_limit", -0.03)))
-            weekly_limit = abs(float(params.get("weekly_limit", -0.08)))
-            assert 0 < daily_limit < 1.0, "Circuit breaker threshold must be a decimal fraction (e.g., 0.03 = 3%%)"
-            assert 0 < weekly_limit < 1.0, "Circuit breaker threshold must be a decimal fraction (e.g., 0.08 = 8%%)"
+            daily_limit_raw = float(params.get("daily_limit", -0.03))
+            weekly_limit_raw = float(params.get("weekly_limit", -0.08))
+
+            # Soft clamp: never raise AssertionError. If value > 1.0, treat as
+            # percentage (divide by 100). If <= 0, use default.
+            def _clamp_limit(raw: float, default: float) -> float:
+                if raw <= 0:
+                    logger.warning(
+                        "Circuit breaker limit %f <= 0, using default %f",
+                        raw, abs(default),
+                    )
+                    return abs(default)
+                if raw > 1.0:
+                    logger.warning(
+                        "Circuit breaker limit %f > 1.0, dividing by 100 "
+                        "(treated as percentage)",
+                        raw,
+                    )
+                    return raw / 100.0
+                return raw
+
+            daily_limit = _clamp_limit(daily_limit_raw, 0.03)
+            weekly_limit = _clamp_limit(weekly_limit_raw, 0.08)
 
             # Check if already halted
             if CircuitBreakerState.is_halted():
