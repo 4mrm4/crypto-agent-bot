@@ -2,7 +2,7 @@
 
 Modular crypto trading bot with 7 LangGraph ReAct agents, Freqtrade backtesting, ChromaDB strategy memory, and a real-time Web UI.
 
-**Latest updates (June 2026 — v10: Batch 2 + CPCV + Pre-filter + State Broker + Agent Split):**
+**Latest updates (June 2026 — v11: 3 External Data API Integrations + Shared Infrastructure):**
 
 ### Core Infrastructure
 - **DeepSeek Chat API** — migrated from OpenRouter to direct DeepSeek API (`api.deepseek.com/v1`, model `deepseek-chat`)
@@ -73,6 +73,39 @@ Modular crypto trading bot with 7 LangGraph ReAct agents, Freqtrade backtesting,
 - Runs inside BacktestEngine before Freqtrade subprocess — zero agent changes
 - Loose thresholds (Sharpe>=0.5, WR>=40%, trades>=3) — noise filter, not quality gate
 
+### External Data API Integrations
+
+Three external data APIs integrated with shared infrastructure (SQLite api_cache, APIHealthTracker):
+
+**CoinCap v3** (`data/coincap_fetcher.py`) — Backup price feed:
+- `get_price()`, `get_batch_prices()`, `get_ohlcv_fallback()` — REST API with httpx
+- Symbol mapping: `BTC/USDT` → `bitcoin`
+- Tertiary fallback in MultiExchangeFetcher (Binance → Bybit → CoinCap)
+- Degraded-mode WebSocket backup on 3x reconnect failure (polls CoinCap REST every 10s)
+- Rate limit: 10 calls/min free tier. Config vars: `COINCAP_API_KEY`, `COINCAP_ENABLED`, `COINCAP_FALLBACK_ONLY`
+
+**Santiment** (`data/santiment_fetcher.py`) — Social volume + developer activity:
+- Direct GraphQL via httpx (no sanpy dependency). Queries: `social_volume_total`, `sentiment_balance_total`, `dev_activity`, `social_dominance_total`, `daily_active_addresses`
+- `SantimentSignal` dataclass with all 5 metrics
+- `get_trending_assets()` fetches assets with surging social volume (boosted priority in AutonomousResearchLoop)
+- `get_batch_signals()` fetches multiple assets concurrently via `asyncio.gather`
+- Free tier: data lags ~30 days, query dates auto-capped. 30 min SQLite cache TTL
+- Integrated into `CombinedSentiment` (25% weight) + `RegimeSnapshot` (social dominance z-score)
+- Config vars: `SANTIMENT_API_KEY`, `SANTIMENT_ENABLED`, `SANTIMENT_CACHE_TTL`, `SANTIMENT_SLUGS`
+
+**CoinGecko** (`agents/researcher.py` get_asset_fundamentals) — Asset fundamentals:
+- Replaces dead Messari API. Uses CoinGecko free API (`GET /api/v3/coins/{id}` via urllib, no external deps)
+- Returns: price, market cap, 24h volume, 24h/7d change, GitHub stars/forks/4wk commits, Reddit subscribers
+- No API key required (free tier, 10-30 calls/min). Slugs: "bitcoin", "ethereum", "solana"
+
+**Messari** (`data/messari_fetcher.py`) — DEPRECATED (public API shut down after Galaxy Digital acquisition). Fetcher returns None gracefully. MESSARI_ENABLED=false by default.
+
+**Shared Infrastructure:**
+- **SQLite api_cache** (`data/database.py`) — `api_cache` table with TTL-based expiry, `get_cached()`/`set_cached()` methods
+- **APIHealthTracker** (`data/api_health.py`) — Tracks consecutive failures per source, provides `/api/data/health` endpoint. `is_healthy` property when <3 consecutive failures
+- **RateLimiter** (`data/rate_limiter.py`) — Token bucket with thread-safe lock, automatic refill. 20 req/min default
+- MongoDB is not used — StateBroker in-memory default sufficient for single-process mode
+
 ### CPCV Validation (`backtesting/cpcv_validator.py`)
 - **CPCVSplitter** — generates all C(n_folds, k_test) combinatorial train/test splits with purge + embargo
 - **CPCVValidator** — evaluates strategy across all combinatorial paths via SignalFactory
@@ -116,11 +149,16 @@ Modular crypto trading bot with 7 LangGraph ReAct agents, Freqtrade backtesting,
 - **Auto-scrolling event log** — WebSocket event stream with heartbeats
 
 ### Data Sources
-- **Market data**: CCXT (Binance), OHLCV via `fetch_ohlcv()`
-- **Sentiment**: Fear & Greed Index (alternative.me), CoinGecko news (requires `COINGECKO_API_KEY`), CryptoPanic (requires `CRYPTOPANIC_API_KEY`)
+- **Market data**: CCXT (Binance), OHLCV via `fetch_ohlcv()` — primary
+- **Price fallback**: CoinCap v3 REST API (tertiary after Binance → Bybit), WebSocket degraded mode
+- **Sentiment**: Fear & Greed Index (alternative.me), CryptoPanic (requires `CRYPTOPANIC_API_KEY`), Santiment social volume + sentiment balance (GraphQL, requires `SANTIMENT_API_KEY`)
+- **Sanitment social + dev**: Santiment GraphQL — social_volume_total, sentiment_balance_total, dev_activity, social_dominance_total, daily_active_addresses
 - **Patterns**: 13 TA-Lib candlestick patterns (hammer, engulfing, morning star, etc.)
-- **Regime**: ADX/ATR/SMA200 classification → strong_uptrend/downtrend, ranging, volatile, weak_trend
+- **Regime**: ADX/ATR/SMA200 classification + Santiment social dominance z-score
+- **Fundamentals**: CoinGecko free API — price, market cap, GitHub stats, community metrics (no key needed)
 - **On-chain**: Whale Alert (requires `WHALE_ALERT_API_KEY`), CoinGecko volume proxy — gated by `ENABLE_ONCHAIN` flag
+- **Web search**: Tavily API (primary, requires `TAVILY_API_KEY`), DuckDuckGo fallback
+- **Health monitoring**: APIHealthTracker tracks consecutive failures per source; `/api/data/health` endpoint
 
 ## Architecture
 
@@ -167,6 +205,11 @@ graph TD
     AD[AnomalyDetector] --> CB
     WS2[MarketDataStream] --> EXCH
     MEF[MultiExchangeFetcher] --> EXCH
+    MEF --> COINCAP[CoinCap v3 REST]
+    SANT[SantimentFetcher] --> SENT
+    SANT --> REGIME
+    SANT --> AL
+    CG[CoinGecko] --> RESEARCHER
 
     DP[DeploymentPipeline] --> ENGINE
     DP --> CPCV[CPCVValidator]
@@ -204,7 +247,7 @@ graph TD
 | **StrategistAgent** | `agents/strategist.py` | 4 tools: strategy design (generate, concepts, params, research) |
 | **BacktesterAgent** | `agents/backtester.py` | 7 tools: backtesting execution (run, hyperopt, WFV, blind search, compare, config, data) |
 | **IterationTrackerAgent** | `agents/iteration_tracker.py` | 4 tools: strategy memory (best, history, store result, store insight) |
-| **ResearcherAgent** | `agents/researcher.py` | Web search (Tavily + DDG fallback), paper reading, concept-mapped strategy specs |
+| **ResearcherAgent** | `agents/researcher.py` | Web search (Tavily + DDG fallback), paper reading, concept-mapped strategy specs, CoinGecko fundamentals |
 | **RiskManagerAgent** | `agents/risk_manager.py` | Risk metrics + go/no-go verdict |
 | **MemoryCuratorAgent** | `agents/curator.py` | Cross-session memory retrieval from ChromaDB |
 | **HermesOrchestrator** | `orchestration/hermes.py` | Multi-agent LangGraph orchestration + outer research loop |
@@ -223,7 +266,7 @@ graph TD
 | **EventBus** | `api/event_bus.py` | Async event streaming for Web UI |
 | **Web UI** | `ui/index.html` | Single-file React dashboard with 6 metric cards |
 | **TokenTracker** | `agents/token_tracker.py` | Thread-safe token usage accumulator with live UI counter |
-| **SentimentFetcher** | `data/sentiment.py` | Fear & Greed + CoinGecko news (with API key support) |
+| **SentimentFetcher** | `data/sentiment.py` | Fear & Greed + CryptoPanic + Santiment (3-source weighted: 40/20/40) |
 | **PatternDetector** | `data/patterns.py` | 13 candlestick patterns via TA-Lib |
 | **MarketRegimeDetector** | `data/regime.py` | ADX/ATR/SMA200 regime classification |
 | **DataSplitConfig** | `backtesting/data_split.py` | Frozen singleton defining research/holdout split |
@@ -232,6 +275,10 @@ graph TD
 | **SyntheticValidator** | `backtesting/synthetic_validator.py` | Random walk + permutation sanity checks |
 | **DeploymentPipeline** | `orchestration/deployment_pipeline.py` | 11-gate strategy deployment gauntlet |
 | **PerformanceMonitor** | `monitoring/performance_monitor.py` | Live vs backtest degradation tracking |
+| **CoinCapFetcher** | `data/coincap_fetcher.py` | CoinCap v3 price feed + tertiary OHLCV fallback |
+| **SantimentFetcher** | `data/santiment_fetcher.py` | Santiment GraphQL — social volume, sentiment, dev activity |
+| **APIHealthTracker** | `data/api_health.py` | Per-source failure tracking with `/api/data/health` endpoint |
+| **RateLimiter** | `data/rate_limiter.py` | Token bucket rate limiter (thread-safe) |
 | **AnomalyDetector** | `monitoring/anomaly_detector.py` | 7-checks: rapid drawdown, stuck positions, API errors |
 | **MarketDataStream** | `data/stream.py` | Live Binance WebSocket feeds |
 | **MultiExchangeFetcher** | `data/fetcher.py` | Binance/Bybit best-price routing |
@@ -418,6 +465,15 @@ Opens at `http://127.0.0.1:8765`. Features:
 | `TAVILY_API_KEY` | — | Optional Tavily API key for web search |
 | `TAVILY_ENABLED` | `true` | Enable Tavily search (falls back to DuckDuckGo) |
 | `LEGACY_JSONL_BACKUP` | `true` | Keep JSONL file writes alongside SQLite |
+| `COINCAP_API_KEY` | — | CoinCap v3 API key (backup price feed) |
+| `COINCAP_ENABLED` | `false` | Enable CoinCap price feed |
+| `COINCAP_FALLBACK_ONLY` | `true` | Use CoinCap only as tertiary OHLCV fallback |
+| `SANTIMENT_API_KEY` | — | Santiment API key (social volume + dev activity) |
+| `SANTIMENT_ENABLED` | `false` | Enable Santiment data fetcher |
+| `SANTIMENT_CACHE_TTL` | `1800` | Santiment cache TTL in seconds (30 min) |
+| `SANTIMENT_SLUGS` | `bitcoin,ethereum,solana` | Assets to track via Santiment |
+| `MESSARI_API_KEY` | — | DEPRECATED — Messari public API shut down |
+| `MESSARI_ENABLED` | `false` | Disabled by default (API dead) |
 
 ## Strategy Types
 
