@@ -94,11 +94,20 @@ def monkey_patch_hermes(orchestrator: Any, bus: EventBus, loop=None):
             loop = None
 
     def emit(event_type: str, payload: Dict[str, Any]):
+        nonlocal loop
+        if loop is None:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                pass
         if loop is None:
             return
-        asyncio.run_coroutine_threadsafe(
-            bus.publish(event_type, payload), loop
-        )
+        try:
+            asyncio.run_coroutine_threadsafe(
+                bus.publish(event_type, payload), loop
+            )
+        except RuntimeError:
+            pass
 
     def emit_tokens():
         """Emit current cumulative token usage."""

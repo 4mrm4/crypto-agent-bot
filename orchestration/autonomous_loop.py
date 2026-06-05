@@ -11,9 +11,11 @@ Self-generates research goals based on:
 """
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from orchestration.research import ResearchGoal
@@ -216,6 +218,7 @@ class AutonomousResearchLoop:
         4. Otherwise → explore novel hypothesis
         """
         # 1. Check coverage gaps for current regime
+        from data.regime import REGIME_STRATEGY_MAP
         coverage = await self._compute_coverage_gaps()
         current_regime = self.state.last_regime
 
@@ -223,7 +226,6 @@ class AutonomousResearchLoop:
         best_sharpe = coverage.get(current_regime, 0.0)
         if best_sharpe < 0.8:
             # Find a recommended strategy type for this regime
-            from data.regime import REGIME_STRATEGY_MAP
             recommended = REGIME_STRATEGY_MAP.get(current_regime, {}).get("use", [])
             hint = recommended[0] if recommended else "sma_crossover"
             return ResearchGoal(
@@ -377,25 +379,71 @@ class AutonomousResearchLoop:
 
     async def _compute_coverage_gaps(self) -> Dict[str, float]:
         """
-        Returns {regime: best_sharpe_in_memory} for all 5 regimes.
+        Returns {regime: best_sharpe_in_memory} for all 6 regimes.
         Used to identify which regimes are underserved.
+
+        Checks both ChromaDB (vector-store strategy memory) and
+        workspace/experiments.jsonl (cross-referenced via REGIME_STRATEGY_MAP),
+        returning the higher of the two values.
         """
-        if not self._vector_store:
-            return {}
+        from data.regime import REGIME_STRATEGY_MAP
 
-        regimes = ["strong_uptrend", "weak_trend", "ranging", "volatile", "low_liquidity"]
-        gaps = {}
+        regimes: List[str] = list(REGIME_STRATEGY_MAP.keys())
+        gaps: Dict[str, float] = {}
 
-        for regime in regimes:
-            try:
-                best = self._vector_store.get_best_strategies(regime=regime, min_sharpe=0.0, k=1)
-                if best:
-                    meta = best[0].get("metadata", {})
-                    gaps[regime] = float(meta.get("sharpe", 0.0))
-                else:
-                    gaps[regime] = 0.0
-            except Exception:
-                gaps[regime] = 0.0
+        # ── Pass 1: Read from ChromaDB (vector-store strategy memory) ──
+        if self._vector_store:
+            for regime in regimes:
+                try:
+                    best = self._vector_store.get_best_strategies(regime=regime, min_sharpe=0.0, k=1)
+                    if best:
+                        meta = best[0].get("metadata", {})
+                        gaps[regime] = float(meta.get("sharpe", 0.0))
+                except Exception:
+                    pass
+
+        # ── Pass 2: Cross-reference experiments.jsonl ──
+        # Map each regime's recommended strategy types to the best Sharpe
+        # seen in past experiments, taking the max.
+        try:
+            exp_path = Path("./workspace/experiments.jsonl")
+            if exp_path.exists():
+                # Build {strategy_type: best_sharpe} from experiments file
+                best_by_strat: Dict[str, float] = {}
+                with open(exp_path) as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            data = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        s = data.get("strategy_type")
+                        if not s:
+                            continue
+                        sh = data.get("sharpe", 0.0)
+                        if sh is None:
+                            continue
+                        sh = float(sh)
+                        trades = int(data.get("total_trades", 0))
+                        if trades < 3:
+                            continue
+                        if s not in best_by_strat or sh > best_by_strat[s]:
+                            best_by_strat[s] = sh
+
+                # For each regime, check its recommended strategy types
+                for regime in regimes:
+                    use_strats = REGIME_STRATEGY_MAP.get(regime, {}).get("use", [])
+                    regime_best: Optional[float] = gaps.get(regime)
+                    for s in use_strats:
+                        s_sharpe = best_by_strat.get(s)
+                        if s_sharpe is not None:
+                            if regime_best is None or s_sharpe > regime_best:
+                                regime_best = s_sharpe
+                    gaps[regime] = regime_best if regime_best is not None else 0.0
+        except Exception as exc:
+            logger.debug("Failed to read experiments.jsonl for coverage gaps: %s", exc)
 
         return gaps
 
@@ -424,7 +472,7 @@ class AutonomousResearchLoop:
             None,
             lambda: self._orchestrator.run_research_loop(
                 goal=goal_text,
-                max_iterations=3,
+                max_iterations=10,
                 max_cycles=6,
             ),
         )

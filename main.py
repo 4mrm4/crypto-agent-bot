@@ -159,8 +159,9 @@ def _run_autonomous(ui: bool = False):
 
     event_bus = None
     if ui:
-        from api.event_bus import EventBus
+        from api.event_bus import EventBus, monkey_patch_hermes
         event_bus = EventBus()
+        monkey_patch_hermes(orchestrator, event_bus)
 
     loop = AutonomousResearchLoop(
         orchestrator=orchestrator,

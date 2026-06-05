@@ -55,8 +55,79 @@ class BacktesterAgent(BaseAgent):
         )
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # Run override — skip LLM for backtest commands
     # ------------------------------------------------------------------
+
+    def run(self, input_text: str) -> Dict[str, Any]:
+        """Override BaseAgent.run: execute backtest commands directly,
+        bypassing the LLM entirely. Falls back to the LLM agent for
+        non-backtest commands (hyperopt, compare, walk-forward, etc.)."""
+        import re
+        from config import settings
+
+        stripped = input_text.strip()
+        if stripped.startswith("backtest "):
+            # Parse: backtest strategy_type=X params={...}
+            m = re.search(r'strategy_type[=:]\s*(\w+)', stripped)
+            if m:
+                strategy_type = m.group(1)
+                params_match = re.search(r'params=(\{.*\})', stripped, re.DOTALL)
+                strat_params: Dict[str, Any] = {}
+                if params_match:
+                    try:
+                        strat_params = json.loads(params_match.group(1))
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+
+                global_cfg = getattr(self, "_backtest_config", {})
+                timerange = strat_params.pop("timerange",
+                                             global_cfg.get("timerange", "20210101-"))
+                pairs = strat_params.pop("pairs", global_cfg.get("pairs", None))
+                strat_params.setdefault("timeframe",
+                                        global_cfg.get("timeframe", settings.TIMEFRAME))
+
+                try:
+                    result = self._engine.run_backtest(
+                        strat_params,
+                        strategy_type=strategy_type,
+                        timerange=timerange,
+                        pairs=pairs,
+                    )
+                except Exception as exc:
+                    logger.error("Backtest failed: %s", exc)
+                    return {"output": f"Error running backtest: {exc}",
+                            "intermediate_steps": []}
+
+                # Evaluate and store in iteration history
+                verdict, reason = self._evaluate_metrics(result)
+                self._iteration_history.append({
+                    "params": {**strat_params, "_strategy_id": strategy_type},
+                    "metrics": result,
+                    "verdict": verdict,
+                    "reason": reason,
+                })
+
+                metrics = {k: result.get(k, "N/A") for k in
+                           ["total_trades", "profit_ratio", "win_rate",
+                            "sharpe_ratio", "max_drawdown"]}
+                lines = [f"Backtest result for [{strategy_type}]:",
+                         f"  Total trades: {metrics['total_trades']}"]
+                for k, v in metrics.items():
+                    if k != "total_trades":
+                        lines.append(f"  {k}: {v}")
+                lines.append(f"  Verdict: {verdict}")
+                if reason:
+                    lines.append(f"  Reason: {reason}")
+
+                logger.info(
+                    "Backtest result for %s: sharpe=%.2f trades=%d verdict=%s",
+                    strategy_type, result.get("sharpe_ratio", 0),
+                    result.get("total_trades", 0), verdict,
+                )
+                return {"output": "\n".join(lines), "intermediate_steps": []}
+
+        # Non-backtest commands → use the LLM agent as before
+        return super().run(input_text)
 
     @staticmethod
     def _evaluate_metrics(metrics: Dict[str, Any]) -> tuple:

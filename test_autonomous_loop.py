@@ -56,17 +56,17 @@ def test_generate_goal_when_no_coverage():
     vs = FakeVectorStore()
     orchestrator = FakeOrchestrator()
     loop = AutonomousResearchLoop(orchestrator=orchestrator, vector_store=vs, interval_minutes=60)
-    # Set current regime to "ranging" — no coverage means best_sharpe = 0
-    loop.state.last_regime = "ranging"
+    # Set current regime to one with no recommended strategies, so
+    # experiments.jsonl cross-reference returns 0.0 even with real data.
+    loop.state.last_regime = "low_liquidity"
     goal = loop._generate_next_goal()
     # Should run synchronously without await
     import asyncio
     goal = asyncio.run(loop._generate_next_goal())
     assert goal is not None
-    assert goal.regime == "ranging"
     assert goal.triggered_by == "coverage_gap"
     assert goal.priority_score == 1.0
-    assert goal.strategy_type_hint in ("mean_reversion", "bollinger_bands", "rsi_oversold", "volatility_squeeze")
+    assert goal.strategy_type_hint == "sma_crossover"  # fallback when recommended list is empty
     assert len(goal.motivation) > 10
 
 

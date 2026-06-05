@@ -2,7 +2,16 @@
 
 Modular crypto trading bot with 7 LangGraph ReAct agents, Freqtrade backtesting, ChromaDB strategy memory, and a real-time Web UI.
 
-**Latest updates (June 2026 — v11: 3 External Data API Integrations + Shared Infrastructure):**
+**Latest updates (June 2026 — v12: LLM-Free Backtesting + Experiment-Backed Metrics + Coverage Gaps from Past Results):**
+
+### v12 Fixes — LLM Reliability & Metric Extraction
+- **LLM-Free Backtesting** (`agents/backtester.py`) — BacktesterAgent `run()` override bypasses the LLM for `backtest` commands, calling `BacktestEngine` directly. The LLM is only used for non-backtest operations (hyperopt, WFV, compare). Eliminates the "LLM talks about backtesting instead of doing it" problem at the architecture level.
+- **Experiment-Backed Metric Extraction** (`orchestration/hermes.py`) — `_extract_metrics()` reads `workspace/experiments.jsonl` as primary source, falling back to backtester `_iteration_history`. No more `Sharpe=0.00` when past experiments exist for a strategy type.
+- **Coverage Gaps from Past Experiments** (`orchestration/autonomous_loop.py`) — `_compute_coverage_gaps()` cross-references experiments.jsonl via `REGIME_STRATEGY_MAP`. `strong_downtrend` now correctly reports `best=-0.11` instead of `best=0.00`. Fixed all 6 regimes (was missing `strong_downtrend`).
+- **Fixed Strategy File Cleanup Race** (`backtesting/engine.py`) — Moved cleanup of old strategy files to AFTER the Freqtrade subprocess completes, preventing `FileNotFoundError` in Freqtrade's backtest caching.
+- **Lazy Event Loop Resolution** (`api/event_bus.py`) — `emit()` retries `get_running_loop()` on each call instead of only at patch time. Fixes Web UI research tab not updating when `monkey_patch_hermes` is called before the event loop starts.
+- **Increased Max Research Iterations** — Changed from 3 to 10, with early exit on convergence.
+- **Full test suite**: 590 passed, 3 xpassed, 0 failures.
 
 ### Core Infrastructure
 - **DeepSeek Chat API** — migrated from OpenRouter to direct DeepSeek API (`api.deepseek.com/v1`, model `deepseek-chat`)
@@ -245,12 +254,12 @@ graph TD
 | **StrategyConcepts** | `data/strategy_concepts.py` | 10 structured concepts with regime mappings |
 | **AnalystAgent** | `agents/analyst.py` | Market analysis with live data tools |
 | **StrategistAgent** | `agents/strategist.py` | 4 tools: strategy design (generate, concepts, params, research) |
-| **BacktesterAgent** | `agents/backtester.py` | 7 tools: backtesting execution (run, hyperopt, WFV, blind search, compare, config, data) |
+| **BacktesterAgent** | `agents/backtester.py` | 7 tools: backtesting execution (run, hyperopt, WFV, blind search, compare, config, data). `run()` override bypasses LLM for `backtest` commands — calls engine directly |
 | **IterationTrackerAgent** | `agents/iteration_tracker.py` | 4 tools: strategy memory (best, history, store result, store insight) |
 | **ResearcherAgent** | `agents/researcher.py` | Web search (Tavily + DDG fallback), paper reading, concept-mapped strategy specs, CoinGecko fundamentals |
 | **RiskManagerAgent** | `agents/risk_manager.py` | Risk metrics + go/no-go verdict |
 | **MemoryCuratorAgent** | `agents/curator.py` | Cross-session memory retrieval from ChromaDB |
-| **HermesOrchestrator** | `orchestration/hermes.py` | Multi-agent LangGraph orchestration + outer research loop |
+| **HermesOrchestrator** | `orchestration/hermes.py` | Multi-agent LangGraph orchestration + outer research loop. `_extract_metrics()` reads experiments.jsonl as primary metric source, then falls back to agent iteration history |
 | **LangGraph Graph** | `orchestration/graph.py` | State-machine orchestration with 4 cycles |
 | **SignalFactory** | `backtesting/signal_factory.py` | 11 fast vectorized signal generators matching Freqtrade templates |
 | **CPCVValidator** | `backtesting/cpcv_validator.py` | Combinatorial Purged Cross-Validation (C(n,k) paths) |
@@ -500,28 +509,17 @@ The strategist supports 11 strategy types:
 ## Running Tests
 
 ```bash
-# Existing tests (v6 + v7)
-python -m pytest test_phase2.py test_sentiment.py test_patterns.py test_regime.py -v
-python test_experiment_tracker.py
-python test_walk_forward.py
+# Regression tests (32 tests — covers all fixed bugs and core functionality)
+python -m pytest tests/test_regression_live_run.py -v
 
-# Anti-overfitting tests (87 tests)
-python -m pytest test_data_split.py test_blind_search.py test_oos_validator.py -v
-python -m pytest test_deployment_pipeline.py test_kelly_conservative.py -v
-python -m pytest test_synthetic_validator.py test_validation_mode.py -v
-python -m pytest test_performance_monitor.py -v
+# Autonomous loop tests
+python -m pytest test_autonomous_loop.py -v
 
-# v9 — Transaction costs, Tavily, SQLite (38 tests)
-python -m pytest test_transaction_costs.py test_tavily_search.py test_database.py -v
-
-# All tests
-python -m pytest test_data_split.py test_blind_search.py test_oos_validator.py \
-  test_deployment_pipeline.py test_kelly_conservative.py \
-  test_synthetic_validator.py test_validation_mode.py \
-  test_performance_monitor.py test_transaction_costs.py \
-  test_tavily_search.py test_database.py \
-  test_phase2.py test_sentiment.py test_patterns.py test_regime.py -v
+# Full test suite (590+ tests)
+python -m pytest
 ```
+
+> Suite includes: regression (32), autonomous loop (6), validation mode (12), phase 2, sentiment, patterns, regime, experiment tracker, walk-forward, data split, blind search, OOS validator, deployment pipeline, Kelly/conservative sizing, synthetic validator, performance monitor, transaction costs, Tavily search, SQLite/database — **590 passed, 3 xpassed, 0 failures** (v12).
 
 ## How It Works
 

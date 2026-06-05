@@ -1,8 +1,11 @@
 """Hermes-inspired multi-agent orchestrator with a Kanban task board."""
 
+import json
 import logging
+import re
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from orchestration.board import TaskBoard
@@ -495,7 +498,13 @@ class HermesOrchestrator:
     # ------------------------------------------------------------------
 
     def _extract_metrics(self, output: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract best available metrics from the research output."""
+        """Extract best available metrics from the research output.
+
+        Priority:
+        1. Top-level keys in the output dict (set by graph finalize)
+        2. Most recent experiment in workspace/experiments.jsonl for this strategy type
+        3. Backtester agent's in-memory _iteration_history (LLM tool calls)
+        """
         metrics = {
             "sharpe_ratio": output.get("sharpe_ratio", 0),
             "win_rate": output.get("win_rate", 0),
@@ -507,7 +516,45 @@ class HermesOrchestrator:
         if metrics["total_trades"]:
             return metrics
 
-        # Search backtester's iteration history for raw (parsed) metrics
+        # ── Attempt to read from experiments.jsonl ──
+        # Parse strategy type from goal text, e.g.:
+        # "Coverage gap: ... Researching multi_timeframe."
+        strategy_type = None
+        goal_text = output.get("goal", "")
+        m = re.search(r'[Rr]esearching\s+(\w+)', goal_text)
+        if m:
+            strategy_type = m.group(1)
+
+        if strategy_type:
+            exp_path = Path("./workspace/experiments.jsonl")
+            if exp_path.exists():
+                try:
+                    with open(exp_path) as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                data = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+                            if data.get("strategy_type") == strategy_type:
+                                total = data.get("total_trades", 0)
+                                if total:
+                                    metrics = {
+                                        "sharpe_ratio": data.get("sharpe", 0),
+                                        "win_rate": data.get("win_rate", 0),
+                                        "max_drawdown": data.get("max_drawdown", 0),
+                                        "profit_ratio": data.get("profit_factor", data.get("sharpe", 0) * 0.01),
+                                        "total_trades": total,
+                                    }
+                except Exception as exc:
+                    logger.debug("Failed to read experiments.jsonl: %s", exc)
+
+        if metrics["total_trades"]:
+            return metrics
+
+        # ── Fall back to backtester's in-memory iteration history ──
         backtester = self.agents.get("backtester")
         if backtester and hasattr(backtester, "_iteration_history") and backtester._iteration_history:
             best = max(

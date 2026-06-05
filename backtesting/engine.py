@@ -635,11 +635,6 @@ class BacktestEngine:
         strategy_dir.mkdir(parents=True, exist_ok=True)
         strategy_path = strategy_dir / f"{strategy_name}.py"
         strategy_path.write_text(strategy_code, encoding="utf-8")
-        # Clean up old generated strategy files
-        for f in strategy_dir.glob("Strategy_*.py"):
-            if f.name != strategy_path.name:
-                try: f.unlink()
-                except Exception: pass
 
         # 2a. Validate the generated Python is syntactically valid
         self._validate_strategy(strategy_code)
@@ -652,7 +647,14 @@ class BacktestEngine:
         # 3. Run via subprocess
         result = self._run_freqtrade_backtest(config, strategy_path)
 
-        # 4. Parse result JSON
+        # 4. Clean up OLD generated strategy files (after subprocess completes
+        #    so Freqtrade's backtest caching can still read strategy.__file__)
+        for f in strategy_dir.glob("Strategy_*.py"):
+            if f.name != strategy_path.name:
+                try: f.unlink()
+                except Exception: pass
+
+        # 5. Parse result JSON
         return self._parse_results(result, strategy_name=strategy_name)
 
     def get_performance_metrics(self, trades_df: pd.DataFrame) -> Dict[str, Any]:

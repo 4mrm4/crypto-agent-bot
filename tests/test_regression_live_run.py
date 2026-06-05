@@ -554,3 +554,61 @@ def test_regression_bayesian_kelly_conservative_parses_json_string():
     assert result.get("error") is not True, (
         f"Should parse JSON string, got: {result}"
     )
+
+
+def test_regression_extract_metrics_reads_experiments_jsonl():
+    """_extract_metrics must find real metrics from experiments.jsonl
+    without relying on LLM tool invocation. The experiments file has
+    70+ sma_crossover entries with real trades — this path must work."""
+    from orchestration.hermes import HermesOrchestrator
+    from pathlib import Path
+
+    exp_path = Path("./workspace/experiments.jsonl")
+    assert exp_path.exists(), "experiments.jsonl must exist for regression test"
+    has_sma = False
+    with open(exp_path) as f:
+        for line in f:
+            if '"strategy_type": "sma_crossover"' in line:
+                has_sma = True
+                break
+    assert has_sma, "experiments file must have sma_crossover entries"
+
+    orch = HermesOrchestrator(agents={})
+    metrics = orch._extract_metrics({
+        "goal": "Coverage gap: strong_downtrend has no strategy with Sharpe > 0.8. "
+                "Researching sma_crossover",
+    })
+
+    assert metrics["total_trades"] > 0, (
+        f"Should find sma_crossover in experiments.jsonl, got total_trades={metrics['total_trades']}"
+    )
+    assert metrics["sharpe_ratio"] != 0, (
+        f"Should return real Sharpe from experiments file, got sharpe_ratio={metrics['sharpe_ratio']}"
+    )
+    assert metrics["win_rate"] > 0, (
+        f"Should return real win_rate from experiments file, got win_rate={metrics['win_rate']}"
+    )
+
+
+def test_regression_backtester_run_bypasses_llm():
+    """BacktesterAgent.run() must execute backtest commands directly
+    without the LLM. The output must contain real metrics (trades, sharpe)
+    from the engine, not LLM-generated text."""
+    from agents.backtester import BacktesterAgent
+
+    agent = BacktesterAgent()
+    result = agent.run(
+        'backtest strategy_type=sma_crossover params={"fast_ma": 10, "slow_ma": 30}'
+    )
+
+    output = result.get("output", "")
+    assert "Error" not in output, f"Backtest should not fail, got: {output[:200]}"
+    assert "Backtest result for" in output, (
+        f"Output should contain result header, got: {output[:200]}"
+    )
+    assert "Total trades:" in output, (
+        f"Output should contain trade count, got: {output[:200]}"
+    )
+    assert "Verdict:" in output, (
+        f"Output should contain a verdict, got: {output[:200]}"
+    )
