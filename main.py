@@ -129,6 +129,8 @@ def _run_autonomous(ui: bool = False):
 
     from agents.analyst import AnalystAgent
     from agents.strategist import StrategistAgent
+    from agents.backtester import BacktesterAgent
+    from agents.iteration_tracker import IterationTrackerAgent
     from agents.risk_manager import RiskManagerAgent
     from agents.curator import CuratorAgent
     from agents.researcher import ResearcherAgent
@@ -148,6 +150,8 @@ def _run_autonomous(ui: bool = False):
     agents = {
         "analyst": AnalystAgent(),
         "strategist": StrategistAgent(),
+        "backtester": BacktesterAgent(),
+        "iteration_tracker": IterationTrackerAgent(),
         "risk_manager": RiskManagerAgent(),
         "curator": CuratorAgent(),
         "researcher": ResearcherAgent(),
