@@ -41,31 +41,31 @@ def main():
 
 
 def test_sanitize_timerange_slash_format():
-    from backtesting.engine import _sanitize_timerange
-    assert _sanitize_timerange("2024-01-01/2024-12-31") == "20240101-20241231"
+    from backtesting.timerange_utils import sanitize_timerange
+    assert sanitize_timerange("2024-01-01/2024-12-31") == "20240101-20241231"
 
 
 def test_sanitize_timerange_year_only():
-    from backtesting.engine import _sanitize_timerange
-    result = _sanitize_timerange("2024")
+    from backtesting.timerange_utils import sanitize_timerange
+    result = sanitize_timerange("2024")
     assert result.startswith("2024")
 
 
 def test_sanitize_timerange_already_correct():
-    from backtesting.engine import _sanitize_timerange
-    assert _sanitize_timerange("20240101-20241231") == "20240101-20241231"
+    from backtesting.timerange_utils import sanitize_timerange
+    assert sanitize_timerange("20240101-20241231") == "20240101-20241231"
 
 
 def test_sanitize_timerange_open_ended():
-    from backtesting.engine import _sanitize_timerange
-    result = _sanitize_timerange("20260427-")
+    from backtesting.timerange_utils import sanitize_timerange
+    result = sanitize_timerange("20260427-")
     assert result == "20260427-"
 
 
 def test_sanitize_timerange_iso_slash_variants():
-    from backtesting.engine import _sanitize_timerange
-    assert _sanitize_timerange("2024-06-01/2024-09-01") == "20240601-20240901"
-    assert _sanitize_timerange("2023-01-01/2023-12-31") == "20230101-20231231"
+    from backtesting.timerange_utils import sanitize_timerange
+    assert sanitize_timerange("2024-06-01/2024-09-01") == "20240601-20240901"
+    assert sanitize_timerange("2023-01-01/2023-12-31") == "20230101-20231231"
 
 
 def test_strategy_syntax_validation_catches_bad_python():

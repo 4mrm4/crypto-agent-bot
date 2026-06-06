@@ -95,7 +95,7 @@ class BlindParameterSearch:
         self, strategy_type: str, n: int
     ) -> List[Dict[str, Any]]:
         """Fallback: generate diverse parameter variants deterministically."""
-        from backtesting.engine import STRATEGY_REGISTRY
+        from backtesting.strategy_templates import STRATEGY_REGISTRY
         registry = STRATEGY_REGISTRY.get(strategy_type, {})
         defaults = dict(registry.get("default_params", {}))
 

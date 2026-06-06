@@ -94,7 +94,7 @@ class OOSValidator:
         research_win_rate = float(research_metrics.get("win_rate", 0))
 
         # ── Net-of-costs metrics ──
-        from backtesting.engine import TransactionCostModel
+        from backtesting.cost_model import TransactionCostModel
         cost_model = TransactionCostModel.from_settings()
         profit = float(holdout_result.get("profit_ratio", 0))
         avg_return = profit / max(oos_trades, 1)

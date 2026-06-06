@@ -1,4 +1,10 @@
-"""Vector memory store using ChromaDB for persistent RAG-backed agent memory."""
+"""Vector memory store using ChromaDB for persistent RAG-backed agent memory.
+
+Stores strategy insights, deployment approvals, and live performance
+metrics as vector-indexed documents. Provides semantic similarity search
+for the research agent and tracks deployable strategies across approval
+lifecycle stages.
+"""
 
 import logging
 from typing import Any, Dict, List, Optional
@@ -34,7 +40,7 @@ def _get_embedding_function():
 class VectorStore:
     """ChromaDB-based persistent vector store for agent memories."""
 
-    def __init__(self, collection_name: str = "agent_memory", persist_dir: Optional[str] = None):
+    def __init__(self, collection_name: str = "agent_memory", persist_dir: Optional[str] = None) -> None:
         self.persist_dir = persist_dir or settings.CHROMA_DB_PATH
         self.collection_name = collection_name
         self._client = None
@@ -57,7 +63,7 @@ class VectorStore:
         )
 
     @property
-    def collection(self):
+    def collection(self) -> Any:
         if self._collection is None:
             self._init_db()
         return self._collection
@@ -67,7 +73,7 @@ class VectorStore:
         text: str,
         metadata: Optional[Dict[str, Any]] = None,
         doc_id: Optional[str] = None,
-    ):
+    ) -> None:
         """Store a piece of insight text into vector memory."""
         metadata = metadata or {}
         doc_id = doc_id or str(hash(text))[:16]
@@ -99,7 +105,7 @@ class VectorStore:
     def count(self) -> int:
         return self.collection.count()
 
-    def clear(self):
+    def clear(self) -> None:
         """Delete all documents in the collection."""
         self.collection.delete(where={})
         logger.info("Cleared collection: %s", self.collection_name)
@@ -202,7 +208,7 @@ class VectorStore:
                 filtered.append(r)
         return filtered[:k]
 
-    def tag_as_deployable(self, strategy_id: str, approval_result: dict):
+    def tag_as_deployable(self, strategy_id: str, approval_result: dict) -> None:
         """Tag a strategy as deployable in ChromaDB."""
         import uuid
         text = f"DEPLOYABLE: {strategy_id}"
@@ -225,7 +231,7 @@ class VectorStore:
             results = self.query_similar("DEPLOYABLE", k=25)
         return [r for r in results if r.get("metadata", {}).get("deployable", False)]
 
-    def update_live_performance(self, strategy_id: str, audit_metrics: dict):
+    def update_live_performance(self, strategy_id: str, audit_metrics: dict) -> None:
         """Update rolling live performance for a strategy in ChromaDB."""
         import uuid
         metadata = {

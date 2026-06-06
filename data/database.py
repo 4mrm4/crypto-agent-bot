@@ -19,7 +19,7 @@ import time
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Iterator, Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class TradingDatabase:
                 cls._instances[key] = instance
             return cls._instances[key]
 
-    def __init__(self, db_path=None, legacy_backup=True):
+    def __init__(self, db_path=None, legacy_backup=True) -> None:
         if getattr(self, "_initialized", False):
             return
         self._initialized = True
@@ -194,7 +194,7 @@ class TradingDatabase:
             conn.close()
 
     @contextmanager
-    def transaction(self):
+    def transaction(self) -> Iterator:
         """Context manager for safe transactions.
 
         Usage:
@@ -637,7 +637,7 @@ class TradingDatabase:
             ).fetchone()
             return result[0]
 
-    def clear_all(self):
+    def clear_all(self) -> None:
         """Clear all data (for testing)."""
         with self.transaction() as conn:
             for table in ["trades", "experiments", "oos_results", "pipeline_results", "validation_trades", "_migrations"]:
@@ -664,7 +664,7 @@ class TradingDatabase:
 
     def set_cached(
         self, cache_key: str, data: dict, source: str, ttl_seconds: int
-    ):
+    ) -> None:
         """Insert or replace a cached entry."""
         with self.transaction() as conn:
             conn.execute(

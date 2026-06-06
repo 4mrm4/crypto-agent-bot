@@ -24,7 +24,7 @@ class TestTransactionCostModel:
     """Verify the cost model dataclass exists and has correct defaults."""
 
     def test_model_exists_and_importable(self):
-        from backtesting.engine import TransactionCostModel
+        from backtesting.cost_model import TransactionCostModel
         model = TransactionCostModel()
         assert model.maker_fee == 0.001
         assert model.taker_fee == 0.00075
@@ -32,7 +32,7 @@ class TestTransactionCostModel:
         assert model.slippage_model == "fixed"
 
     def test_model_from_settings(self):
-        from backtesting.engine import TransactionCostModel
+        from backtesting.cost_model import TransactionCostModel
         # Test construction from config values
         model = TransactionCostModel(
             maker_fee=float(settings.MAKER_FEE),
@@ -49,7 +49,7 @@ class TestTransactionCostComputation:
 
     def test_high_trade_count_erodes_alpha(self):
         """A strategy with 200 trades/year at 0.1% fee needs gross Sharpe >= ~0.6 for net Sharpe >= 0."""
-        from backtesting.engine import TransactionCostModel
+        from backtesting.cost_model import TransactionCostModel
         import numpy as np
 
         np.random.seed(42)
@@ -71,7 +71,7 @@ class TestTransactionCostComputation:
 
     def test_cost_drag_increases_with_trade_frequency(self):
         """More trades should mean more cost drag for the same gross Sharpe."""
-        from backtesting.engine import TransactionCostModel
+        from backtesting.cost_model import TransactionCostModel
         import numpy as np
 
         np.random.seed(42)
@@ -95,7 +95,7 @@ class TestTransactionCostComputation:
 
     def test_zero_costs_no_drag(self):
         """With all costs at 0, net should equal gross."""
-        from backtesting.engine import TransactionCostModel
+        from backtesting.cost_model import TransactionCostModel
 
         model = TransactionCostModel(maker_fee=0.0, taker_fee=0.0, slippage_pct=0.0)
         assert model.total_cost_per_trade() == 0.0
@@ -164,7 +164,7 @@ class TestOOSNetSharpe:
 
     def test_net_sharpe_lower_than_oos_sharpe(self):
         """After applying cost model, net Sharpe should be lower than gross OOS Sharpe."""
-        from backtesting.engine import TransactionCostModel
+        from backtesting.cost_model import TransactionCostModel
         from backtesting.oos_validator import OOSResult
 
         model = TransactionCostModel(maker_fee=0.001, taker_fee=0.001, slippage_pct=0.0005)

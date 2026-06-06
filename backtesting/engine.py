@@ -6,6 +6,13 @@ Freqtrade CLI, and parses results into pandas DataFrames.
 Includes a vectorized pre-filter (SignalFactory + FastMetrics) that runs
 before the Freqtrade subprocess to reject obviously worthless strategies
 in <1 second.
+
+Architecture note -- extracted sibling modules (re-exported for compat):
+  TransactionCostModel -> backtesting/cost_model.py
+  sanitize_timerange    -> backtesting/timerange_utils.py
+  Strategy templates   -> backtesting/strategy_templates.py
+  SignalFactory         -> backtesting/signal_factory.py
+  DataSplit             -> backtesting/data_split.py
 """
 
 import ast
@@ -13,493 +20,37 @@ import json
 import logging
 import uuid
 import os
-import re
 import shutil
 import string
 import subprocess
-import tempfile
-import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
 from config import settings
 from backtesting.data_split import DATA_SPLIT
 from backtesting.signal_factory import FastMetrics, SignalFactory
+from backtesting.cost_model import TransactionCostModel
+from backtesting.timerange_utils import sanitize_timerange
+from backtesting.strategy_templates import (
+    STRATEGY_TEMPLATE,
+    SMA_CROSSOVER_INDICATOR, SMA_CROSSOVER_ENTRY, SMA_CROSSOVER_EXIT,
+    MACD_CROSSOVER_INDICATOR, MACD_CROSSOVER_ENTRY, MACD_CROSSOVER_EXIT,
+    RSI_INDICATOR, RSI_OVERSOLD_ENTRY, RSI_OVERSOLD_EXIT,
+    BB_INDICATOR, BB_ENTRY, BB_EXIT,
+    SMA_RSI_INDICATOR, SMA_RSI_ENTRY, SMA_RSI_EXIT,
+    STRATEGY_REGISTRY,
+)
 
 logger = logging.getLogger(__name__)
-
-
-# ── Transaction cost model ──
-
-@dataclass
-class TransactionCostModel:
-    """Realistic transaction cost assumptions for backtest fidelity.
-
-    Defaults reflect Binance spot tier-0 (30-day volume < 1M BTC):
-      - maker_fee:   0.10%   (limit order, adds liquidity)
-      - taker_fee:   0.075%  (market order, removes liquidity) — note: Binance spot
-                             taker is typically higher than maker; this 0.075 is a
-                             blended estimate for the bot's typical execution mix
-      - slippage_pct: 0.05%  (fixed estimate — scales with order size / volume)
-      - slippage_model: "fixed" (future: "volume_scaled")
-    """
-    maker_fee: float = 0.001       # 0.10%
-    taker_fee: float = 0.00075     # 0.075%
-    slippage_pct: float = 0.0005   # 0.05%
-    slippage_model: Literal["fixed", "volume_scaled"] = "fixed"
-
-    def total_cost_per_trade(self) -> float:
-        """Combined cost for a round-trip trade (entry + exit).
-
-        Assumes entry at taker rate, exit at maker rate (typical for signal-based bots
-        that need immediate entry but can set limit exits).
-        """
-        return self.taker_fee + self.maker_fee + self.slippage_pct * 2
-
-    def annual_cost_drag(self, trades_per_year: int) -> float:
-        """Estimate of total cost drag as a fraction of notional per year."""
-        return trades_per_year * self.total_cost_per_trade()
-
-    def to_freqtrade_fee(self) -> float:
-        """Return a single fee rate for Freqtrade's ``--fee`` flag.
-
-        Freqtrade applies this as a flat per-trade fee (both entry and exit).
-        We use the blended rate (max of maker/taker + slippage) as a conservative
-        simplification.
-        """
-        return max(self.maker_fee, self.taker_fee) + self.slippage_pct
-
-    @classmethod
-    def from_settings(cls) -> "TransactionCostModel":
-        """Construct from config/settings."""
-        return cls(
-            maker_fee=settings.MAKER_FEE,
-            taker_fee=settings.TAKER_FEE,
-            slippage_pct=settings.SLIPPAGE_PCT,
-            slippage_model=settings.SLIPPAGE_MODEL,  # type: ignore
-        )
-
-    def net_sharpe(self, gross_sharpe: float, avg_return_per_trade: float) -> float:
-        """Estimate net Sharpe after cost drag.
-
-        This is a linear approximation: costs reduce returns directly.
-        For a strategy with consistent returns, net Sharpe scales roughly as:
-          net = gross * (1 - cost_per_trade / avg_return_per_trade)
-        """
-        cost_per_trade = self.total_cost_per_trade()
-        if avg_return_per_trade <= 0 or cost_per_trade <= 0:
-            return gross_sharpe
-        return gross_sharpe * max(0, 1 - cost_per_trade / avg_return_per_trade)
-
-
-# ── Timerange sanitizer ──
-
-def _sanitize_timerange(raw: str) -> str:
-    """Convert any LLM-invented date format to freqtrade's ``YYYYMMDD-YYYYMMDD``.
-
-    Handles all common variants:
-      "2024-01-01/2024-12-31" -> "20240101-20241231"
-      "2024-01-01-2024-12-31" -> "20240101-20241231"
-      "2024-01-01"            -> "20240101-"
-      "20240101-20241231"     -> unchanged (already valid)
-      "20240101-"             -> unchanged
-      "2024"                  -> "2024"
-    """
-    raw = raw.strip()
-    if not raw:
-        return "20210101-"
-    # Separate by / or whitespace first, then by dash
-    # Extract all digit groups: "2024-01-01/2024-12-31" -> [2024,01,01,2024,12,31]
-    groups = re.findall(r'\d+', raw)
-    if not groups:
-        return "20210101-"
-    # If there's a "/" or "-" separator between dates, groups are split into two dates
-    # Detect: if groups have 6+ entries, treat as two dates of 3 groups each (YYYY MM DD)
-    if len(groups) >= 6:
-        # Two dates: first 3 groups = date1, next 3 = date2
-        d1 = "".join(groups[:3])[:8]
-        d2 = "".join(groups[3:6])[:8]
-        return f"{d1}-{d2}"
-    if len(groups) == 5:
-        # Two dates, first has 3 groups, second has 2 (YYYY MM -> YYYYMM)
-        d1 = "".join(groups[:3])[:8]
-        d2 = "".join(groups[3:])[:8]
-        return f"{d1}-{d2}"
-    if len(groups) == 4:
-        # Could be YYYYMMDD-YYYYMMDD split, or YYYY MM DD YYYY
-        # If any group has length 2, it's likely YYYY MM DD YYYY
-        if any(len(g) <= 2 for g in groups):
-            d1 = "".join(groups[:2])[:8]
-            d2 = "".join(groups[2:])[:8]
-            return f"{d1}-{d2}"
-        # Otherwise it's already two 8-digit dates
-        return f"{groups[0][:8]}-{groups[1][:8]}"
-    if len(groups) == 3:
-        # Single date in YYYY MM DD format
-        d = "".join(groups)[:8]
-        return f"{d}-"
-    if len(groups) == 2:
-        # Could be YYYYMMDD-YYYYMMDD without hyphen, or YYYY MM alone
-        if all(len(g) == 8 for g in groups):
-            return f"{groups[0][:8]}-{groups[1][:8]}"
-        # Two groups: likely YYYY and MM -> pad
-        d = "".join(groups)[:8]
-        return f"{d}-" if len(d) == 8 else d
-    # Single group: "20240101" or "2024" or "20240101-"
-    d = groups[0][:8]
-    if len(d) == 8 and raw.endswith('-'):
-        return f"{d}-"
-    return f"{d}-" if len(d) == 8 else d
-
-# ── Strategy template injected as a temp .py file ──
-
-STRATEGY_TEMPLATE = '''"""
-Auto-generated strategy by crypto_agent_bot.
-Do not edit manually — generated on $timestamp.
-"""
-from freqtrade.strategy import IStrategy, IntParameter
-import pandas as pd
-import talib.abstract as ta
-
-
-class $strategy_name(IStrategy):
-    # --- User-defined parameters (set by agent) ---
-    timeframe = "$timeframe"
-    minimal_roi = $minimal_roi
-    stoploss = $stoploss
-    trailing_stop = $trailing_stop
-    startup_candle_count = $startup_candle_count
-    process_only_new_candles = True
-    use_exit_signal = True
-    can_short = False
-
-    # --- Indicator parameters ---
-$indicator_params_block
-    def populate_indicators(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
-        # Coerce string-typed columns upfront (covers PyArrow backend which stores
-        # strings as pd.ArrowDtype(pa.string()), not caught by simple 'string' check)
-        import pandas.api.types as ptypes
-        for col in dataframe.columns:
-            if ptypes.is_string_dtype(dataframe[col]):
-                dataframe[col] = pd.to_numeric(dataframe[col], errors='coerce')
-        $indicator_code
-        # Second pass: catch any new columns created by indicator code
-        for col in dataframe.columns:
-            if ptypes.is_string_dtype(dataframe[col]):
-                dataframe[col] = pd.to_numeric(dataframe[col], errors='coerce')
-        return dataframe
-
-    def populate_entry_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
-        dataframe.loc[
-            (
-                $entry_condition
-            ),
-            "enter_long"] = 1
-        return dataframe
-
-    def populate_exit_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
-        dataframe.loc[
-            (
-                $exit_condition
-            ),
-            "exit_long"] = 1
-        return dataframe
-'''
-
-
-# ── Default SMA crossover indicator/entry/exit snippets ──
-
-SMA_CROSSOVER_INDICATOR = """
-        dataframe['fast_ma'] = ta.SMA(dataframe, timeperiod=self.fast_ma.value)
-        dataframe['slow_ma'] = ta.SMA(dataframe, timeperiod=self.slow_ma.value)
-"""
-
-SMA_CROSSOVER_ENTRY = """
-        (dataframe['fast_ma'].shift(1) <= dataframe['slow_ma'].shift(1)) &
-        (dataframe['fast_ma'] > dataframe['slow_ma'])
-"""
-
-SMA_CROSSOVER_EXIT = """
-        (dataframe['fast_ma'].shift(1) >= dataframe['slow_ma'].shift(1)) &
-        (dataframe['fast_ma'] < dataframe['slow_ma'])
-"""
-
-# ── MACD Crossover snippets ──
-
-MACD_CROSSOVER_INDICATOR = """
-        macd_data = ta.MACD(
-            dataframe,
-            fastperiod=self.macd_fast.value,
-            slowperiod=self.macd_slow.value,
-            signalperiod=self.macd_signal.value,
-        )
-        dataframe['macd'] = macd_data['macd'].astype(float)
-        dataframe['macdsignal'] = macd_data['macdsignal'].astype(float)
-        dataframe['macd_hist'] = (dataframe['macd'] - dataframe['macdsignal']).astype(float)
-"""
-
-MACD_CROSSOVER_ENTRY = """
-        (dataframe['macd_hist'].shift(1) <= 0) & (dataframe['macd_hist'] > 0)
-"""
-
-MACD_CROSSOVER_EXIT = """
-        (dataframe['macd_hist'].shift(1) >= 0) & (dataframe['macd_hist'] < 0)
-"""
-
-# ── RSI Oversold/Overbought snippets ──
-
-RSI_INDICATOR = """
-        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=self.rsi_period.value)
-"""
-
-RSI_OVERSOLD_ENTRY = """
-        (dataframe['rsi'] < self.rsi_buy_threshold.value) & (dataframe['rsi'].shift(1) >= self.rsi_buy_threshold.value)
-"""
-
-RSI_OVERSOLD_EXIT = """
-        (dataframe['rsi'] > self.rsi_sell_threshold.value) & (dataframe['rsi'].shift(1) <= self.rsi_sell_threshold.value)
-"""
-
-# ── Bollinger Bands snippets ──
-
-BB_INDICATOR = """
-        upper, middle, lower = ta.BBANDS(
-            dataframe['close'].astype(float),
-            timeperiod=self.bb_period.value,
-            nbdevup=2.0,
-            nbdevdn=2.0,
-        )
-        dataframe['bb_upper'] = upper.astype(float)
-        dataframe['bb_middle'] = middle.astype(float)
-        dataframe['bb_lower'] = lower.astype(float)
-"""
-
-BB_ENTRY = """
-        (dataframe['close'] < dataframe['bb_lower']) & (dataframe['close'].shift(1) >= dataframe['bb_lower'].shift(1))
-"""
-
-BB_EXIT = """
-        (dataframe['close'] > dataframe['bb_upper']) & (dataframe['close'].shift(1) <= dataframe['bb_upper'].shift(1))
-"""
-
-# ── Combined SMA + RSI filter snippets ──
-
-SMA_RSI_INDICATOR = """
-        dataframe['fast_ma'] = ta.SMA(dataframe, timeperiod=self.fast_ma.value)
-        dataframe['slow_ma'] = ta.SMA(dataframe, timeperiod=self.slow_ma.value)
-        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=14)
-"""
-
-SMA_RSI_ENTRY = """
-        (dataframe['fast_ma'].shift(1) <= dataframe['slow_ma'].shift(1)) &
-        (dataframe['fast_ma'] > dataframe['slow_ma']) &
-        (dataframe['rsi'] > 30) & (dataframe['rsi'] < 70)
-"""
-
-SMA_RSI_EXIT = """
-        (dataframe['fast_ma'].shift(1) >= dataframe['slow_ma'].shift(1)) &
-        (dataframe['fast_ma'] < dataframe['slow_ma'])
-"""
-
-# ── Strategy registry: maps type to its snippets and defaults ──
-
-STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
-    "sma_crossover": {
-        "indicator_code": SMA_CROSSOVER_INDICATOR,
-        "entry_condition": SMA_CROSSOVER_ENTRY,
-        "exit_condition": SMA_CROSSOVER_EXIT,
-        "indicator_params_block": """
-    fast_ma = IntParameter(5, 50, default=$fast_ma, space="buy")
-    slow_ma = IntParameter(20, 200, default=$slow_ma, space="buy")
-""",
-        "default_params": {"fast_ma": 10, "slow_ma": 30, "startup_candle_count": 30},
-    },
-    "macd_crossover": {
-        "indicator_code": MACD_CROSSOVER_INDICATOR,
-        "entry_condition": MACD_CROSSOVER_ENTRY,
-        "exit_condition": MACD_CROSSOVER_EXIT,
-        "indicator_params_block": """
-    macd_fast = IntParameter(8, 20, default=12, space="buy")
-    macd_slow = IntParameter(20, 40, default=26, space="buy")
-    macd_signal = IntParameter(6, 14, default=9, space="buy")
-""",
-        "default_params": {"startup_candle_count": 33},
-    },
-    "rsi_oversold": {
-        "indicator_code": RSI_INDICATOR,
-        "entry_condition": RSI_OVERSOLD_ENTRY,
-        "exit_condition": RSI_OVERSOLD_EXIT,
-        "indicator_params_block": """
-    rsi_period = IntParameter(10, 21, default=14, space="buy")
-    rsi_buy_threshold = IntParameter(25, 35, default=30, space="buy")
-    rsi_sell_threshold = IntParameter(65, 80, default=70, space="sell")
-""",
-        "default_params": {"startup_candle_count": 20},
-    },
-    "bollinger_bands": {
-        "indicator_code": BB_INDICATOR,
-        "entry_condition": BB_ENTRY,
-        "exit_condition": BB_EXIT,
-        "indicator_params_block": """
-    bb_period = IntParameter(15, 30, default=20, space="buy")
-""",
-        "default_params": {"startup_candle_count": 26},
-    },
-    "combined_sma_rsi": {
-        "indicator_code": SMA_RSI_INDICATOR,
-        "entry_condition": SMA_RSI_ENTRY,
-        "exit_condition": SMA_RSI_EXIT,
-        "indicator_params_block": """
-    fast_ma = IntParameter(5, 50, default=$fast_ma, space="buy")
-    slow_ma = IntParameter(20, 200, default=$slow_ma, space="buy")
-""",
-        "default_params": {"fast_ma": 10, "slow_ma": 30, "startup_candle_count": 30},
-    },
-    "custom": {
-        "indicator_code": "",
-        "entry_condition": "",
-        "exit_condition": "",
-        "indicator_params_block": "",
-        "default_params": {"startup_candle_count": 20},
-    },
-
-    "momentum": {
-        "indicator_code": """
-        dataframe['roc'] = ta.ROC(dataframe, timeperiod=10)
-        dataframe['volume_ma'] = ta.SMA(dataframe['volume'], timeperiod=20)
-        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=14)
-    """,
-        "entry_condition": """
-        (dataframe['roc'] > 2.0) &
-        (dataframe['volume'] > dataframe['volume_ma'] * 1.5) &
-        (dataframe['rsi'] > 50) & (dataframe['rsi'] < 75)
-    """,
-        "exit_condition": """
-        (dataframe['roc'] < 0) | (dataframe['rsi'] > 75)
-    """,
-        "indicator_params_block": "",
-        "default_params": {"startup_candle_count": 25},
-    },
-
-    "breakout": {
-        "indicator_code": """
-        dataframe['highest_high'] = dataframe['high'].rolling(20).max().shift(1)
-        dataframe['volume_ma'] = ta.SMA(dataframe['volume'], timeperiod=20)
-        dataframe['atr'] = ta.ATR(dataframe, timeperiod=14)
-    """,
-        "entry_condition": """
-        (dataframe['close'] > dataframe['highest_high']) &
-        (dataframe['volume'] > dataframe['volume_ma'] * 1.3)
-    """,
-        "exit_condition": """
-        (dataframe['close'] < dataframe['highest_high'] - dataframe['atr'] * 2)
-    """,
-        "indicator_params_block": "",
-        "default_params": {"startup_candle_count": 25},
-    },
-
-    "mean_reversion": {
-        "indicator_code": """
-        bb_upper, bb_middle, bb_lower = ta.BBANDS(
-            dataframe['close'], timeperiod=20, nbdevup=2.0, nbdevdn=2.0)
-        dataframe['bb_upper'] = bb_upper.astype(float)
-        dataframe['bb_middle'] = bb_middle.astype(float)
-        dataframe['bb_lower'] = bb_lower.astype(float)
-        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=14)
-        dataframe['distance_from_mean'] = (dataframe['close'] - dataframe['bb_middle']) / dataframe['bb_middle']
-    """,
-        "entry_condition": """
-        (dataframe['close'] < dataframe['bb_lower']) &
-        (dataframe['rsi'] < 35) &
-        (dataframe['distance_from_mean'] < -0.02)
-    """,
-        "exit_condition": """
-        (dataframe['close'] > dataframe['bb_middle']) | (dataframe['rsi'] > 60)
-    """,
-        "indicator_params_block": "",
-        "default_params": {"startup_candle_count": 25},
-    },
-
-    "volatility_squeeze": {
-        "indicator_code": """
-        bb_upper, bb_middle, bb_lower = ta.BBANDS(
-            dataframe['close'], timeperiod=20, nbdevup=2.0, nbdevdn=2.0)
-        dataframe['bb_upper'] = bb_upper.astype(float)
-        dataframe['bb_middle'] = bb_middle.astype(float)
-        dataframe['bb_lower'] = bb_lower.astype(float)
-        dataframe['bb_width'] = (dataframe['bb_upper'] - dataframe['bb_lower']) / dataframe['bb_middle']
-        dataframe['bb_width_min'] = dataframe['bb_width'].rolling(120).min()
-        dataframe['macd'], dataframe['macdsignal'], _ = [
-            x.astype(float) for x in ta.MACD(dataframe['close'].astype(float))]
-    """,
-        "entry_condition": """
-        (dataframe['bb_width'] <= dataframe['bb_width_min'] * 1.05) &
-        (dataframe['macd'] > dataframe['macdsignal'])
-    """,
-        "exit_condition": """
-        (dataframe['bb_width'] > dataframe['bb_width_min'] * 3) |
-        (dataframe['macd'] < dataframe['macdsignal'])
-    """,
-        "indicator_params_block": "",
-        "default_params": {"startup_candle_count": 130},
-    },
-
-    "sentiment_driven": {
-        "indicator_code": """
-        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=14)
-        dataframe['sma50'] = ta.SMA(dataframe, timeperiod=50)
-    """,
-        "entry_condition": """
-        (dataframe['rsi'] < 40) &
-        (dataframe['close'] > dataframe['sma50'])
-    """,
-        "exit_condition": """
-        (dataframe['rsi'] > 65) | (dataframe['close'] < dataframe['sma50'])
-    """,
-        "indicator_params_block": "",
-        "default_params": {"startup_candle_count": 55},
-    },
-
-    "multi_timeframe": {
-        "indicator_code": """
-        # 1h timeframe indicators (primary)
-        dataframe['sma20'] = ta.SMA(dataframe, timeperiod=20)
-        dataframe['sma50'] = ta.SMA(dataframe, timeperiod=50)
-        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=14)
-        # Proxy for 4h trend: use longer SMAs on 1h data (approx 4x periods)
-        dataframe['sma80'] = ta.SMA(dataframe, timeperiod=80)
-        dataframe['sma200'] = ta.SMA(dataframe, timeperiod=200)
-        dataframe['adx'] = ta.ADX(dataframe, timeperiod=14)
-    """,
-        "entry_condition": """
-        # Short-term signal: 20 crosses above 50
-        (dataframe['sma20'].shift(1) <= dataframe['sma50'].shift(1)) &
-        (dataframe['sma20'] > dataframe['sma50']) &
-        # Long-term confirmation: price above 200 SMA (higher timeframe proxy)
-        (dataframe['close'] > dataframe['sma200']) &
-        # Trend strength: ADX > 20
-        (dataframe['adx'] > 20) &
-        # RSI not overbought
-        (dataframe['rsi'] > 40) & (dataframe['rsi'] < 70)
-    """,
-        "exit_condition": """
-        (dataframe['sma20'].shift(1) >= dataframe['sma50'].shift(1)) &
-        (dataframe['sma20'] < dataframe['sma50']) |
-        (dataframe['close'] < dataframe['sma200'])
-    """,
-        "indicator_params_block": "",
-        "default_params": {"startup_candle_count": 205},
-    },
-}
 
 
 class BacktestEngine:
     """Runs Freqtrade backtests by generating temporary strategy files."""
 
-    def __init__(self, ft_userdata_dir: str = "./ft_userdata"):
+    def __init__(self, ft_userdata_dir: str = "./ft_userdata") -> None:
         self.ft_userdata_dir = Path(ft_userdata_dir).resolve()
         self._config: Optional[Dict[str, Any]] = None
         # Locate freqtrade executable in the venv
@@ -595,7 +146,7 @@ class BacktestEngine:
     ) -> Dict[str, Any]:
         """Generate a strategy from *params*, run a Freqtrade backtest,
         and return parsed results."""
-        timerange = _sanitize_timerange(timerange)
+        timerange = sanitize_timerange(timerange)
 
         # Fast pre-filter: reject obviously worthless strategies before Freqtrade
         prefilter_result = self._run_prefilter(strategy_type, strategy_params or {},
@@ -695,9 +246,9 @@ class BacktestEngine:
             "avg_profit_loss": round(losses["profit_ratio"].mean(), 4) if not losses.empty else 0.0,
         }
 
-    def download_data(self, pairs: Optional[List[str]] = None, timerange: str = "20210101-"):
+    def download_data(self, pairs: Optional[List[str]] = None, timerange: str = "20210101-") -> None:
         """Download historical data via ``freqtrade download-data``."""
-        timerange = _sanitize_timerange(timerange)
+        timerange = sanitize_timerange(timerange)
 
         # HOLDOUT GUARD — never download holdout data for research
         if DATA_SPLIT.is_in_holdout(timerange):

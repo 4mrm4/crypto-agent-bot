@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 import httpx
 
 from config import settings
+from data.cache_client import CacheClient
 from data.database import TradingDatabase
 
 logger = logging.getLogger(__name__)
@@ -72,12 +73,13 @@ class SantimentFetcher:
         api_key: Optional[str] = None,
         enabled: Optional[bool] = None,
         health_tracker=None,
+        cache: Optional[CacheClient] = None,
     ):
         self._api_key = api_key or settings.SANTIMENT_API_KEY
         self._enabled = enabled if enabled is not None else settings.SANTIMENT_ENABLED
         self._health_tracker = health_tracker
         self._client: Optional[httpx.AsyncClient] = None
-        self._cache = TradingDatabase()
+        self._cache: CacheClient = cache if cache is not None else TradingDatabase()
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:

@@ -3,7 +3,6 @@ and data operations for trading strategies. Does NOT design strategies."""
 
 import json
 import logging
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from langchain_core.tools import Tool

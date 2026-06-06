@@ -1,4 +1,10 @@
-"""Hermes-inspired multi-agent orchestrator with a Kanban task board."""
+"""Hermes-inspired multi-agent orchestrator with a Kanban task board.
+
+Routes research tasks through a multi-agent loop (Strategist -> Backtester ->
+Curator -> Researcher) via a shared TaskBoard. Tracks iteration convergence
+and manages autonomous research/backtest cycles. Each agent operates as an
+independent LangGraph react_agent coordinated by the Kanban workflow.
+"""
 
 import json
 import logging
@@ -20,7 +26,7 @@ logger = logging.getLogger(__name__)
 class HermesOrchestrator:
     """Multi-agent orchestrator using a Kanban board and a LangGraph loop."""
 
-    def __init__(self, agents: Dict[str, Any], state_broker: Optional[StateBroker] = None):
+    def __init__(self, agents: Dict[str, Any], state_broker: Optional[StateBroker] = None) -> None:
         self._agent_capabilities: Dict[str, List[str]] = {
             "analyst": ["analysis", "market_research", "sentiment", "analyse", "market"],
             "strategist": ["strategy", "generate", "concept", "design"],

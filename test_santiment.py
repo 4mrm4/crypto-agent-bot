@@ -1,7 +1,8 @@
 """Tests for Santiment API integration."""
 from datetime import datetime
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
+from data.cache_client import CacheClient
 from data.santiment_fetcher import SantimentFetcher, SantimentSignal
 from data.sentiment import SentimentFetcher, CombinedSentiment
 
@@ -9,6 +10,65 @@ from data.sentiment import SentimentFetcher, CombinedSentiment
 @pytest.fixture
 def fetcher():
     return SantimentFetcher(api_key="test_key", enabled=True)
+
+
+def _make_mock_cache() -> MagicMock:
+    """Create a mock CacheClient for testing."""
+    mock = MagicMock(spec=CacheClient)
+    mock.get_cached.return_value = None
+    return mock
+
+
+# ── CacheClient abstraction tests ──
+
+
+@pytest.mark.asyncio
+async def test_fetcher_accepts_mock_cache():
+    """SantimentFetcher can be instantiated with a mock CacheClient."""
+    mock_cache = _make_mock_cache()
+    f = SantimentFetcher(api_key="test_key", enabled=True, cache=mock_cache)
+    assert f._cache is mock_cache
+
+
+@pytest.mark.asyncio
+async def test_cache_hit_skips_api_call():
+    """When cache hit, _fetch_metric_value returns cached data without calling API."""
+    mock_cache = _make_mock_cache()
+    mock_cache.get_cached.return_value = {"value": 1234.0}
+    f = SantimentFetcher(api_key="test_key", enabled=True, cache=mock_cache)
+
+    with patch.object(f, "_query", new_callable=AsyncMock) as mock_query:
+        result = await f._fetch_metric_value("bitcoin", "social_volume_total", 7)
+
+    assert result == 1234.0
+    mock_query.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cache_miss_calls_api_and_stores():
+    """When cache miss, _fetch_metric_value calls API and stores the result."""
+    mock_cache = _make_mock_cache()
+    mock_cache.get_cached.return_value = None  # miss
+    f = SantimentFetcher(api_key="test_key", enabled=True, cache=mock_cache)
+
+    query_response = {
+        "data": {"getMetric": {"timeseriesData": [
+            {"datetime": "2026-05-01T00:00:00Z", "value": 500.0},
+            {"datetime": "2026-05-02T00:00:00Z", "value": 567.0},
+        ]}}
+    }
+
+    with patch.object(f, "_query", new_callable=AsyncMock) as mock_query:
+        mock_query.return_value = query_response
+        result = await f._fetch_metric_value("bitcoin", "social_volume_total", 7)
+
+    assert result == 567.0  # latest value
+    mock_cache.set_cached.assert_called_once()
+    key_arg = mock_cache.set_cached.call_args[0][0]
+    assert "santiment:bitcoin:social_volume_total" in key_arg
+
+
+# ── Original tests below ──
 
 
 @pytest.mark.asyncio

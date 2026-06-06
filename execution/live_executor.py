@@ -7,10 +7,9 @@ Handles TWAP splitting, position monitoring, and full audit logging.
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import ccxt
-import pandas as pd
 
 from agents.risk_manager import RiskManagerAgent, CircuitBreakerState
 from config import settings

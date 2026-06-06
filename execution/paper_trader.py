@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import pandas as pd
 
-from data.fetcher import MarketDataFetcher
+from execution.price_feed import PriceFeed
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class PaperTrader:
         symbol: str = "BTC/USDT",
         timeframe: str = "1h",
         initial_balance: float = 10000.0,
-        fetcher: Optional[MarketDataFetcher] = None,
+        fetcher: Optional[PriceFeed] = None,
     ):
         self.symbol = symbol
         self.timeframe = timeframe
@@ -45,7 +45,10 @@ class PaperTrader:
         self.position_size: float = 0.0
         self.trades: List[Trade] = []
         self.equity_curve: List[Dict[str, Any]] = []
-        self._fetcher = fetcher or MarketDataFetcher()
+        self._fetcher = fetcher
+        if self._fetcher is None:
+            from data.fetcher import MarketDataFetcher  # lazy: break module-level coupling
+            self._fetcher = MarketDataFetcher()
 
     def run(self, signal_fn: Callable[[pd.DataFrame], str], max_candles: int = 100) -> Dict[str, Any]:
         logger.info("Paper trading %s | Balance: $%.2f", self.symbol, self.initial_balance)

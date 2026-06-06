@@ -1,7 +1,14 @@
-"""Live market data fetcher using the CCXT exchange library."""
+"""Live market data fetcher using the CCXT exchange library.
+
+Provides MarketDataFetcher (single exchange) and MultiExchangeFetcher
+(multiple exchanges) wrappers around CCXT. Supports OHLCV historical data
+fetching, real-time ticker polling, exchange config from settings, and
+configurable rate-limiting. Primary data source for backtesting and live
+trading pipelines.
+"""
 
 import logging
-from typing import Dict, Optional
+from typing import Optional
 
 import ccxt
 import pandas as pd
@@ -14,7 +21,7 @@ logger = logging.getLogger(__name__)
 class MarketDataFetcher:
     """Fetches OHLCV and ticker data from a cryptocurrency exchange via CCXT."""
 
-    def __init__(self, exchange_id: Optional[str] = None):
+    def __init__(self, exchange_id: Optional[str] = None) -> None:
         self.exchange_id = exchange_id or settings.EXCHANGE_ID
         self._exchange: Optional[ccxt.Exchange] = None
 
@@ -123,7 +130,7 @@ def symbol_to_coincap_id(symbol: str) -> Optional[str]:
 class MultiExchangeFetcher:
     """Wraps multiple CCXT instances for best-price routing and fallback."""
 
-    def __init__(self, exchange_ids: Optional[list] = None):
+    def __init__(self, exchange_ids: Optional[list] = None) -> None:
         self._exchange_ids = exchange_ids or ["kraken", "binance"]
         self._fetchers: dict = {}
         for eid in self._exchange_ids:

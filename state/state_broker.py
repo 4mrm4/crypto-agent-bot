@@ -43,7 +43,7 @@ class StateBroker:
     connection fails.
     """
 
-    def __init__(self, redis_url: Optional[str] = None):
+    def __init__(self, redis_url: Optional[str] = None) -> None:
         self._store: Dict[str, Tuple[Any, float]] = {}  # key -> (value, expiry_ts)
         self._pubsub: Dict[str, List[asyncio.Queue]] = {}
         self._redis_url = redis_url or REDIS_URL
@@ -65,7 +65,7 @@ class StateBroker:
             logger.warning("StateBroker: Redis unavailable (%s), using in-memory", exc)
             self._redis = None
 
-    async def start(self):
+    async def start(self) -> None:
         """Start background tasks (cleanup, Redis listener)."""
         if self._started:
             return
@@ -74,7 +74,7 @@ class StateBroker:
         if self._redis:
             self._redis_listener_task = asyncio.create_task(self._redis_listen_loop())
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop background tasks."""
         self._started = False
         if self._cleanup_task:

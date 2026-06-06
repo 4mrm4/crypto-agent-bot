@@ -9,9 +9,7 @@ by agents and the signal scanner.
 import asyncio
 import json
 import logging
-from typing import Any, Callable, Dict, List, Optional
-
-import httpx
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +26,7 @@ class MarketDataStream:
         "trades":    "{pair}@aggTrade",
     }
 
-    def __init__(self, base_url: str = "wss://stream.binance.com:9443/ws"):
+    def __init__(self, base_url: str = "wss://stream.binance.com:9443/ws") -> None:
         self._base_url = base_url
         self._subscribers: Dict[str, List[asyncio.Queue]] = {}
         self._latest_data: Dict[str, Any] = {}
@@ -43,7 +41,7 @@ class MarketDataStream:
     def is_connected(self) -> bool:
         return self._connected
 
-    async def connect(self, pairs: List[str], streams: Optional[List[str]] = None):
+    async def connect(self, pairs: List[str], streams: Optional[List[str]] = None) -> None:
         """Open Binance WebSocket for all pair/stream combinations."""
         import websockets
 
@@ -105,7 +103,7 @@ class MarketDataStream:
                 except asyncio.QueueEmpty:
                     pass
 
-    async def read_loop(self):
+    async def read_loop(self) -> None:
         """Read from WebSocket and dispatch to subscribers."""
         if not self._connected or not self._ws:
             logger.warning("WebSocket not connected — read loop skipped")
@@ -170,7 +168,7 @@ class MarketDataStream:
             }
         return None
 
-    def disconnect(self):
+    def disconnect(self) -> None:
         """Close the WebSocket connection."""
         self._connected = False
         if self._ws:
