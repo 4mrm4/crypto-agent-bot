@@ -4,6 +4,8 @@ import os
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from monitoring.telegram_alerter import (
     TelegramAlerter,
     _format_alert,
@@ -244,3 +246,88 @@ def test_resolve_approval_nonexistent():
     """resolve_approval does not crash for unknown pair."""
     alerter = TelegramAlerter()
     alerter.resolve_approval("NONEXISTENT", True)
+
+
+# ── New: Polling & Callback Tests ──
+
+@pytest.mark.asyncio
+async def test_telegram_alerter_polling_start():
+    """start() registers 3 handlers (2 Command + 1 CallbackQuery) and starts polling."""
+    alerter = TelegramAlerter()
+
+    mock_app = MagicMock()
+    mock_app.add_handler = MagicMock()
+    mock_app.initialize = AsyncMock()
+    mock_app.start = AsyncMock()
+    mock_app.updater = MagicMock()
+    mock_app.updater.start_polling = AsyncMock()
+
+    # Application is imported lazily inside start(), so patch at the source
+    with patch("monitoring.telegram_alerter.TELEGRAM_ENABLED", True), \
+         patch("telegram.ext.Application.builder") as mock_builder:
+        mock_builder.return_value.token.return_value.build.return_value = mock_app
+
+        await alerter.start()
+
+        # start_polling is launched via asyncio.create_task, yield to let it execute
+        await asyncio.sleep(0)
+
+        # 3 handlers registered
+        assert mock_app.add_handler.call_count == 3
+        # Initialize, start, start_polling all called
+        mock_app.initialize.assert_awaited_once()
+        mock_app.start.assert_awaited_once()
+        mock_app.updater.start_polling.assert_awaited_once()
+
+        assert alerter._running is True
+
+    # Clean up the background task created by asyncio.create_task
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    for t in tasks:
+        t.cancel()
+
+
+@pytest.mark.asyncio
+async def test_telegram_alerter_callback_approve():
+    """_callback_handler parses callback_data and calls resolve_approval."""
+    alerter = TelegramAlerter()
+
+    # Set up pending approval
+    event = asyncio.Event()
+    alerter._pending_approvals["BTC/USDT"] = event
+
+    # Mock the callback query
+    mock_query = AsyncMock()
+    mock_query.data = "approve_BTC/USDT"
+    mock_update = MagicMock()
+    mock_update.callback_query = mock_query
+    mock_context = MagicMock()
+
+    await alerter._callback_handler(mock_update, mock_context)
+
+    # answer() called to remove loading state
+    mock_query.answer.assert_awaited_once()
+    # resolve_approval set the result and triggered the event
+    assert alerter._approval_results.get("BTC/USDT") is True
+    assert event.is_set()
+
+
+@pytest.mark.asyncio
+async def test_telegram_alerter_callback_reject():
+    """_callback_handler parses reject callback_data correctly."""
+    alerter = TelegramAlerter()
+
+    event = asyncio.Event()
+    alerter._pending_approvals["ETH/USDT"] = event
+
+    mock_query = AsyncMock()
+    mock_query.data = "reject_ETH/USDT"
+    mock_update = MagicMock()
+    mock_update.callback_query = mock_query
+    mock_context = MagicMock()
+
+    await alerter._callback_handler(mock_update, mock_context)
+
+    mock_query.answer.assert_awaited_once()
+    assert alerter._approval_results.get("ETH/USDT") is False
+    assert event.is_set()

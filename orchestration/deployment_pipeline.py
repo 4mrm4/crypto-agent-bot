@@ -212,6 +212,29 @@ class DeploymentPipeline:
             bt_win_rate = float(bt_result.get("win_rate", 0))
             bt_dd = abs(float(bt_result.get("max_drawdown", 0)))
             bt_trades = int(bt_result.get("total_trades", 0))
+
+            # Extract avg_win_pct and avg_loss_pct from backtest result
+            bt_avg_win = float(bt_result.get("avg_win_pct", 0))
+            bt_avg_loss = float(bt_result.get("avg_loss_pct", 0))
+            if bt_avg_win <= 0 or bt_avg_loss <= 0:
+                # Derive from backtest statistics if fields are missing
+                profit_ratio = float(bt_result.get("profit_ratio", 0))
+                if bt_win_rate > 0 and profit_ratio != 0:
+                    # profit_ratio ≈ win_rate * avg_win - (1-win_rate) * avg_loss
+                    # Assume avg_loss ≈ avg_win * 0.5 (reasonable for most strategies)
+                    bt_avg_loss = 0.01  # default 1% loss
+                    bt_avg_win = profit_ratio / (bt_win_rate * 100) if bt_win_rate > 0 else 0.02
+                    bt_avg_win = max(bt_avg_win, 0.005)  # min 0.5%
+                else:
+                    # Fallback when no reliable derivation is possible
+                    bt_avg_win = 0.015
+                    bt_avg_loss = 0.01
+            logger.debug(
+                "Gate 4: derived avg_win=%.4f avg_loss=%.4f from bt_result "
+                "(win_rate=%.4f profit_ratio=%.4f)",
+                bt_avg_win, bt_avg_loss, bt_win_rate,
+                float(bt_result.get("profit_ratio", 0)),
+            )
         except Exception as exc:
             return PipelineResult(
                 strategy_id=strategy_id, strategy_type=strategy_type,
@@ -264,8 +287,10 @@ class DeploymentPipeline:
             fetcher = MarketDataFetcher()
             cpcv_df = fetcher.fetch_ohlcv(
                 settings.SYMBOL, settings.TIMEFRAME,
-                limit=1000,
+                limit=100000,
             )
+            if cpcv_df is not None:
+                logger.info("CPCV gate: fetched %d candles for validation", len(cpcv_df))
             if cpcv_df is not None and len(cpcv_df) > 200:
                 cpcv_result = cpcv.validate(
                     df=cpcv_df,
@@ -316,8 +341,8 @@ class DeploymentPipeline:
         try:
             kelly = kelly_position_size_conservative(
                 win_rate=bt_win_rate,
-                avg_win_pct=float(bt_result.get("avg_win_pct", 0.02)),
-                avg_loss_pct=float(bt_result.get("avg_loss_pct", 0.01)),
+                avg_win_pct=bt_avg_win,
+                avg_loss_pct=bt_avg_loss,
                 portfolio_value=10000.0,
                 sizing_tier=PositionSizingTier.CAUTIOUS,
             )

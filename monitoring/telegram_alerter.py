@@ -120,23 +120,30 @@ class TelegramAlerter:
 
             self._app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-            # Register command handlers
-            await self._app.bot.initialize()
+            # Register command and callback handlers for interactive approvals
+            self._app.add_handler(CommandHandler("approve", self._command_approve))
+            self._app.add_handler(CommandHandler("reject", self._command_reject))
+            self._app.add_handler(CallbackQueryHandler(self._callback_handler))
 
-            # We use bot.send_message directly rather than full polling for simplicity.
-            # For interactive approvals, we register handlers but don't start polling
-            # unless specifically needed (the event bus subscriber can push alerts).
+            await self._app.initialize()
+            await self._app.start()
+            # Start polling in background so the bot can receive user responses
+            asyncio.create_task(self._app.updater.start_polling())
+
             self._running = True
-            logger.info("TelegramAlerter initialized (chat_id=%s)", TELEGRAM_CHAT_ID[:4] + "...")
+            logger.info("TelegramAlerter started polling (chat_id=%s)", TELEGRAM_CHAT_ID[:4] + "...")
         except Exception as exc:
             logger.warning("TelegramAlerter init failed: %s", exc)
             self._running = False
 
     async def stop(self):
-        """Shutdown the Telegram bot."""
+        """Shutdown the Telegram bot and stop polling."""
         if self._app:
             try:
-                await self._app.bot.shutdown()
+                if self._app.updater:
+                    await self._app.updater.stop()
+                await self._app.stop()
+                await self._app.shutdown()
             except Exception:
                 pass
         self._running = False
@@ -324,3 +331,35 @@ class TelegramAlerter:
         if pair in self._pending_approvals:
             self._approval_results[pair] = approved
             self._pending_approvals[pair].set()
+
+    # ── Bot command / callback handlers ──
+
+    async def _command_approve(self, update, context):
+        """Handle /approve <pair> command from user."""
+        if not context.args:
+            await update.message.reply_text("Usage: /approve <pair>  (e.g., /approve BTC/USDT)")
+            return
+        pair = " ".join(context.args)
+        self.resolve_approval(pair, True)
+        await update.message.reply_text(f"{pair}: APPROVED")
+
+    async def _command_reject(self, update, context):
+        """Handle /reject <pair> command from user."""
+        if not context.args:
+            await update.message.reply_text("Usage: /reject <pair>  (e.g., /reject BTC/USDT)")
+            return
+        pair = " ".join(context.args)
+        self.resolve_approval(pair, False)
+        await update.message.reply_text(f"{pair}: REJECTED")
+
+    async def _callback_handler(self, update, context):
+        """Handle inline keyboard button presses (approve_BTC/USDT or reject_BTC/USDT)."""
+        query = update.callback_query
+        await query.answer()  # Remove loading spinner from the button
+        data = query.data
+        if data.startswith("approve_"):
+            pair = data[len("approve_"):]
+            self.resolve_approval(pair, True)
+        elif data.startswith("reject_"):
+            pair = data[len("reject_"):]
+            self.resolve_approval(pair, False)

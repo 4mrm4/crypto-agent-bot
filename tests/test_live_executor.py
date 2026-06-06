@@ -11,13 +11,20 @@ import pytest
 
 @pytest.fixture
 def mock_settings():
-    """Patch config.settings so exchange keys are predictable.
+    """Patch both config.settings and the module reference in live_executor.
 
-    We patch at the config level because LiveExecutor.__init__ re-imports
-    ``from config import settings`` inside the method body, bypassing any
-    patch on ``execution.live_executor.settings``.
+    ``live_executor`` module-level ``from config import settings`` (line 15)
+    captures the real Settings singleton at import time, which happens during
+    collection (via signal_scanner).  The ``__init__`` method then re-reads
+    ``from config import settings`` locally, while the ``exchange`` property
+    uses the module-level reference.
+
+    We patch **both** so all code paths see the mock values:
+      - ``config.settings``  — caught by ``__init__``'s re-import
+      - ``execution.live_executor.settings`` — caught by ``exchange`` property
     """
-    with patch("config.settings") as mock:
+    with patch("config.settings") as mock, \
+         patch("execution.live_executor.settings", mock):
         mock.EXCHANGE_API_KEY = "test_exchange_key_123"
         mock.EXCHANGE_SECRET = "test_secret_456"
         mock.OPENAI_API_KEY = "sk-should-not-be-used"
