@@ -660,8 +660,17 @@ class RiskManagerAgent(BaseAgent):
             except json.JSONDecodeError:
                 params = {}
 
-            daily_pnl = float(params.get("daily_pnl_pct", 0.0))
-            weekly_pnl = float(params.get("weekly_pnl_pct", 0.0))
+            daily_pnl = params.get("daily_pnl_pct", 0.0)
+            weekly_pnl = params.get("weekly_pnl_pct", 0.0)
+            # Guard against None/NaN from LLM hallucinated params
+            if daily_pnl is None or (isinstance(daily_pnl, float) and math.isnan(daily_pnl)):
+                daily_pnl = 0.0
+            else:
+                daily_pnl = float(daily_pnl)
+            if weekly_pnl is None or (isinstance(weekly_pnl, float) and math.isnan(weekly_pnl)):
+                weekly_pnl = 0.0
+            else:
+                weekly_pnl = float(weekly_pnl)
             daily_limit_raw = float(params.get("daily_limit", -0.03))
             weekly_limit_raw = float(params.get("weekly_limit", -0.08))
 

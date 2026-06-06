@@ -70,6 +70,45 @@ def test_pre_trade_approval_rejects_when_circuit_breaker_halted():
     assert result["confidence"] == 0.0
 
 
+def test_circuit_breaker_clamps_raw_percentage_pnl():
+    """LLM passes daily_pnl_pct=-50 (-50%) — clamped to -0.50, matches 50% limit, no halt."""
+    result = _call_circuit_breaker({"daily_pnl_pct": -50, "daily_limit": 0.50})
+    assert result["trading_allowed"] is True, (
+        f"Expected trading_allowed=True after clamping -50 to -0.50 (== 50% limit), got {result}"
+    )
+
+
+def test_circuit_breaker_clamps_then_halt_on_excess():
+    """LLM passes daily_pnl_pct=-50, clamped to -0.50, still exceeds 3% limit — halts."""
+    result = _call_circuit_breaker({"daily_pnl_pct": -50, "daily_limit": 0.03})
+    assert result["trading_allowed"] is False, (
+        f"Expected trading_allowed=False for -50 clamped to -0.50 vs 3% limit, got {result}"
+    )
+
+
+def test_circuit_breaker_zeroes_implausible_pnl():
+    """LLM passes daily_pnl_pct=-0.95 (95% drawdown) — sanity guard zeroes it."""
+    result = _call_circuit_breaker({"daily_pnl_pct": -0.95, "daily_limit": 0.03})
+    assert result["trading_allowed"] is True, (
+        f"Expected trading_allowed=True for zeroed implausible PnL, got {result}"
+    )
+
+
+def test_circuit_breaker_still_halted_on_real_drawdown():
+    """A legitimate daily drawdown exceeding limit should still halt."""
+    result = _call_circuit_breaker({"daily_pnl_pct": -0.05, "daily_limit": 0.03})
+    assert result["trading_allowed"] is False, (
+        f"Expected trading_allowed=False for -5% drawdown vs 3% limit, got {result}"
+    )
+
+
+def test_circuit_breaker_handles_none_pnl():
+    """LLM passes daily_pnl_pct=None — guard prevents TypeError crash."""
+    result = _call_circuit_breaker({"daily_pnl_pct": None, "daily_limit": 0.03})
+    # Should not crash; None -> 0.0 should allow trading
+    assert "trading_allowed" in result
+
+
 def test_risk_assessment_rejects_high_risk():
     result = json.loads(RiskManagerAgent().get_tool("assess_strategy_risk").func(json.dumps({
         "sharpe_ratio": 0.3,
@@ -91,4 +130,11 @@ def _call_kelly(win_rate, avg_win, avg_loss, portfolio, max_frac=0.25):
         "max_kelly_fraction": max_frac,
         "oos_degradation_pct": 0.0, "sizing_tier": "normal",
     }))
+    return json.loads(result)
+
+
+def _call_circuit_breaker(params: dict) -> dict:
+    """Call the circuit_breaker_check tool with given params and return parsed result."""
+    CircuitBreakerState.clear()
+    result = RiskManagerAgent().get_tool("circuit_breaker_check").func(json.dumps(params))
     return json.loads(result)
