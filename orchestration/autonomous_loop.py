@@ -42,6 +42,10 @@ class AutonomousLoopState:
     last_error: Optional[str] = None
     last_regime: str = "unknown"
     coverage_gaps: Dict[str, float] = field(default_factory=dict)  # regime -> best_sharpe
+    # Iteration results for UI charting
+    iteration_results: List[Dict[str, Any]] = field(default_factory=list)
+    current_sharpe: float = 0.0
+    current_best_sharpe: float = 0.0
 
 
 class AutonomousResearchLoop:
@@ -203,6 +207,8 @@ class AutonomousResearchLoop:
             "last_error": self.state.last_error,
             "last_regime": self.state.last_regime,
             "coverage_gaps": self.state.coverage_gaps,
+            "current_sharpe": self.state.current_sharpe,
+            "current_best_sharpe": self.state.current_best_sharpe,
         }
 
     # ── Internal: Goal generation ──
@@ -482,6 +488,37 @@ class AutonomousResearchLoop:
             result.get("converged", False),
             result.get("total_iterations", 0),
         )
+
+        # Capture iteration results for UI
+        iterations = result.get("iterations", [])
+        for it in iterations:
+            metrics = it.get("metrics", {})
+            self.state.iteration_results.append({
+                "cycle": self.state.total_cycles,
+                "iteration": it.get("iteration", 0),
+                "verdict": it.get("verdict", "unknown"),
+                "strategy_id": it.get("strategy_id", ""),
+                "sharpe_ratio": metrics.get("sharpe_ratio", 0),
+                "win_rate": metrics.get("win_rate", 0),
+                "max_drawdown": metrics.get("max_drawdown", 0),
+                "total_trades": metrics.get("total_trades", 0),
+            })
+
+        # Keep only last 100 results
+        if len(self.state.iteration_results) > 100:
+            self.state.iteration_results = self.state.iteration_results[-100:]
+
+        # Store current best metrics for UI
+        best_metrics = result.get("best_metrics", {})
+        self.state.current_sharpe = best_metrics.get("sharpe_ratio", 0)
+
+        # Track best sharpe across all cycles
+        for it in iterations:
+            metrics = it.get("metrics", {})
+            s = metrics.get("sharpe_ratio", 0)
+            if isinstance(s, (int, float)) and s > self.state.current_best_sharpe:
+                self.state.current_best_sharpe = s
+
         return result
 
     # ── Internal: Regime detection ──

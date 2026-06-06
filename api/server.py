@@ -177,6 +177,29 @@ async def autonomous_status():
     return {"is_running": False, "is_paused": False, "persisted_enabled": persisted.get("enabled", False), "message": "Not started"}
 
 
+@app.get("/api/autonomous/iterations")
+async def autonomous_iterations():
+    """Return iteration results from autonomous research cycles for UI charting."""
+    global _autonomous_loop_ref
+    loop = _autonomous_loop_ref or getattr(app.state, "autonomous_loop", None)
+    if loop and hasattr(loop.state, "iteration_results"):
+        results = loop.state.iteration_results
+        # Compute summary stats
+        discarded = sum(1 for r in results if r.get("verdict") == "discarded")
+        kept = sum(1 for r in results if r.get("verdict") == "converged" or r.get("verdict") == "kept")
+        best = max(
+            (r.get("sharpe_ratio", 0) for r in results if isinstance(r.get("sharpe_ratio"), (int, float))),
+            default=0,
+        )
+        return {
+            "results": results,
+            "discarded_count": discarded,
+            "kept_count": kept,
+            "best_sharpe": best,
+        }
+    return {"results": [], "discarded_count": 0, "kept_count": 0, "best_sharpe": 0}
+
+
 @app.post("/api/autonomous/start")
 async def autonomous_start():
     """Start the autonomous loop as a background task."""

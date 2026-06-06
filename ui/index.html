@@ -282,6 +282,7 @@ function App() {
   const [strategies, setStrategies] = useState([]);
   const [circuitBreaker, setCircuitBreaker] = useState({ halted: false });
   const [regimeSnapshot, setRegimeSnapshot] = useState(null);
+  const [iterationData, setIterationData] = useState({ results: [], discarded_count: 0, kept_count: 0, best_sharpe: 0 });
 
   useEffect(() => {
     if (!runId) return;
@@ -482,6 +483,10 @@ function App() {
       fetch("/api/regime/current")
         .then((r) => r.json())
         .then((d) => setRegimeSnapshot(d))
+        .catch(() => {});
+      fetch("/api/autonomous/iterations")
+        .then((r) => r.json())
+        .then(setIterationData)
         .catch(() => {});
     };
     poll();
@@ -684,6 +689,7 @@ function App() {
           regimeSnapshot={regimeSnapshot}
           positions={positions}
           tokens={tokens}
+          iterationData={iterationData}
         />
       )}
       {tab === "strategies" && <StrategyLibraryView strategies={strategies} />}
@@ -1405,7 +1411,7 @@ const LogPanel = React.forwardRef(function LogPanel({ events }, ref) {
 // ════════════════════════════════════════════
 // DASHBOARD VIEW (New)
 // ════════════════════════════════════════════
-function DashboardView({ autonomousState, circuitBreaker, regimeSnapshot, positions, tokens }) {
+function DashboardView({ autonomousState, circuitBreaker, regimeSnapshot, positions, tokens, iterationData }) {
   return (
     <div
       style={{
@@ -1727,7 +1733,7 @@ function DashboardView({ autonomousState, circuitBreaker, regimeSnapshot, positi
         )}
       </div>
 
-      {/* Bottom-right: Risk Dashboard */}
+      {/* Bottom-right: Research Results */}
       <div
         className="r4"
         style={{
@@ -1759,40 +1765,79 @@ function DashboardView({ autonomousState, circuitBreaker, regimeSnapshot, positi
             color: T.muted,
             textTransform: "uppercase",
             letterSpacing: "2px",
-            marginBottom: 8,
+            marginBottom: 10,
           }}
         >
-          ⟐ Portfolio Risk
+          ◈ Research Results
         </h2>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <MiniStat label="Daily PnL" value="—" color={T.text} />
-          <MiniStat label="Drawdown" value="—" color={T.muted} />
-          <MiniStat label="Open Pos" value={positions.length} color={T.teal} />
-          <MiniStat label="Kelly Cap" value="10%" color={T.gold} />
+          <MiniStat
+            label="Best Sharpe"
+            value={iterationData?.best_sharpe?.toFixed(2) || "—"}
+            color={T.amber}
+          />
+          <MiniStat
+            label="Discarded"
+            value={iterationData?.discarded_count || 0}
+            color={T.coral}
+          />
+          <MiniStat
+            label="Kept"
+            value={iterationData?.kept_count || 0}
+            color={T.sage}
+          />
+          <MiniStat
+            label="Total Iterations"
+            value={iterationData?.results?.length || 0}
+            color={T.teal}
+          />
         </div>
-        <div style={{ marginTop: 10, padding: "6px 8px", background: T.surface, borderRadius: 4 }}>
+        {iterationData?.results?.length > 0 && (
           <div
             style={{
-              fontSize: 9,
-              color: T.muted,
+              marginTop: 10,
+              maxHeight: 120,
+              overflowY: "auto",
+              fontSize: 9.5,
               fontFamily: "'DM Mono',monospace",
-              marginBottom: 4,
             }}
           >
-            Token Usage
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ color: T.muted, fontSize: 8, textTransform: "uppercase" }}>
+                  <th style={{ textAlign: "left", padding: "2px 4px" }}>It</th>
+                  <th style={{ textAlign: "left", padding: "2px 4px" }}>Sharpe</th>
+                  <th style={{ textAlign: "left", padding: "2px 4px" }}>WR</th>
+                  <th style={{ textAlign: "left", padding: "2px 4px" }}>DD</th>
+                  <th style={{ textAlign: "left", padding: "2px 4px" }}>Trades</th>
+                  <th style={{ textAlign: "left", padding: "2px 4px" }}>Verdict</th>
+                </tr>
+              </thead>
+              <tbody>
+                {iterationData.results.slice(-20).reverse().map((r, i) => (
+                  <tr key={i} style={{ borderTop: `1px solid ${T.border}20` }}>
+                    <td style={{ padding: "2px 4px", color: T.muted }}>{r.iteration}</td>
+                    <td style={{
+                      padding: "2px 4px",
+                      color: r.sharpe_ratio >= 0.8 ? T.sage : T.coral
+                    }}>{r.sharpe_ratio?.toFixed(2)}</td>
+                    <td style={{ padding: "2px 4px", color: T.text }}>
+                      {r.win_rate ? `${(r.win_rate * 100).toFixed(0)}%` : "—"}
+                    </td>
+                    <td style={{ padding: "2px 4px", color: T.text }}>
+                      {r.max_drawdown ? `${(Math.abs(r.max_drawdown) * 100).toFixed(1)}%` : "—"}
+                    </td>
+                    <td style={{ padding: "2px 4px", color: T.text }}>{r.total_trades || 0}</td>
+                    <td style={{
+                      padding: "2px 4px",
+                      color: r.verdict === "kept" || r.verdict === "converged" ? T.sage : T.coral
+                    }}>{r.verdict}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div style={{ display: "flex", gap: 16 }}>
-            <span style={{ fontSize: 10, color: T.text, fontFamily: "'DM Mono',monospace" }}>
-              ↑ {fmtNum(tokens.prompt_tokens)}
-            </span>
-            <span style={{ fontSize: 10, color: T.text, fontFamily: "'DM Mono',monospace" }}>
-              ↓ {fmtNum(tokens.completion_tokens)}
-            </span>
-            <span style={{ fontSize: 10, color: T.gold, fontFamily: "'DM Mono',monospace" }}>
-              ∑ {fmtNum(tokens.total_tokens)}
-            </span>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
