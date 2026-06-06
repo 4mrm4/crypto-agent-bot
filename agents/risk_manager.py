@@ -665,6 +665,23 @@ class RiskManagerAgent(BaseAgent):
             daily_limit_raw = float(params.get("daily_limit", -0.03))
             weekly_limit_raw = float(params.get("weekly_limit", -0.08))
 
+            # Clamp PnL values the same way we clamp limits
+            # LLMs often pass raw percentages (e.g. -50 for -50%) instead of decimals
+            if abs(daily_pnl) > 1.0:
+                daily_pnl /= 100.0
+                logger.debug("Clamped daily_pnl from raw percentage to %.4f", daily_pnl)
+            if abs(weekly_pnl) > 1.0:
+                weekly_pnl /= 100.0
+                logger.debug("Clamped weekly_pnl from raw percentage to %.4f", weekly_pnl)
+
+            # Sanity guard: reject PnL values >90% daily drawdown (clearly hallucinated)
+            if abs(daily_pnl) > 0.90:
+                logger.warning("Rejecting implausible daily_pnl=%.4f (>90%%), treating as 0", daily_pnl)
+                daily_pnl = 0.0
+            if abs(weekly_pnl) > 0.90:
+                logger.warning("Rejecting implausible weekly_pnl=%.4f (>90%%), treating as 0", weekly_pnl)
+                weekly_pnl = 0.0
+
             # Soft clamp: never raise AssertionError. If value > 1.0, treat as
             # percentage (divide by 100). If <= 0, use default.
             def _clamp_limit(raw: float, default: float) -> float:
