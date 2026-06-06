@@ -1,6 +1,7 @@
 """Base agent class used by all specialised agents in the system."""
 
 import logging
+import time
 from typing import Any, Callable, Dict, List, Optional
 
 from langchain_core.callbacks import BaseCallbackHandler
@@ -60,29 +61,49 @@ class BaseAgent:
         )
 
     def run(self, input_text: str) -> Dict[str, Any]:
-        """Invoke the agent and return the structured result."""
+        """Invoke the agent and return the structured result.
+        Includes timeout and automatic retry on transient failures.
+        """
         logger.info("[%s] Running with input: %.120s", self.name, input_text)
-        result = self._agent.invoke(
-            {"messages": [("user", input_text)]},
-            config={"recursion_limit": 50},
-        )
-        raw_content = result.get("messages", [])[-1].content if result.get("messages") else ""
-        # Handle content blocks (LangChain list format) or plain string
-        if isinstance(raw_content, list):
-            output = " ".join(
-                b.get("text", "") if isinstance(b, dict) else str(b)
-                for b in raw_content
-            )
-        else:
-            output = str(raw_content)
-        # Sanitise non-ASCII characters for Windows console
-        output = output.encode("ascii", errors="replace").decode("ascii")
-        steps = [
-            {"thought": m.content, "tool": m.name if hasattr(m, "name") else ""}
-            for m in result.get("messages", [])
-            if hasattr(m, "additional_kwargs") and m.additional_kwargs.get("tool_calls")
-        ]
-        return {"output": output, "intermediate_steps": steps}
+
+        max_retries = 3
+        timeout_seconds = 120
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                result = self._agent.invoke(
+                    {"messages": [("user", input_text)]},
+                    config={"recursion_limit": 50},
+                )
+                raw_content = result.get("messages", [])[-1].content if result.get("messages") else ""
+                # Handle content blocks (LangChain list format) or plain string
+                if isinstance(raw_content, list):
+                    output = " ".join(
+                        b.get("text", "") if isinstance(b, dict) else str(b)
+                        for b in raw_content
+                    )
+                else:
+                    output = str(raw_content)
+                # Sanitise non-ASCII characters for Windows console
+                output = output.encode("ascii", errors="replace").decode("ascii")
+                steps = [
+                    {"thought": m.content, "tool": m.name if hasattr(m, "name") else ""}
+                    for m in result.get("messages", [])
+                    if hasattr(m, "additional_kwargs") and m.additional_kwargs.get("tool_calls")
+                ]
+                return {"output": output, "intermediate_steps": steps}
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "[%s] Attempt %d/%d failed: %s",
+                    self.name, attempt + 1, max_retries, exc,
+                )
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # exponential backoff
+
+        logger.error("[%s] All %d retries exhausted: %s", self.name, max_retries, last_error)
+        return {"output": f"Error: {last_error}", "intermediate_steps": []}
 
     def get_tool(self, name: str) -> Optional[Tool]:
         """Retrieve a registered tool by name."""

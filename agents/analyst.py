@@ -51,12 +51,27 @@ class AnalystAgent(BaseAgent):
             return f"Current price: ${price:,.2f}"
 
         def sentiment_fn(_dummy: str = "") -> str:
-            """Get crypto market sentiment. Returns a neutral score for now (Phase 3 placeholder)."""
-            # TODO: wire up a real news/sentiment API in later phase
-            return (
-                "Sentiment analysis: NEUTRAL (score 0.0/1.0). "
-                "Fear & Greed Index not yet available — using default."
-            )
+            """Get crypto market sentiment using real sentiment data."""
+            try:
+                from data.sentiment import SentimentFetcher
+                sf = SentimentFetcher()
+                result = sf.get_combined_sentiment_sync()
+                if result is None:
+                    return (
+                        "Sentiment analysis: NEUTRAL (score 0.0/1.0). "
+                        "Sentiment data temporarily unavailable."
+                    )
+                return (
+                    f"Sentiment analysis: overall score {result.overall_score:.2f}/1.0. "
+                    f"Fear & Greed Index: {result.fear_greed_index or 'N/A'}. "
+                    f"CryptoPanic sentiment: {result.cryptopanic_sentiment or 'N/A'}. "
+                    f"Signal count: {result.signal_count}."
+                )
+            except Exception as exc:
+                return (
+                    f"Sentiment analysis: UNAVAILABLE ({exc}). "
+                    "Using neutral default."
+                )
 
         return [
             Tool(name="fetch_ohlcv", func=fetch_ohlcv_fn,

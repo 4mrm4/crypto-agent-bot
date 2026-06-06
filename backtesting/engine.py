@@ -143,9 +143,20 @@ class BacktestEngine:
         strategy_type: str = "sma_crossover",
         timerange: str = "20210101-",
         pairs: Optional[List[str]] = None,
+        dataframe_override: Optional[Dict[str, pd.DataFrame]] = None,  # NEW
     ) -> Dict[str, Any]:
         """Generate a strategy from *params*, run a Freqtrade backtest,
-        and return parsed results."""
+        and return parsed results.
+
+        If *dataframe_override* is provided (dict of pair -> DataFrame),
+        skip the Freqtrade subprocess and use SignalFactory + FastMetrics
+        directly on the supplied DataFrames. This is used for synthetic
+        data validation and permutation testing.
+        """
+        # If dataframe_override is provided, skip Freqtrade entirely
+        if dataframe_override is not None:
+            return self._run_fastmetrics_backtest(strategy_type, strategy_params, dataframe_override)
+
         timerange = sanitize_timerange(timerange)
 
         # Fast pre-filter: reject obviously worthless strategies before Freqtrade
@@ -207,6 +218,52 @@ class BacktestEngine:
 
         # 5. Parse result JSON
         return self._parse_results(result, strategy_name=strategy_name)
+
+    def _run_fastmetrics_backtest(
+        self,
+        strategy_type: str,
+        strategy_params: Optional[Dict[str, Any]],
+        dataframes: Dict[str, pd.DataFrame],
+    ) -> Dict[str, Any]:
+        """Run backtest using SignalFactory + FastMetrics on provided DataFrames
+        (no Freqtrade subprocess). Used by synthetic data validation."""
+        params = strategy_params or {}
+        tf = params.get("timeframe", settings.TIMEFRAME)
+
+        results = {}
+        for pair, df in dataframes.items():
+            if df is None or (isinstance(df, pd.DataFrame) and len(df) < 50):
+                results[pair] = {"error": "Insufficient data", "total_trades": 0, "sharpe_ratio": 0, "win_rate": 0, "profit_ratio": 0}
+                continue
+            df = df.copy() if isinstance(df, pd.DataFrame) else pd.DataFrame(df)
+            signals = SignalFactory.generate(df, strategy_type, params)
+            metrics = FastMetrics.compute(df, signals)
+            results[pair] = metrics
+
+        # Aggregate across pairs
+        total_trades = sum(r.get("total_trades", 0) for r in results.values())
+        if total_trades == 0:
+            return {"sharpe_ratio": 0, "win_rate": 0, "total_trades": 0, "profit_ratio": 0}
+
+        weighted_sharpe = sum(
+            r.get("sharpe_ratio", 0) * r.get("total_trades", 0)
+            for r in results.values()
+        ) / total_trades
+
+        weighted_win_rate = sum(
+            r.get("win_rate", 0) * r.get("total_trades", 0)
+            for r in results.values()
+        ) / total_trades
+
+        total_profit = sum(r.get("total_return_pct", 0) * r.get("total_trades", 0) for r in results.values()) / total_trades
+
+        return {
+            "sharpe_ratio": round(weighted_sharpe, 4),
+            "win_rate": round(weighted_win_rate, 4),
+            "total_trades": total_trades,
+            "profit_ratio": round(total_profit, 4),
+            "net_sharpe_ratio": round(max(weighted_sharpe, 0), 2),
+        }
 
     def get_performance_metrics(self, trades_df: pd.DataFrame) -> Dict[str, Any]:
         """Compute standard performance metrics from a trades DataFrame.

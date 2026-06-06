@@ -185,19 +185,20 @@ def test_combined_sentiment_full():
     assert cs.signal_count == 3
 
 
-def test_get_combined_sentiment_includes_santiment():
+@pytest.mark.asyncio
+async def test_get_combined_sentiment_includes_santiment():
     """When all sources available, weights work correctly."""
     sentiment = SentimentFetcher()
     with patch.object(sentiment, "get_fear_greed_index") as mock_fng, \
          patch.object(sentiment, "get_cryptopanic_sentiment_score") as mock_cp, \
-         patch.object(sentiment, "_fetch_santiment") as mock_sant:
+         patch.object(sentiment, "_fetch_santiment_async") as mock_sant:
         mock_fng.return_value = {"value": 50, "classification": "Neutral"}
         mock_cp.return_value = 0.2
         mock_sant.return_value = SantimentSignal(
             asset_slug="bitcoin", social_volume_24h=1000.0,
             sentiment_balance_24h=0.5,
         )
-        result = sentiment.get_combined_sentiment(slug="bitcoin")
+        result = await sentiment.get_combined_sentiment(slug="bitcoin")
 
     assert result.fear_greed_index == 50
     assert result.cryptopanic_sentiment == 0.2
@@ -212,16 +213,17 @@ def test_get_combined_sentiment_includes_santiment():
     assert result.signal_count == 4
 
 
-def test_get_combined_sentiment_redistributes_weights():
+@pytest.mark.asyncio
+async def test_get_combined_sentiment_redistributes_weights():
     """When Santiment is unavailable, weights redistribute proportionally."""
     sentiment = SentimentFetcher()
     with patch.object(sentiment, "get_fear_greed_index") as mock_fng, \
          patch.object(sentiment, "get_cryptopanic_sentiment_score") as mock_cp, \
-         patch.object(sentiment, "_fetch_santiment") as mock_sant:
+         patch.object(sentiment, "_fetch_santiment_async") as mock_sant:
         mock_fng.return_value = {"value": 55, "classification": "Neutral"}
         mock_cp.return_value = 0.3
         mock_sant.return_value = None  # Santiment not available
-        result = sentiment.get_combined_sentiment(slug="bitcoin")
+        result = await sentiment.get_combined_sentiment(slug="bitcoin")
 
     assert result.fear_greed_index == 55
     assert result.cryptopanic_sentiment == 0.3
@@ -242,16 +244,17 @@ def test_fetch_santiment_returns_none_when_disabled():
     assert result is None
 
 
-def test_get_combined_sentiment_returns_fng_only():
+@pytest.mark.asyncio
+async def test_get_combined_sentiment_returns_fng_only():
     """When only F&G available, overall_score matches."""
     sentiment = SentimentFetcher()
     with patch.object(sentiment, "get_fear_greed_index") as mock_fng, \
          patch.object(sentiment, "get_cryptopanic_sentiment_score") as mock_cp, \
-         patch.object(sentiment, "_fetch_santiment") as mock_sant:
+         patch.object(sentiment, "_fetch_santiment_async") as mock_sant:
         mock_fng.return_value = {"value": 50, "classification": "Neutral"}
         mock_cp.return_value = None
         mock_sant.return_value = None
-        result = sentiment.get_combined_sentiment(slug="bitcoin")
+        result = await sentiment.get_combined_sentiment(slug="bitcoin")
     assert abs(result.overall_score - 0.5) < 0.01
     assert result.signal_count == 1
 
@@ -283,13 +286,14 @@ def test_regime_snapshot_defaults_social_dominance():
     assert snap.social_dominance_zscore == 0.0
 
 
-def test_get_social_signal_returns_none_when_disabled():
+@pytest.mark.asyncio
+async def test_get_social_signal_returns_none_when_disabled():
     """_get_social_signal returns None when Santiment not enabled."""
     from data.regime import MarketRegimeDetector
     detector = MarketRegimeDetector()
     with patch("data.regime.settings") as mock_settings:
         mock_settings.SANTIMENT_ENABLED = False
-        result = detector._get_social_signal("bitcoin")
+        result = await detector._fetch_social_signal_async("bitcoin")
     assert result is None
 
 
@@ -352,3 +356,55 @@ def test_check_trending_assets_empty_when_disabled():
         import asyncio
         result = asyncio.run(loop._check_trending_assets())
     assert result == []
+
+
+# ── Async/sync wrapper tests for C5 fix ──
+
+
+@pytest.mark.asyncio
+async def test_fetch_santiment_async_does_not_crash():
+    """_fetch_santiment_async returns None gracefully when Santiment disabled."""
+    sentiment = SentimentFetcher()
+    with patch("data.sentiment.settings") as mock_settings:
+        mock_settings.SANTIMENT_ENABLED = False
+        result = await sentiment._fetch_santiment_async(slug="bitcoin")
+    assert result is None
+
+
+def test_fetch_santiment_sync_does_not_crash():
+    """_fetch_santiment wrapper works in sync context without RuntimeError."""
+    sentiment = SentimentFetcher()
+    with patch("data.sentiment.settings") as mock_settings:
+        mock_settings.SANTIMENT_ENABLED = False
+        result = sentiment._fetch_santiment(slug="bitcoin")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_combined_sentiment_async_no_runtime_error():
+    """get_combined_sentiment as async does not raise RuntimeError."""
+    sentiment = SentimentFetcher()
+    with patch.object(sentiment, "get_fear_greed_index") as mock_fng, \
+         patch.object(sentiment, "get_cryptopanic_sentiment_score") as mock_cp, \
+         patch.object(sentiment, "_fetch_santiment_async") as mock_sant:
+        mock_fng.return_value = {"value": 50, "classification": "Neutral"}
+        mock_cp.return_value = None
+        mock_sant.return_value = None
+        result = await sentiment.get_combined_sentiment(slug="bitcoin")
+    assert result is not None
+    assert result.overall_score == 0.5
+
+
+def test_get_combined_sentiment_sync_wrapper():
+    """get_combined_sentiment_sync returns correct result from sync context."""
+    sentiment = SentimentFetcher()
+    with patch.object(sentiment, "get_fear_greed_index") as mock_fng, \
+         patch.object(sentiment, "get_cryptopanic_sentiment_score") as mock_cp, \
+         patch.object(sentiment, "_fetch_santiment_async") as mock_sant:
+        mock_fng.return_value = {"value": 60, "classification": "Greed"}
+        mock_cp.return_value = 0.5
+        mock_sant.return_value = None
+        result = sentiment.get_combined_sentiment_sync(slug="bitcoin")
+    assert result is not None
+    assert result.fear_greed_index == 60
+    assert result.signal_count == 2

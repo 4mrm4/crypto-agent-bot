@@ -326,6 +326,7 @@ class ResearcherAgent(BaseAgent):
             if not hasattr(self, "_specs"):
                 self._specs = {}
             self._specs[spec_id] = spec
+            self._generated_specs[spec_id] = spec
 
             return json.dumps(spec, indent=2)
 

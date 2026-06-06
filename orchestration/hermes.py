@@ -6,6 +6,7 @@ and manages autonomous research/backtest cycles. Each agent operates as an
 independent LangGraph react_agent coordinated by the Kanban workflow.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -75,7 +76,9 @@ class HermesOrchestrator:
             logger.info("Hypothesis: %.200s", hypothesis)
 
             # 2. Run the inner LangGraph with hypothesis context
-            output = self._run_research_goal(goal, max_cycles=max_cycles, hypothesis=hypothesis, iteration=iter_num)
+            output = asyncio.run(
+                self._run_research_goal(goal, max_cycles=max_cycles, hypothesis=hypothesis, iteration=iter_num)
+            )
             final_output = output
 
             # 3. Extract best metrics from the output
@@ -137,7 +140,7 @@ class HermesOrchestrator:
     # Inner research run
     # ------------------------------------------------------------------
 
-    def _run_research_goal(
+    async def _run_research_goal(
         self,
         goal: str,
         max_cycles: int = 5,
@@ -147,6 +150,10 @@ class HermesOrchestrator:
         """Execute a single research lifecycle using the LangGraph state graph."""
         logger.info("=== Research goal: %s ===", goal)
         goal_id = uuid.uuid4().hex[:8]
+
+        # Enable research mode on circuit breaker — skip hard halt on hallucinated PnL
+        from agents.risk_manager import CircuitBreakerState
+        CircuitBreakerState._research_mode = True
 
         # Reset board for this run
         self.board = TaskBoard(self.agents, self._agent_capabilities)
@@ -175,7 +182,7 @@ class HermesOrchestrator:
                 sf = SentimentFetcher()
                 symbol = settings.SYMBOL.replace("/USDT", "")
                 slug = symbol.lower()
-                combined = sf.get_combined_sentiment(slug=slug, currency=symbol)
+                combined = sf.get_combined_sentiment_sync(slug=slug, currency=symbol)
 
                 # Build backward-compatible sentinel dict
                 fg_value = combined.fear_greed_index or 50
@@ -303,21 +310,33 @@ class HermesOrchestrator:
             f"Assess risk for strategies targeting: {enriched_goal}", assigned_to="risk_manager"
         )
 
-        # Run the LangGraph
-        initial_state = {
-            "goal": enriched_goal,
-            "board": self.board,
-            "current_task_id": None,
-            "current_agent_name": None,
-            "cycle": 0,
-            "max_cycles": max_cycles,
-            "final_output": None,
-            "messages": [],
-            "curator_context": "",
-            "research_specs": research_specs if research_specs else None,
-        }
+        # Run the LangGraph — wrapped in try/finally to reset research_mode even on crash
+        try:
+            initial_state = {
+                "goal": enriched_goal,
+                "board": self.board,
+                "current_task_id": None,
+                "current_agent_name": None,
+                "cycle": 0,
+                "max_cycles": max_cycles,
+                "final_output": None,
+                "messages": [],
+                "curator_context": "",
+                "research_specs": research_specs if research_specs else None,
+            }
 
-        final_state = self._graph.invoke(initial_state)
+            timeout = getattr(settings, 'LANGGRAPH_TIMEOUT', 300) or 300
+            try:
+                final_state = await asyncio.wait_for(
+                    self._graph.ainvoke(initial_state),
+                    timeout=timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.error("LangGraph invoke timed out after %ds", timeout)
+                initial_state["error"] = "Research cycle timed out"
+                final_state = initial_state
+        finally:
+            CircuitBreakerState._research_mode = False
 
         output = final_state.get("final_output", self._build_summary(enriched_goal))
 
@@ -508,8 +527,8 @@ class HermesOrchestrator:
 
         Priority:
         1. Top-level keys in the output dict (set by graph finalize)
-        2. Most recent experiment in workspace/experiments.jsonl for this strategy type
-        3. Backtester agent's in-memory _iteration_history (LLM tool calls)
+        2. Backtester agent's in-memory _iteration_history (fresh tool-call data)
+        3. Most recent experiment in workspace/experiments.jsonl for this strategy type (stale fallback)
         """
         metrics = {
             "sharpe_ratio": output.get("sharpe_ratio", 0),
@@ -522,7 +541,31 @@ class HermesOrchestrator:
         if metrics["total_trades"]:
             return metrics
 
-        # ── Attempt to read from experiments.jsonl ──
+        # ── Level 2: backtester's in-memory iteration history (fresh tool-call data) ──
+        backtester = self.agents.get("backtester")
+        if backtester and hasattr(backtester, "_iteration_history") and backtester._iteration_history:
+            recent = [
+                r for r in backtester._iteration_history
+                if r["metrics"].get("total_trades", 0)
+            ]
+            if recent:
+                best = max(
+                    recent,
+                    key=lambda r: (
+                        r["metrics"].get("sharpe_ratio", -999)
+                        if isinstance(r["metrics"].get("sharpe_ratio"), (int, float))
+                        else -999
+                    ),
+                )
+                return {
+                    "sharpe_ratio": best["metrics"].get("sharpe_ratio", 0),
+                    "win_rate": best["metrics"].get("win_rate", 0),
+                    "max_drawdown": best["metrics"].get("max_drawdown", 0),
+                    "profit_ratio": best["metrics"].get("profit_ratio", best["metrics"].get("total_profit", 0)),
+                    "total_trades": best["metrics"].get("total_trades", 0),
+                }
+
+        # ── Level 3: fall back to experiments.jsonl (stale entries, last resort) ──
         # Parse strategy type from goal text, e.g.:
         # "Coverage gap: ... Researching multi_timeframe."
         strategy_type = None
@@ -556,28 +599,6 @@ class HermesOrchestrator:
                                     }
                 except Exception as exc:
                     logger.debug("Failed to read experiments.jsonl: %s", exc)
-
-        if metrics["total_trades"]:
-            return metrics
-
-        # ── Fall back to backtester's in-memory iteration history ──
-        backtester = self.agents.get("backtester")
-        if backtester and hasattr(backtester, "_iteration_history") and backtester._iteration_history:
-            best = max(
-                backtester._iteration_history,
-                key=lambda r: (
-                    r["metrics"].get("sharpe_ratio", -999)
-                    if isinstance(r["metrics"].get("sharpe_ratio"), (int, float))
-                    else -999
-                ),
-            )
-            return {
-                "sharpe_ratio": best["metrics"].get("sharpe_ratio", 0),
-                "win_rate": best["metrics"].get("win_rate", 0),
-                "max_drawdown": best["metrics"].get("max_drawdown", 0),
-                "profit_ratio": best["metrics"].get("profit_ratio", best["metrics"].get("total_profit", 0)),
-                "total_trades": best["metrics"].get("total_trades", 0),
-            }
 
         return metrics
 

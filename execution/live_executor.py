@@ -103,8 +103,8 @@ class LiveExecutor:
         if self._exchange is None and not self.paper_mode:
             exchange_class = getattr(ccxt, self.exchange_id)
             self._exchange = exchange_class({
-                "apiKey": settings.OPENAI_API_KEY,  # placeholder — real key goes in .env
-                "secret": "",
+                "apiKey": settings.EXCHANGE_API_KEY,
+                "secret": settings.EXCHANGE_SECRET,
                 "enableRateLimit": True,
                 "options": {"defaultType": "spot"},
             })
@@ -232,10 +232,12 @@ class LiveExecutor:
                 None,
                 lambda: self._paper_trader.run(signal_fn, max_candles=5),
             )
+            trades = result.get("trades", [])
+            fill_price = trades[-1].entry_price if trades else 0.0
             return ExecutionResult(
                 signal_id=signal.signal_id,
                 success=True,
-                fill_price=result.get("final_balance", 0),
+                fill_price=fill_price,
                 fill_amount=signal.position_size_usdt,
                 status="executed_paper",
             )

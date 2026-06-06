@@ -38,6 +38,11 @@ class TradingDatabase:
     _instances: Dict[str, "TradingDatabase"] = {}
     _lock = threading.Lock()
 
+    VALID_TABLES = frozenset({
+        "trades", "experiments", "pipeline_results",
+        "oos_results", "validation_trades", "api_cache", "_migrations"
+    })
+
     def __new__(cls, db_path=None, legacy_backup=True):
         path = Path(db_path) if isinstance(db_path, str) else (db_path or DB_PATH)
         key = str(path)
@@ -630,18 +635,20 @@ class TradingDatabase:
             return result[0].upper() == "WAL"
 
     def table_count(self, table_name: str) -> int:
-        """Count rows in a table."""
+        """Count rows in a table. Raises ValueError for invalid table names."""
+        if table_name not in self.VALID_TABLES:
+            raise ValueError(f"Invalid table name: {table_name!r}")
         with self.transaction() as conn:
             result = conn.execute(
-                f"SELECT COUNT(*) FROM {table_name}"
+                f"SELECT COUNT(*) FROM [{table_name}]"
             ).fetchone()
             return result[0]
 
     def clear_all(self) -> None:
         """Clear all data (for testing)."""
         with self.transaction() as conn:
-            for table in ["trades", "experiments", "oos_results", "pipeline_results", "validation_trades", "_migrations"]:
-                conn.execute(f"DELETE FROM {table}")
+            for table in self.VALID_TABLES - {"_migrations"}:
+                conn.execute(f"DELETE FROM [{table}]")
 
     # ── API Cache ──
 

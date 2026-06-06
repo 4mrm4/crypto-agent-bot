@@ -27,17 +27,17 @@
         --text-secondary: #a6978a;
         --text-muted: #73665a;
         --amber: #e8854a;
-        --amber-glow: #e8854a18;
         --amber-dim: #cc7540;
         --teal: #4a9e8c;
         --teal-dim: #3a8a7a;
-        --teal-glow: #4a9e8c15;
         --sage: #7ab86a;
-        --sage-glow: #7ab86a12;
         --coral: #d65d5d;
-        --coral-glow: #d65d5d12;
         --gold: #d8a84a;
-        --gold-glow: #d8a84a12;
+        --amber-glow: rgba(232,133,74,0.08);
+        --teal-glow: rgba(74,158,140,0.08);
+        --sage-glow: rgba(122,184,106,0.08);
+        --coral-glow: rgba(214,93,93,0.08);
+        --gold-glow: rgba(216,168,74,0.08);
         --radius: 10px;
         --radius-sm: 6px;
       }
@@ -49,15 +49,17 @@
       body {
         background: var(--bg-deep);
         background-image:
-          radial-gradient(ellipse at 20% 50%, rgba(232, 133, 74, 0.04) 0%, transparent 50%),
-          radial-gradient(ellipse at 80% 20%, rgba(74, 158, 140, 0.03) 0%, transparent 50%);
+          radial-gradient(ellipse at 20% 30%, rgba(232,133,74,0.05) 0%, transparent 50%),
+          radial-gradient(ellipse at 80% 70%, rgba(74,158,140,0.04) 0%, transparent 50%);
         color: var(--text);
         font-family: "Sora", sans-serif;
         -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
         min-height: 100vh;
         position: relative;
         overflow-x: hidden;
       }
+      /* Noise grain overlay */
       body::after {
         content: "";
         position: fixed;
@@ -65,10 +67,11 @@
         opacity: 0.025;
         pointer-events: none;
         z-index: 9999;
-        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='ng'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23ng)' opacity='0.5'/%3E%3C/svg%3E");
         background-repeat: repeat;
         background-size: 200px 200px;
       }
+      /* Geometric grid background */
       body::before {
         content: "";
         position: fixed;
@@ -77,114 +80,134 @@
         right: 0;
         bottom: 0;
         background-image:
-          linear-gradient(rgba(54, 48, 42, 0.3) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(54, 48, 42, 0.3) 1px, transparent 1px);
+          linear-gradient(rgba(54,48,42,0.25) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(54,48,42,0.25) 1px, transparent 1px);
         background-size: 48px 48px;
         pointer-events: none;
         z-index: -1;
       }
       ::-webkit-scrollbar {
-        width: 3px;
+        width: 6px;
+        height: 6px;
       }
       ::-webkit-scrollbar-track {
-        background: transparent;
+        background: var(--bg-surface);
       }
       ::-webkit-scrollbar-thumb {
         background: var(--border);
-        border-radius: 2px;
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--border-light);
       }
       @keyframes reveal {
-        from {
-          opacity: 0;
-          transform: translateY(6px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-      @keyframes revealLeft {
-        from {
-          opacity: 0;
-          transform: translateX(-8px);
-        }
-        to {
-          opacity: 1;
-          transform: translateX(0);
-        }
-      }
-      @keyframes revealRight {
-        from {
-          opacity: 0;
-          transform: translateX(8px);
-        }
-        to {
-          opacity: 1;
-          transform: translateX(0);
-        }
-      }
-      @keyframes pulse {
-        0%,
-        100% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0.3;
-        }
-      }
-      @keyframes shimmer {
-        0% {
-          background-position: -200% 0;
-        }
-        100% {
-          background-position: 200% 0;
-        }
-      }
-      @keyframes stampIn {
-        from {
-          opacity: 0;
-          scale: 0.9;
-        }
-        to {
-          opacity: 1;
-          scale: 1;
-        }
-      }
-      @keyframes fadeIn {
-        from {
-          opacity: 0;
-        }
-        to {
-          opacity: 1;
-        }
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
       }
       @keyframes slideUp {
-        from {
-          opacity: 0;
-          transform: translateY(12px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
       }
-      .r1 {
-        animation: reveal 0.4s ease-out both;
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
       }
-      .r2 {
-        animation: reveal 0.4s ease-out 0.08s both;
+      @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
       }
-      .r3 {
-        animation: reveal 0.4s ease-out 0.16s both;
+      @keyframes stampIn {
+        from { opacity: 0; scale: 0.9; }
+        to { opacity: 1; scale: 1; }
       }
-      .r4 {
-        animation: reveal 0.4s ease-out 0.24s both;
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
       }
-      .rl {
-        animation: revealLeft 0.4s ease-out both;
+      .r1 { animation: reveal 0.4s ease-out both; }
+      .r2 { animation: reveal 0.4s ease-out 0.1s both; }
+      .r3 { animation: reveal 0.4s ease-out 0.2s both; }
+      .r4 { animation: reveal 0.4s ease-out 0.3s both; }
+      .r5 { animation: reveal 0.4s ease-out 0.4s both; }
+      .r6 { animation: reveal 0.4s ease-out 0.5s both; }
+      .rl { animation: slideUp 0.4s ease-out both; }
+      .rr { animation: slideUp 0.4s ease-out 0.08s both; }
+
+      /* Glass-morphism navbar */
+      .nav-glass {
+        background: rgba(15,14,12,0.85);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border);
       }
-      .rr {
-        animation: revealRight 0.4s ease-out both;
+
+      /* Skeleton shimmer */
+      .skeleton {
+        background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-elevated) 50%, var(--bg-card) 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s ease-in-out infinite;
+        border-radius: 4px;
+      }
+
+      /* Table styles */
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10.5px;
+        font-family: "DM Mono", monospace;
+      }
+      .data-table thead th {
+        text-align: left;
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--border);
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        font-size: 9px;
+        letter-spacing: 1px;
+        font-family: "Syne", sans-serif;
+      }
+      .data-table tbody td {
+        padding: 5px 8px;
+        border-bottom: 1px solid rgba(54,48,42,0.3);
+      }
+      .data-table tbody tr:hover {
+        background: rgba(45,39,34,0.5);
+      }
+      .data-table tbody tr:last-child td {
+        border-bottom: none;
+      }
+
+      /* Smooth transitions */
+      button, input, select, textarea {
+        transition: all 0.15s ease;
+      }
+      button:hover:not(:disabled) {
+        filter: brightness(1.1);
+      }
+      button:active:not(:disabled) {
+        transform: scale(0.97);
+      }
+
+      /* Card hover effects */
+      .r1, .r2, .r3, .r4, .r5, .r6 {
+        transition: transform 0.2s ease, border-color 0.2s ease;
+      }
+      .r1:hover, .r2:hover, .r3:hover, .r4:hover, .r5:hover, .r6:hover {
+        transform: translateY(-2px);
+        border-color: var(--amber);
+      }
+
+      @media (max-width: 900px) {
+        .dash-grid { grid-template-columns: 1fr !important; }
+        .research-grid { grid-template-columns: 1fr !important; }
+        .metrics-grid { grid-template-columns: repeat(2,1fr) !important; }
+        .nav-tabs { gap: 4px !important; }
+        .nav-tab { font-size: 9px !important; padding: 6px 10px !important; }
+        .dash-row-3 { grid-template-columns: 1fr !important; }
+      }
+      @media (max-width: 600px) {
+        .metrics-grid { grid-template-columns: 1fr !important; }
       }
     </style>
   </head>
@@ -192,19 +215,7 @@
     <div id="root"></div>
     <div
       id="error-banner"
-      style="
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        background: var(--coral);
-        color: #fff;
-        padding: 12px 20px;
-        font-family: &quot;DM Mono&quot;, monospace;
-        font-size: 13px;
-        z-index: 99999;
-      "
+      style="display:none;position:fixed;top:0;left:0;right:0;background:var(--coral);color:#fff;padding:12px 20px;font-family:'DM Mono',monospace;font-size:13px;z-index:99999;"
     ></div>
     <script>
       window.onerror = function (m, u, l, c, e) {
@@ -213,12 +224,15 @@
         b.style.display = "block";
       };
     </script>
-    <script type="text/babel">const { useState, useEffect, useRef, useCallback, useMemo, Fragment } = React;
 
+    <script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo, Fragment } = React;
+
+// ── Color Constants ──
 const T = {
-  deep: "#141210",
-  surface: "#1b1815",
-  card: "#221e1a",
+  deep: "#0f0e0c",
+  surface: "#1a1714",
+  card: "#231f1b",
   elevated: "#2d2722",
   border: "#36302a",
   borderLight: "#443d36",
@@ -235,18 +249,75 @@ const T = {
 };
 
 const AGENTS = {
-  analyst: { icon: "◈", label: "Analyst", color: "#448aff" },
-  strategist: { icon: "◉", label: "Strategist", color: "#4a9e8c" },
-  risk_manager: { icon: "▣", label: "Risk Mgr", color: "#7ab86a" },
-  curator: { icon: "◇", label: "Curator", color: "#b388ff" },
-  researcher: { icon: "○", label: "Researcher", color: "#d8a84a" },
+  analyst: { icon: "\u25C8", label: "Analyst", color: "#448aff" },
+  strategist: { icon: "\u25C9", label: "Strategist", color: "#4a9e8c" },
+  risk_manager: { icon: "\u25A3", label: "Risk Mgr", color: "#7ab86a" },
+  curator: { icon: "\u25C7", label: "Curator", color: "#b388ff" },
+  researcher: { icon: "\u25CB", label: "Researcher", color: "#d8a84a" },
 };
 
-function uid() {
-  return Math.random().toString(36).slice(2, 6);
+const TABS = [
+  { id: "research", label: "Research", icon: "\u27D0" },
+  { id: "dashboard", label: "Dashboard", icon: "\u25C8" },
+  { id: "strategies", label: "Strategies", icon: "\u25C9" },
+  { id: "signals", label: "Signals", icon: "\u25CB" },
+];
+
+function uid() { return Math.random().toString(36).slice(2, 6); }
+function fmtNum(n) { return n != null ? Number(n).toLocaleString() : "\u2014"; }
+function pct(v) { return v != null ? (v * 100).toFixed(v < 0.1 ? 1 : 0) + "%" : "\u2014"; }
+function fmtPnl(pnl) {
+  if (pnl == null) return "\u2014";
+  const n = typeof pnl === "number" ? pnl * 100 : pnl;
+  return (n >= 0 ? "+" : "") + Number(n).toFixed(1) + "%";
 }
-function fmtNum(n) {
-  return n != null ? Number(n).toLocaleString() : "—";
+
+// ── Skeleton Loader ──
+function Skeleton({ width, height, style }) {
+  return (
+    <div
+      className="skeleton"
+      style={{ width: width || "100%", height: height || 16, ...(style || {}) }}
+    />
+  );
+}
+
+// ── MiniStat ──
+function MiniStat({ label, value, color, small }) {
+  return (
+    <div
+      style={{
+        background: T.surface,
+        borderRadius: "0 4px 0 4px",
+        padding: small ? "4px 8px" : "6px 10px",
+        border: `1px solid ${T.border}`,
+      }}
+    >
+      <div
+        style={{
+          fontSize: small ? 7 : 8,
+          color: T.muted,
+          fontFamily: "'DM Mono',monospace",
+          textTransform: "uppercase",
+          letterSpacing: small ? "0.5px" : "1px",
+          marginBottom: 1,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: small ? 13 : 16,
+          fontWeight: 700,
+          color: color || T.text,
+          fontFamily: "'DM Mono',monospace",
+          lineHeight: 1.3,
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
 }
 
 // ── App ──
@@ -262,7 +333,7 @@ function App() {
   const [showModal, setShowModal] = useState(false);
   const [goalInput, setGoalInput] = useState("Test SMA crossover for BTC/USDT");
   const [cycleInput, setCycleInput] = useState(3);
-  const [iterInput, setIterInput] = useState(1);
+  const [iterInput, setIterInput] = useState(5);
   const [running, setRunning] = useState(false);
   const [timeline, setTimeline] = useState([]);
   const [log, setLog] = useState([]);
@@ -270,40 +341,51 @@ function App() {
   const [sentiment, setSentiment] = useState(null);
   const logRef = useRef(null);
   const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
 
   // Dashboard state
   const [autonomousState, setAutonomousState] = useState(null);
   const [autoStarting, setAutoStarting] = useState(false);
+  const [autoStopping, setAutoStopping] = useState(false);
+  const [autoPausing, setAutoPausing] = useState(false);
   const [positions, setPositions] = useState([]);
-  const [signalFeed, setSignalFeed] = useState([]);
-  const [strategies, setStrategies] = useState([]);
+  const [wsReconnect, setWsReconnect] = useState(0);
   const [circuitBreaker, setCircuitBreaker] = useState({ halted: false });
   const [regimeSnapshot, setRegimeSnapshot] = useState(null);
   const [iterationData, setIterationData] = useState({ results: [], discarded_count: 0, kept_count: 0, best_sharpe: 0 });
+  const [signalsTabData, setSignalsTabData] = useState([]);
+  const [strategyTabData, setStrategyTabData] = useState([]);
+  const [startupStatus, setStartupStatus] = useState(null);
+  const [riskPortfolio, setRiskPortfolio] = useState(null);
+  const [dataHealth, setDataHealth] = useState(null);
 
+  // Loading states
+  const [loading, setLoading] = useState({
+    autonomous: true, positions: true, strategies: true,
+    circuit: true, regime: true, iterations: true,
+    signals: true, startup: true, risk: true,
+  });
+  const [errors, setErrors] = useState({});
+
+  // ── WebSocket for Research ──
   useEffect(() => {
     if (!runId) return;
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${proto}//${window.location.host}/ws/run/${runId}`);
     ws.onopen = () => setConnected(true);
     ws.onmessage = (m) => {
-      try {
-        processEvent(JSON.parse(m.data));
-      } catch (e) {}
+      try { processEvent(JSON.parse(m.data)); } catch (e) { /* ignore parse errors */ }
     };
-    ws.onclose = () => setConnected(false);
+    ws.onclose = () => { setConnected(false); setTimeout(() => setWsReconnect(n => n + 1), 2000); };
     ws.onerror = () => setConnected(false);
     return () => ws.close();
-  }, [runId]);
+  }, [runId, wsReconnect]);
 
   function processEvent(ev) {
     const { type, payload, timestamp } = ev;
     const ts = timestamp ? new Date(timestamp).toLocaleTimeString() : "";
     const entry = { type, payload, timestamp: ts, id: uid() };
-    setLog((prev) => [...prev.slice(-49), entry]);
+    setLog((prev) => [...prev.slice(-99), entry]);
     switch (type) {
       case "hypothesis":
         setHypothesis(payload.hypothesis || "");
@@ -311,7 +393,7 @@ function App() {
         setMaxIter(payload.max_iterations || 5);
         break;
       case "critique":
-        setHypothesis((prev) => prev + "\n\n╌ Critique ╌\n" + (payload.critique || ""));
+        setHypothesis((prev) => prev + "\n\n\u2550 Critique \u2550\n" + (payload.critique || ""));
         break;
       case "iteration_result":
         setIteration(payload.iteration || 0);
@@ -332,10 +414,10 @@ function App() {
         break;
       case "task_done":
         setTimeline((prev) => [
-          ...prev.slice(-49),
+          ...prev.slice(-99),
           {
             agent: payload.agent,
-            task: (payload.description || "").slice(0, 100),
+            task: (payload.description || "").slice(0, 120),
             time: ts,
             id: uid(),
           },
@@ -368,37 +450,21 @@ function App() {
         }));
         break;
       case "autonomous_cycle_complete":
-        fetch("/api/autonomous/status")
-          .then((r) => r.json())
-          .then((d) => setAutonomousState(d))
-          .catch(() => {});
-        fetch("/api/regime/current")
-          .then((r) => r.json())
-          .then((d) => setRegimeSnapshot(d))
-          .catch(() => {});
+        fetch("/api/autonomous/status").then(r=>r.json()).then(setAutonomousState).catch(()=>{});
+        fetch("/api/regime/current").then(r=>r.json()).then(setRegimeSnapshot).catch(()=>{});
         break;
       case "strategy_decay_detected":
-        setLog((prev) => [
-          ...prev.slice(-49),
-          { type: "decay_alert", payload, time: ts, id: uid() },
-        ]);
+        setLog((prev) => [...prev.slice(-99), { type: "decay_alert", payload, time: ts, id: uid() }]);
         break;
       case "trade_signal_evaluated":
-        setSignalFeed((prev) => [...prev.slice(-99), { signal: payload, time: ts, id: uid() }]);
+        setSignalsTabData((prev) => [...prev.slice(-199), { signal: payload, time: ts, id: uid() }]);
         break;
       case "trade_executed":
-        setSignalFeed((prev) => [
-          ...prev.slice(-99),
-          { signal: { ...payload, type: "executed" }, time: ts, id: uid() },
-        ]);
-        break;
-        fetch("/api/positions/open")
-          .then((r) => r.json())
-          .then((d) => setPositions(Array.isArray(d) ? d : []))
-          .catch(() => {});
+        setSignalsTabData((prev) => [...prev.slice(-199), { signal: { ...payload, type: "executed" }, time: ts, id: uid() }]);
+        fetch("/api/positions/open").then(r=>r.json()).then(d=>setPositions(Array.isArray(d)?d:[])).catch(()=>{});
         break;
       case "anomaly_detected":
-        setLog((prev) => [...prev.slice(-49), { type: "anomaly", payload, time: ts, id: uid() }]);
+        setLog((prev) => [...prev.slice(-99), { type: "anomaly", payload, time: ts, id: uid() }]);
         break;
       case "circuit_breaker_triggered":
         setCircuitBreaker({ halted: true, reason: payload.reason });
@@ -431,269 +497,211 @@ function App() {
       body: JSON.stringify({ goal, max_cycles: cycleInput, max_iterations: iterInput }),
     })
       .then((r) => r.json())
-      .then((d) => {
-        if (d.run_id) setRunId(d.run_id);
-      })
+      .then((d) => { if (d.run_id) setRunId(d.run_id); })
       .catch(() => setRunning(false));
   }
 
+  // ── Autonomous Actions ──
   function startAutonomous() {
     setAutoStarting(true);
+    setLoading((p) => ({ ...p, autonomous: true }));
     fetch("/api/autonomous/start", { method: "POST" })
       .then((r) => r.json())
       .then((d) => {
         setAutoStarting(false);
-        if (d.status === "already_running")
-          setAutonomousState((prev) => ({ ...prev, is_running: true }));
+        setAutonomousState((prev) => ({ ...prev, is_running: true }));
+        setTimeout(pollAll, 500);
       })
       .catch(() => setAutoStarting(false));
   }
   function stopAutonomous() {
+    setAutoStopping(true);
     fetch("/api/autonomous/stop", { method: "POST" })
       .then((r) => r.json())
-      .then(() => setAutonomousState((prev) => ({ ...prev, is_running: false })))
-      .catch(() => {});
+      .then(() => {
+        setAutoStopping(false);
+        setAutonomousState((prev) => ({ ...prev, is_running: false }));
+      })
+      .catch(() => setAutoStopping(false));
   }
-  function pollAutoStatus() {
-    fetch("/api/autonomous/status")
+  function pauseAutonomous() {
+    setAutoPausing(true);
+    fetch("/api/autonomous/pause", { method: "POST" })
       .then((r) => r.json())
-      .then((d) => setAutonomousState(d))
+      .then(() => {
+        setAutoPausing(false);
+        setAutonomousState((prev) => ({ ...prev, is_paused: true, is_running: true }));
+      })
+      .catch(() => setAutoPausing(false));
+  }
+  function resumeAutonomous() {
+    setAutoPausing(true);
+    fetch("/api/autonomous/resume", { method: "POST" })
+      .then((r) => r.json())
+      .then(() => {
+        setAutoPausing(false);
+        setAutonomousState((prev) => ({ ...prev, is_paused: false, is_running: true }));
+      })
+      .catch(() => setAutoPausing(false));
+  }
+
+  function haltCircuitBreaker() {
+    fetch("/api/circuit-breaker/halt?reason=Manual halt from UI", { method: "POST" })
+      .then(r => r.json())
+      .then(d => { setCircuitBreaker(d); })
       .catch(() => {});
   }
-  // Poll dashboard data
+  function clearCircuitBreaker() {
+    fetch("/api/circuit-breaker/clear", { method: "POST" })
+      .then(r => r.json())
+      .then(d => { setCircuitBreaker(d); })
+      .catch(() => {});
+  }
+
+  // ── Dashboard Polling ──
+  function pollAll() {
+    const setLoaded = (key) => setLoading((p) => ({ ...p, [key]: false }));
+    fetch("/api/autonomous/status").then(r=>r.json()).then(d=>{setAutonomousState(d);setLoaded("autonomous");}).catch((err)=>{setLoaded("autonomous");setErrors(prev=>({...prev,autonomous:err.message}));});
+    fetch("/api/positions/open").then(r=>r.json()).then(d=>{setPositions(Array.isArray(d)?d:[]);setLoaded("positions");}).catch((err)=>{setLoaded("positions");setErrors(prev=>({...prev,positions:err.message}));});
+    fetch("/api/strategies/deployable").then(r=>r.json()).then(d=>{const a=Array.isArray(d)?d:d.strategies||[];setLoaded("strategies");}).catch((err)=>{setLoaded("strategies");setErrors(prev=>({...prev,strategies:err.message}));});
+    fetch("/api/circuit-breaker/status").then(r=>r.json()).then(d=>{setCircuitBreaker(d);setLoaded("circuit");}).catch((err)=>{setLoaded("circuit");setErrors(prev=>({...prev,circuit:err.message}));});
+    fetch("/api/regime/current").then(r=>r.json()).then(d=>{setRegimeSnapshot(d);setLoaded("regime");}).catch((err)=>{setLoaded("regime");setErrors(prev=>({...prev,regime:err.message}));});
+    fetch("/api/autonomous/iterations").then(r=>r.json()).then(d=>{setIterationData(d);setLoaded("iterations");}).catch((err)=>{setLoaded("iterations");setErrors(prev=>({...prev,iterations:err.message}));});
+    fetch("/api/signals/feed").then(r=>r.json()).then(d=>{const a=Array.isArray(d)?d:d.signals||[];setSignalsTabData(a);setLoaded("signals");}).catch((err)=>{setLoaded("signals");setErrors(prev=>({...prev,signals:err.message}));});
+    fetch("/api/startup/status").then(r=>r.json()).then(d=>{setStartupStatus(d);setLoaded("startup");}).catch((err)=>{setLoaded("startup");setErrors(prev=>({...prev,startup:err.message}));});
+    fetch("/api/risk/portfolio").then(r=>r.json()).then(d=>{setRiskPortfolio(d);setLoaded("risk");}).catch((err)=>{setLoaded("risk");setErrors(prev=>({...prev,risk:err.message}));});
+    fetch("/api/data/health").then(r=>r.json()).then(d=>{setDataHealth(d);}).catch(()=>{});
+  }
+
+  // Poll dashboard data every 10s
   useEffect(() => {
     if (tab !== "dashboard") return;
+    pollAll();
+    const iv = setInterval(pollAll, 10000);
+    return () => clearInterval(iv);
+  }, [tab]);
+
+  // Fetch strategies data when on strategies tab
+  useEffect(() => {
+    if (tab !== "strategies") return;
+    fetch("/api/strategies/deployable").then(r=>r.json()).then(d=>{
+      const a = Array.isArray(d) ? d : d.strategies || [];
+      setStrategyTabData(a);
+    }).catch(()=>{});
+  }, [tab]);
+
+  // Fetch signals data when on signals tab
+  useEffect(() => {
+    if (tab !== "signals") return;
     const poll = () => {
-      fetch("/api/autonomous/status")
-        .then((r) => r.json())
-        .then(setAutonomousState)
-        .catch(() => {});
-      fetch("/api/positions/open")
-        .then((r) => r.json())
-        .then((d) => setPositions(Array.isArray(d) ? d : []))
-        .catch(() => {});
-      fetch("/api/strategies/deployable")
-        .then((r) => r.json())
-        .then((d) => setStrategies(Array.isArray(d) ? d : []))
-        .catch(() => {});
-      fetch("/api/circuit-breaker/status")
-        .then((r) => r.json())
-        .then(setCircuitBreaker)
-        .catch(() => {});
-      fetch("/api/regime/current")
-        .then((r) => r.json())
-        .then((d) => setRegimeSnapshot(d))
-        .catch(() => {});
-      fetch("/api/autonomous/iterations")
-        .then((r) => r.json())
-        .then(setIterationData)
-        .catch(() => {});
+      fetch("/api/signals/feed").then(r=>r.json()).then(d=>{
+        const a = Array.isArray(d) ? d : d.signals || [];
+        setSignalsTabData(a);
+      }).catch(()=>{});
     };
     poll();
     const iv = setInterval(poll, 10000);
     return () => clearInterval(iv);
   }, [tab]);
 
-  const dotColor = running ? T.sage : connected ? T.muted : T.coral;
-  const dotLabel = running ? "Running" : connected ? "Standby" : "Offline";
-
   if (!mounted) return null;
 
-  const tabs = [
-    { id: "research", label: "Research", icon: "⟐" },
-    { id: "dashboard", label: "Dashboard", icon: "◈" },
-    { id: "strategies", label: "Strategies", icon: "◉" },
-    { id: "signals", label: "Signals", icon: "○" },
-  ];
+  const isLive = running || autonomousState?.is_running;
+  const isActive = isLive;
+  const dotColor = isActive ? T.sage : connected ? T.teal : T.muted;
+  const dotLabel = running ? "Running" : autonomousState?.is_running ? (autonomousState?.is_paused ? "Paused" : "Auto") : connected ? "Standby" : "Offline";
 
   return (
     <div
       style={{
         maxWidth: 1440,
         margin: "0 auto",
-        padding: "16px 24px",
+        padding: "0 24px",
         height: "100vh",
         display: "flex",
         flexDirection: "column",
-        gap: 12,
       }}
     >
-      {/* Header */}
-      <header
-        className="r1"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 0 10px 0",
-          borderBottom: `1px solid ${T.border}`,
-          position: "relative",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            bottom: -1,
-            left: 0,
-            height: 2,
-            width: 80,
-            background: T.amber,
-            borderRadius: "0 1px 0 0",
-          }}
-        />
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: "0 8px 0 8px",
-              border: `2px solid ${T.amber}`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 16,
-              fontWeight: 700,
-              color: T.amber,
-              fontFamily: "'Syne',sans-serif",
-              letterSpacing: "-0.5px",
-            }}
-          >
-            ⟐
-          </div>
-          <div>
-            <h1
-              style={{
-                fontFamily: "'Syne',sans-serif",
-                fontSize: 17,
-                fontWeight: 700,
-                letterSpacing: "-0.3px",
-                color: T.text,
-                lineHeight: 1.2,
-              }}
-            >
-              Crypto Agent Bot
-            </h1>
-            <div
-              style={{
-                fontSize: 10,
-                color: T.muted,
-                fontFamily: "'DM Mono',monospace",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginTop: 1,
-              }}
-            >
-              <span style={{ color: dotColor, fontSize: 8 }}>●</span>
-              <span>{dotLabel}</span>
-              {tokens.total_tokens > 0 && (
-                <span style={{ color: T.gold }}>◆ {tokens.total_tokens.toLocaleString()} tok</span>
-              )}
-              {circuitBreaker.halted && <span style={{ color: T.coral }}>! CIRCUIT HALTED</span>}
-            </div>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              style={{
-                padding: "7px 14px",
-                borderRadius: "0 6px 0 6px",
-                background: tab === t.id ? T.amber : T.elevated,
-                color: tab === t.id ? "#fff" : T.text,
-                border: `1px solid ${tab === t.id ? T.amber : T.borderLight}`,
-                cursor: "pointer",
-                fontSize: 11,
-                fontWeight: 600,
-                fontFamily: "'Sora',sans-serif",
-                transition: "all 0.15s",
-              }}
-            >
-              {t.icon} {t.label}
-            </button>
-          ))}
-          <button
-            onClick={() => {
-              const s = autonomousState || {};
-              if (s.is_running) stopAutonomous();
-              else startAutonomous();
-            }}
-            disabled={autoStarting || running}
-            style={{
-              padding: "7px 14px",
-              borderRadius: "0 6px 0 6px",
-              background: autoStarting
-                ? "#d8a84a"
-                : autonomousState?.is_running
-                  ? "#7ab86a"
-                  : "#2d2722",
-              color: autoStarting ? "#000" : "#fff",
-              border: `1px solid ${autoStarting ? "#d8a84a" : autonomousState?.is_running ? "#7ab86a" : "#443d36"}`,
-              cursor: autoStarting || running ? "not-allowed" : "pointer",
-              fontSize: 11,
-              fontWeight: 600,
-              fontFamily: "'Sora',sans-serif",
-              opacity: autoStarting || running ? 0.4 : 1,
-              transition: "all 0.15s",
-            }}
-          >
-            {autoStarting
-              ? "Starting\u2026"
-              : autonomousState?.is_running
-                ? "Stop Auto"
-                : "Start Auto"}
-          </button>
-          <button
-            onClick={() => setShowModal(true)}
-            disabled={running}
-            style={{
-              padding: "7px 14px",
-              borderRadius: "0 6px 0 6px",
-              background: T.elevated,
-              color: T.text,
-              border: `1px solid ${T.borderLight}`,
-              cursor: running ? "not-allowed" : "pointer",
-              fontSize: 11,
-              fontWeight: 600,
-              fontFamily: "'Sora',sans-serif",
-              opacity: running ? 0.4 : 1,
-            }}
-          >
-            + New Run
-          </button>
-        </div>
-      </header>
+      {/* ── NavBar ── */}
+      <NavBar
+        tab={tab}
+        setTab={setTab}
+        dotColor={dotColor}
+        dotLabel={dotLabel}
+        tokens={tokens}
+        circuitBreaker={circuitBreaker}
+        running={running}
+        autonomousState={autonomousState}
+        startAutonomous={startAutonomous}
+        stopAutonomous={stopAutonomous}
+        autoStarting={autoStarting}
+        autoStopping={autoStopping}
+        pauseAutonomous={pauseAutonomous}
+        resumeAutonomous={resumeAutonomous}
+        autoPausing={autoPausing}
+        setShowModal={setShowModal}
+      />
 
-      {/* Tab content */}
-      {tab === "research" && (
-        <ResearchView
-          hypothesis={hypothesis}
-          iteration={iteration}
-          maxIter={maxIter}
-          metrics={metrics}
-          chartData={chartData}
-          sentiment={sentiment}
-          running={running}
-          timeline={timeline}
-          tokens={tokens}
-          log={log}
-          logRef={logRef}
-        />
+      {/* ── Tab Content ── */}
+      <div style={{ flex: 1, minHeight: 0, paddingTop: 12, overflow: "hidden" }}>
+        {tab === "research" && (
+          <ResearchView
+            hypothesis={hypothesis}
+            iteration={iteration}
+            maxIter={maxIter}
+            metrics={metrics}
+            chartData={chartData}
+            sentiment={sentiment}
+            running={running}
+            timeline={timeline}
+            tokens={tokens}
+            log={log}
+            logRef={logRef}
+            goalInput={goalInput}
+            setGoalInput={setGoalInput}
+            cycleInput={cycleInput}
+            setCycleInput={setCycleInput}
+            iterInput={iterInput}
+            setIterInput={setIterInput}
+            startRun={startRun}
+          />
+        )}
+        {tab === "dashboard" && (
+          <DashboardView
+            autonomousState={autonomousState}
+            circuitBreaker={circuitBreaker}
+            regimeSnapshot={regimeSnapshot}
+            positions={positions}
+            tokens={tokens}
+            iterationData={iterationData}
+            loading={loading}
+            startupStatus={startupStatus}
+            riskPortfolio={riskPortfolio}
+            dataHealth={dataHealth}
+            startAutonomous={startAutonomous}
+            stopAutonomous={stopAutonomous}
+            pauseAutonomous={pauseAutonomous}
+            resumeAutonomous={resumeAutonomous}
+            autoStarting={autoStarting}
+            autoStopping={autoStopping}
+            autoPausing={autoPausing}
+            haltCircuitBreaker={haltCircuitBreaker}
+            clearCircuitBreaker={clearCircuitBreaker}
+          />
+        )}
+        {tab === "strategies" && <StrategyLibraryView strategies={strategyTabData} />}
+        {tab === "signals" && <SignalFeedView signals={signalsTabData} />}
+      </div>
+
+      {/* Error Status Bar */}
+      {Object.keys(errors).length > 0 && (
+        <div style={{position: 'fixed', bottom: 0, left: 0, right: 0, background: 'var(--coral)', color: '#fff', padding: '4px 16px', fontSize: 11, fontFamily: 'DM Mono', zIndex: 9999, display: 'flex', gap: 16}}>
+          <span>⚠ API Errors: {Object.keys(errors).length}</span>
+          {Object.entries(errors).slice(0, 3).map(([k, v]) => (
+            <span key={k} style={{opacity: 0.8}}>{k}: {v}</span>
+          ))}
+        </div>
       )}
-      {tab === "dashboard" && (
-        <DashboardView
-          autonomousState={autonomousState}
-          circuitBreaker={circuitBreaker}
-          regimeSnapshot={regimeSnapshot}
-          positions={positions}
-          tokens={tokens}
-          iterationData={iterationData}
-        />
-      )}
-      {tab === "strategies" && <StrategyLibraryView strategies={strategies} />}
-      {tab === "signals" && <SignalFeedView signals={signalFeed} />}
 
       {showModal && (
         <Modal
@@ -712,191 +720,391 @@ function App() {
 }
 
 // ════════════════════════════════════════════
-// RESEARCH VIEW (Original layout preserved)
+// NAVBAR
+// ════════════════════════════════════════════
+function NavBar({
+  tab, setTab, dotColor, dotLabel, tokens, circuitBreaker,
+  running, autonomousState, startAutonomous, stopAutonomous,
+  autoStarting, autoStopping, pauseAutonomous, resumeAutonomous,
+  autoPausing, setShowModal
+}) {
+  const isRunning = autonomousState?.is_running;
+  const isPaused = autonomousState?.is_paused;
+  return (
+    <header className="nav-glass" style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: "0 4px",
+      margin: "0 -24px",
+      height: 48,
+      flexShrink: 0,
+      position: "sticky",
+      top: 0,
+      zIndex: 100,
+    }}>
+      {/* Logo + Status */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14, paddingLeft: 24 }}>
+        <div style={{
+          width: 30, height: 30,
+          borderRadius: "0 6px 0 6px",
+          border: `2px solid ${T.amber}`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 14, fontWeight: 700, color: T.amber,
+          fontFamily: "'Syne',sans-serif",
+        }}>
+          ⟐
+        </div>
+        <div>
+          <h1 style={{
+            fontFamily: "'Syne',sans-serif",
+            fontSize: 14, fontWeight: 700,
+            letterSpacing: "-0.3px", color: T.text,
+            lineHeight: 1.2,
+          }}>
+            Crypto Agent Bot
+          </h1>
+          <div style={{
+            fontSize: 9, color: T.muted,
+            fontFamily: "'DM Mono',monospace",
+            display: "flex", alignItems: "center", gap: 8,
+          }}>
+            <span style={{ color: dotColor, fontSize: 7 }}>●</span>
+            <span>{dotLabel}</span>
+            {tokens.total_tokens > 0 && (
+              <span style={{ color: T.gold }}>◆ {tokens.total_tokens.toLocaleString()} tok</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="nav-tabs" style={{
+        display: "flex", alignItems: "center", gap: 2,
+        height: "100%",
+      }}>
+        {TABS.map((t) => {
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              style={{
+                position: "relative",
+                height: "100%",
+                padding: "0 18px",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 10,
+                fontWeight: active ? 700 : 500,
+                fontFamily: "'Syne',sans-serif",
+                color: active ? T.text : T.muted,
+                textTransform: "uppercase",
+                letterSpacing: "2px",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                opacity: active ? 1 : 0.6,
+              }}
+            >
+              <span style={{ fontSize: 9, color: active ? T.amber : T.muted }}>{t.icon}</span>
+              {t.label}
+              {active && (
+                <div style={{
+                  position: "absolute",
+                  bottom: 0, left: "10%", right: "10%",
+                  height: 2,
+                  background: `linear-gradient(90deg,transparent,${T.amber},transparent)`,
+                  borderRadius: "1px 1px 0 0",
+                }} />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Action Controls */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, paddingRight: 24 }}>
+        {/* Circuit Breaker Alert */}
+        {circuitBreaker?.halted && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 4,
+            padding: "4px 10px",
+            background: `${T.coral}15`,
+            border: `1px solid ${T.coral}30`,
+            borderRadius: "0 4px 0 4px",
+          }}>
+            <div style={{
+              width: 6, height: 6, borderRadius: "50%",
+              background: T.coral,
+              animation: "pulse 1.5s ease-in-out infinite",
+            }} />
+            <span style={{ fontSize: 9, color: T.coral, fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>
+              HALTED
+            </span>
+          </div>
+        )}
+
+        {/* Auto Start/Stop */}
+        {!isRunning ? (
+          <button
+            onClick={startAutonomous}
+            disabled={autoStarting || running}
+            style={{
+              padding: "5px 12px",
+              borderRadius: "0 4px 0 4px",
+              background: autoStarting ? T.gold : "transparent",
+              color: autoStarting ? "#000" : T.teal,
+              border: `1px solid ${autoStarting ? T.gold : T.teal}`,
+              cursor: (autoStarting || running) ? "not-allowed" : "pointer",
+              fontSize: 9,
+              fontWeight: 700,
+              fontFamily: "'Syne',sans-serif",
+              textTransform: "uppercase",
+              letterSpacing: "1.5px",
+              opacity: (autoStarting || running) ? 0.5 : 1,
+            }}
+          >
+            {autoStarting ? "..." : "Start Auto"}
+          </button>
+        ) : (
+          <div style={{ display: "flex", gap: 4 }}>
+            {!isPaused ? (
+              <button
+                onClick={pauseAutonomous}
+                disabled={autoPausing}
+                style={{
+                  padding: "5px 10px",
+                  borderRadius: "0 4px 0 4px",
+                  background: "transparent",
+                  color: T.gold,
+                  border: `1px solid ${T.gold}`,
+                  cursor: autoPausing ? "not-allowed" : "pointer",
+                  fontSize: 8,
+                  fontWeight: 700,
+                  fontFamily: "'Syne',sans-serif",
+                  textTransform: "uppercase",
+                  letterSpacing: "1px",
+                  opacity: autoPausing ? 0.5 : 1,
+                }}
+              >
+                Pause
+              </button>
+            ) : (
+              <button
+                onClick={resumeAutonomous}
+                disabled={autoPausing}
+                style={{
+                  padding: "5px 10px",
+                  borderRadius: "0 4px 0 4px",
+                  background: "transparent",
+                  color: T.sage,
+                  border: `1px solid ${T.sage}`,
+                  cursor: autoPausing ? "not-allowed" : "pointer",
+                  fontSize: 8,
+                  fontWeight: 700,
+                  fontFamily: "'Syne',sans-serif",
+                  textTransform: "uppercase",
+                  letterSpacing: "1px",
+                  opacity: autoPausing ? 0.5 : 1,
+                }}
+              >
+                Resume
+              </button>
+            )}
+            <button
+              onClick={stopAutonomous}
+              disabled={autoStopping}
+              style={{
+                padding: "5px 10px",
+                borderRadius: "0 4px 0 4px",
+                background: "transparent",
+                color: T.coral,
+                border: `1px solid ${T.coral}`,
+                cursor: autoStopping ? "not-allowed" : "pointer",
+                fontSize: 8,
+                fontWeight: 700,
+                fontFamily: "'Syne',sans-serif",
+                textTransform: "uppercase",
+                letterSpacing: "1px",
+                opacity: autoStopping ? 0.5 : 1,
+              }}
+            >
+              Stop
+            </button>
+          </div>
+        )}
+
+        <button
+          onClick={() => setShowModal(true)}
+          disabled={running}
+          style={{
+            padding: "5px 12px",
+            borderRadius: "0 4px 0 4px",
+            background: T.amber,
+            color: "#000",
+            border: `1px solid ${T.amber}`,
+            cursor: running ? "not-allowed" : "pointer",
+            fontSize: 9,
+            fontWeight: 700,
+            fontFamily: "'Syne',sans-serif",
+            textTransform: "uppercase",
+            letterSpacing: "1.5px",
+            opacity: running ? 0.4 : 1,
+            marginLeft: 2,
+          }}
+        >
+          + New Run
+        </button>
+      </div>
+    </header>
+  );
+}
+
+// ════════════════════════════════════════════
+// RESEARCH VIEW
 // ════════════════════════════════════════════
 function ResearchView({
-  hypothesis,
-  iteration,
-  maxIter,
-  metrics,
-  chartData,
-  sentiment,
-  running,
-  timeline,
-  tokens,
-  log,
-  logRef,
+  hypothesis, iteration, maxIter, metrics, chartData,
+  sentiment, running, timeline, tokens, log, logRef,
+  goalInput, setGoalInput, cycleInput, setCycleInput,
+  iterInput, setIterInput, startRun,
 }) {
   const hasM = metrics && Object.keys(metrics).length > 0;
   return (
-    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 12 }}>
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          display: "grid",
-          gridTemplateColumns: "210px 1fr 190px",
-          gap: 12,
-        }}
-      >
-        <div className="rl">
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+      {/* 3-col grid */}
+      <div className="research-grid" style={{
+        flex: 1, minHeight: 0,
+        display: "grid",
+        gridTemplateColumns: "210px 1fr 190px",
+        gap: 10,
+      }}>
+        {/* Left: Timeline Panel */}
+        <div className="r1" style={{ overflow: "hidden" }}>
           <TimelinePanel events={timeline} />
         </div>
-        <div
-          className="r2"
-          style={{ display: "flex", flexDirection: "column", gap: 10, overflow: "hidden" }}
-        >
-          {/* Hypothesis */}
-          <div
-            style={{
-              background: T.card,
-              borderRadius: "0 8px 0 8px",
-              border: `1px solid ${T.border}`,
-              flexShrink: 0,
-              maxHeight: 160,
-              overflowY: "auto",
-              position: "relative",
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                top: 12,
-                left: 0,
-                width: 3,
-                height: 26,
-                background: T.amber,
-                borderRadius: "0 2px 2px 0",
-              }}
-            />
+
+        {/* Center: Hypothesis + Chart + Metrics */}
+        <div className="r2" style={{ display: "flex", flexDirection: "column", gap: 8, overflow: "hidden" }}>
+          {/* Hypothesis Card */}
+          <div style={{
+            background: T.card,
+            borderRadius: "0 8px 0 8px",
+            border: `1px solid ${T.border}`,
+            flexShrink: 0,
+            maxHeight: 150,
+            overflowY: "auto",
+            position: "relative",
+          }}>
+            <div style={{
+              position: "absolute", top: 12, left: 0,
+              width: 3, height: 26,
+              background: T.amber,
+              borderRadius: "0 2px 2px 0",
+            }} />
             <div style={{ padding: "10px 16px 10px 22px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                <h2
-                  style={{
-                    fontFamily: "'Syne',sans-serif",
-                    fontSize: 10,
-                    fontWeight: 600,
-                    color: T.muted,
-                    textTransform: "uppercase",
-                    letterSpacing: "2px",
-                  }}
-                >
+                <h2 style={{
+                  fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
+                  color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
+                }}>
                   Hypothesis
                 </h2>
                 {iteration > 0 && (
-                  <span
-                    style={{
-                      fontSize: 9,
-                      fontWeight: 600,
-                      padding: "1px 8px",
-                      borderRadius: "0 4px 0 4px",
-                      background: `${T.amber}15`,
-                      color: T.amber,
-                      fontFamily: "'DM Mono',monospace",
-                    }}
-                  >
+                  <span style={{
+                    fontSize: 8, fontWeight: 600,
+                    padding: "1px 8px",
+                    borderRadius: "0 4px 0 4px",
+                    background: `${T.amber}15`,
+                    color: T.amber,
+                    fontFamily: "'DM Mono',monospace",
+                  }}>
                     IT {iteration}/{maxIter}
                   </span>
                 )}
               </div>
               {hypothesis ? (
-                <pre
-                  style={{
-                    fontSize: 11.5,
-                    color: T.text,
-                    lineHeight: 1.7,
-                    fontFamily: "'DM Mono',monospace",
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
+                <pre style={{
+                  fontSize: 11, color: T.text, lineHeight: 1.7,
+                  fontFamily: "'DM Mono',monospace", whiteSpace: "pre-wrap",
+                }}>
                   {hypothesis}
                 </pre>
               ) : (
-                <div style={{ fontSize: 12, color: T.muted, fontStyle: "italic" }}>
-                  {running ? "…" : "No hypothesis yet."}
+                <div style={{ fontSize: 11, color: T.muted, fontStyle: "italic" }}>
+                  {running ? "Generating hypothesis..." : "No hypothesis yet."}
                 </div>
               )}
             </div>
           </div>
-          {/* Metrics */}
-          <div
-            style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 8, flexShrink: 0 }}
-          >
-            <MetricBox
-              label="Sharpe"
-              value={hasM ? metrics.sharpe_ratio?.toFixed(2) : "—"}
-              color={T.amber}
-            />
-            <MetricBox
-              label="Win Rate"
-              value={hasM ? `${(metrics.win_rate * 100).toFixed(0)}%` : "—"}
-              color={T.sage}
-            />
-            <MetricBox
-              label="Max DD"
-              value={hasM ? `${(Math.abs(metrics.max_drawdown) * 100).toFixed(1)}%` : "—"}
-              color={T.coral}
-            />
-            <MetricBox label="Trades" value={hasM ? metrics.total_trades : "—"} color="#b388ff" />
+
+          {/* Metrics Grid */}
+          <div className="metrics-grid" style={{
+            display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6,
+            flexShrink: 0,
+          }}>
+            <MetricBox label="Sharpe" value={hasM ? metrics.sharpe_ratio?.toFixed(2) : "\u2014"} color={T.amber} />
+            <MetricBox label="Win Rate" value={hasM && metrics.win_rate != null ? `${(metrics.win_rate * 100).toFixed(0)}%` : "\u2014"} color={T.sage} />
+            <MetricBox label="Max DD" value={hasM && metrics.max_drawdown != null ? `${(Math.abs(metrics.max_drawdown) * 100).toFixed(1)}%` : "\u2014"} color={T.coral} />
+            <MetricBox label="Trades" value={hasM ? metrics.total_trades : "\u2014"} color={T.teal} />
             <SentimentBox sentiment={sentiment} />
           </div>
+
           {/* Chart */}
-          <div
-            style={{
-              flex: 1,
-              minHeight: 80,
-              background: T.card,
-              borderRadius: "0 8px 0 8px",
-              border: `1px solid ${T.border}`,
-              padding: "10px 16px",
-              position: "relative",
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                top: 12,
-                left: 0,
-                width: 3,
-                height: 20,
-                background: T.teal,
-                borderRadius: "0 2px 2px 0",
-              }}
-            />
-            <h2
-              style={{
-                fontFamily: "'Syne',sans-serif",
-                fontSize: 10,
-                fontWeight: 600,
-                color: T.muted,
-                textTransform: "uppercase",
-                letterSpacing: "2px",
-                marginBottom: 6,
-                paddingLeft: 10,
-              }}
-            >
+          <div style={{
+            flex: 1, minHeight: 80,
+            background: T.card,
+            borderRadius: "0 8px 0 8px",
+            border: `1px solid ${T.border}`,
+            padding: "10px 16px",
+            position: "relative",
+          }}>
+            <div style={{
+              position: "absolute", top: 12, left: 0,
+              width: 3, height: 20,
+              background: T.teal,
+              borderRadius: "0 2px 2px 0",
+            }} />
+            <h2 style={{
+              fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
+              color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
+              marginBottom: 4, paddingLeft: 10,
+            }}>
               Sharpe Progress
             </h2>
             {chartData.length === 0 ? (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  height: "calc(100% - 26px)",
-                }}
-              >
-                <div style={{ fontSize: 11, color: T.muted }}>No iterations yet</div>
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                height: "calc(100% - 24px)",
+              }}>
+                <div style={{ fontSize: 10, color: T.muted }}>
+                  {running ? "Waiting for data..." : "No iterations yet"}
+                </div>
               </div>
             ) : (
               <Chart data={chartData} xKey="iter" yKey="sharpe" color={T.amber} />
             )}
           </div>
         </div>
-        <div className="rr" style={{ marginTop: 4 }}>
+
+        {/* Right: Stats Panel */}
+        <div className="r3" style={{ overflow: "hidden" }}>
           <StatsPanel chartData={chartData} tokens={tokens} />
         </div>
       </div>
+
+      {/* Run Controls */}
+      <RunControls
+        goal={goalInput} setGoal={setGoalInput}
+        cycles={cycleInput} setCycles={setCycleInput}
+        iters={iterInput} setIters={setIterInput}
+        onStart={startRun}
+        running={running}
+      />
+
+      {/* Log Panel */}
       <LogPanel events={log} ref={logRef} />
     </div>
   );
@@ -904,46 +1112,28 @@ function ResearchView({
 
 function TimelinePanel({ events }) {
   return (
-    <div
-      style={{
-        background: T.card,
-        borderRadius: "0 8px 0 8px",
-        border: `1px solid ${T.border}`,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        overflow: "hidden",
-        position: "relative",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 2,
-          background: `linear-gradient(90deg,${T.amber},transparent)`,
-        }}
-      />
-      <div
-        style={{
-          padding: "12px 14px 4px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <h2
-          style={{
-            fontFamily: "'Syne',sans-serif",
-            fontSize: 10,
-            fontWeight: 600,
-            color: T.muted,
-            textTransform: "uppercase",
-            letterSpacing: "2px",
-          }}
-        >
+    <div style={{
+      background: T.card,
+      borderRadius: "0 8px 0 8px",
+      border: `1px solid ${T.border}`,
+      display: "flex",
+      flexDirection: "column",
+      height: "100%",
+      overflow: "hidden",
+      position: "relative",
+    }}>
+      <div style={{
+        position: "absolute", top: 0, left: 0, right: 0, height: 2,
+        background: `linear-gradient(90deg,${T.amber},transparent)`,
+      }} />
+      <div style={{
+        padding: "12px 14px 4px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+      }}>
+        <h2 style={{
+          fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
+          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
+        }}>
           Agents
         </h2>
         <span style={{ fontSize: 9, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
@@ -953,68 +1143,45 @@ function TimelinePanel({ events }) {
       <div style={{ flex: 1, overflowY: "auto", padding: "2px 8px 8px" }}>
         {events.length === 0 ? (
           <div style={{ padding: "32px 8px", textAlign: "center" }}>
-            <div style={{ fontSize: 18, color: T.muted, marginBottom: 6, opacity: 0.3 }}>⟐</div>
-            <div style={{ fontSize: 11, color: T.muted }}>Awaiting activity…</div>
+            <div style={{ fontSize: 16, color: T.muted, marginBottom: 4, opacity: 0.3 }}>⟐</div>
+            <div style={{ fontSize: 10, color: T.muted }}>Awaiting activity...</div>
           </div>
         ) : (
           events.map((evt) => {
-            const ag = AGENTS[evt.agent] || { icon: "◆", label: evt.agent, color: T.muted };
+            const ag = AGENTS[evt.agent] || { icon: "\u25C6", label: evt.agent, color: T.muted };
             return (
-              <div
-                key={evt.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "6px 6px",
-                  borderRadius: 4,
-                  borderBottom: `1px solid ${T.border}15`,
-                  transition: "background 0.15s",
-                }}
-              >
-                <div
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: "0 4px 0 4px",
-                    background: `${ag.color}15`,
-                    border: `1px solid ${ag.color}30`,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 9,
-                    color: ag.color,
-                    flexShrink: 0,
-                    fontWeight: 700,
-                  }}
-                >
+              <div key={evt.id} style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "5px 6px",
+                borderRadius: 4,
+                borderBottom: `1px solid ${T.border}15`,
+              }}>
+                <div style={{
+                  width: 22, height: 22,
+                  borderRadius: "0 4px 0 4px",
+                  background: `${ag.color}15`,
+                  border: `1px solid ${ag.color}30`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 9, color: ag.color, flexShrink: 0, fontWeight: 700,
+                }}>
                   {ag.icon}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: T.text, lineHeight: 1.3 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: T.text, lineHeight: 1.3 }}>
                     {ag.label}
                   </div>
-                  <div
-                    style={{
-                      fontSize: 9,
-                      color: T.muted,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      lineHeight: 1.3,
-                    }}
-                  >
+                  <div style={{
+                    fontSize: 8, color: T.secondary,
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    lineHeight: 1.3,
+                  }}>
                     {evt.task}
                   </div>
                 </div>
-                <span
-                  style={{
-                    fontSize: 9,
-                    color: T.muted,
-                    fontFamily: "'DM Mono',monospace",
-                    flexShrink: 0,
-                  }}
-                >
+                <span style={{
+                  fontSize: 8, color: T.muted,
+                  fontFamily: "'DM Mono',monospace", flexShrink: 0,
+                }}>
                   {evt.time}
                 </span>
               </div>
@@ -1028,42 +1195,28 @@ function TimelinePanel({ events }) {
 
 function MetricBox({ label, value, color }) {
   return (
-    <div
-      style={{
-        background: T.card,
-        borderRadius: "0 6px 0 6px",
-        border: `1px solid ${T.border}`,
-        padding: "8px 10px",
-        textAlign: "center",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 1.5,
-          background: color,
-          opacity: 0.4,
-        }}
-      />
-      <div
-        style={{
-          fontSize: 9,
-          color: T.muted,
-          textTransform: "uppercase",
-          letterSpacing: "1.5px",
-          marginBottom: 3,
-          fontWeight: 500,
-          fontFamily: "'Syne',sans-serif",
-        }}
-      >
+    <div style={{
+      background: T.card,
+      borderRadius: "0 6px 0 6px",
+      border: `1px solid ${T.border}`,
+      padding: "8px 8px",
+      textAlign: "center",
+      position: "relative",
+      overflow: "hidden",
+    }}>
+      <div style={{
+        position: "absolute", top: 0, left: 0, right: 0, height: 1.5,
+        background: color, opacity: 0.4,
+      }} />
+      <div style={{
+        fontSize: 8, color: T.muted,
+        textTransform: "uppercase", letterSpacing: "1.5px",
+        marginBottom: 2, fontWeight: 500,
+        fontFamily: "'Syne',sans-serif",
+      }}>
         {label}
       </div>
-      <div style={{ fontSize: 17, fontWeight: 700, color, fontFamily: "'DM Mono',monospace" }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color, fontFamily: "'DM Mono',monospace" }}>
         {value}
       </div>
     </div>
@@ -1075,56 +1228,35 @@ function SentimentBox({ sentiment }) {
   const fg = sentiment?.fear_greed;
   const c = bias === "bullish" ? T.sage : bias === "bearish" ? T.coral : T.muted;
   return (
-    <div
-      style={{
-        background: T.card,
-        borderRadius: "0 6px 0 6px",
-        border: `1px solid ${T.border}`,
-        padding: "8px 10px",
-        textAlign: "center",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 1.5,
-          background: c,
-          opacity: 0.4,
-        }}
-      />
-      <div
-        style={{
-          fontSize: 9,
-          color: T.muted,
-          textTransform: "uppercase",
-          letterSpacing: "1.5px",
-          marginBottom: 3,
-          fontWeight: 500,
-          fontFamily: "'Syne',sans-serif",
-        }}
-      >
+    <div style={{
+      background: T.card,
+      borderRadius: "0 6px 0 6px",
+      border: `1px solid ${T.border}`,
+      padding: "8px 8px",
+      textAlign: "center",
+      position: "relative",
+      overflow: "hidden",
+    }}>
+      <div style={{
+        position: "absolute", top: 0, left: 0, right: 0, height: 1.5,
+        background: c, opacity: 0.4,
+      }} />
+      <div style={{
+        fontSize: 8, color: T.muted,
+        textTransform: "uppercase", letterSpacing: "1.5px",
+        marginBottom: 2, fontWeight: 500,
+        fontFamily: "'Syne',sans-serif",
+      }}>
         Sentiment
       </div>
-      <div
-        style={{
-          fontSize: 13,
-          fontWeight: 700,
-          color: c,
-          fontFamily: "'DM Mono',monospace",
-          letterSpacing: "1px",
-        }}
-      >
+      <div style={{
+        fontSize: 12, fontWeight: 700, color: c,
+        fontFamily: "'DM Mono',monospace", letterSpacing: "1px",
+      }}>
         {bias}
       </div>
       {fg && (
-        <div
-          style={{ fontSize: 8, color: T.muted, marginTop: 1, fontFamily: "'DM Mono',monospace" }}
-        >
+        <div style={{ fontSize: 7, color: T.muted, marginTop: 1, fontFamily: "'DM Mono',monospace" }}>
           {fg.value} {fg.classification}
         </div>
       )}
@@ -1132,86 +1264,102 @@ function SentimentBox({ sentiment }) {
   );
 }
 
+function RunControls({ goal, setGoal, cycles, setCycles, iters, setIters, onStart, running }) {
+  return (
+    <div style={{
+      background: T.card,
+      borderRadius: "0 6px 0 6px",
+      border: `1px solid ${T.border}`,
+      padding: "8px 14px",
+      display: "flex", alignItems: "center", gap: 10,
+      flexShrink: 0,
+    }}>
+      <input type="text" value={goal} onChange={e => setGoal(e.target.value)}
+        placeholder="Research goal..." disabled={running}
+        style={{
+          flex: 1, padding: "5px 10px", borderRadius: "0 4px 0 4px",
+          background: T.surface, border: `1px solid ${T.border}`, color: T.text,
+          fontSize: 10, fontFamily: "'DM Mono',monospace", outline: "none",
+        }} />
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <label style={{ fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>Cycles</label>
+        <input type="number" min={1} max={10} value={cycles}
+          onChange={e => setCycles(Number(e.target.value))} disabled={running}
+          style={{
+            width: 48, padding: "4px 6px", borderRadius: "0 4px 0 4px",
+            background: T.surface, border: `1px solid ${T.border}`, color: T.text,
+            fontSize: 10, fontFamily: "'DM Mono',monospace", outline: "none", textAlign: "center",
+          }} />
+        <label style={{ fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>Iters</label>
+        <input type="number" min={1} max={10} value={iters}
+          onChange={e => setIters(Number(e.target.value))} disabled={running}
+          style={{
+            width: 48, padding: "4px 6px", borderRadius: "0 4px 0 4px",
+            background: T.surface, border: `1px solid ${T.border}`, color: T.text,
+            fontSize: 10, fontFamily: "'DM Mono',monospace", outline: "none", textAlign: "center",
+          }} />
+        <button onClick={() => onStart(goal)} disabled={running || !goal?.trim()}
+          style={{
+            padding: "5px 14px", borderRadius: "0 4px 0 4px",
+            background: running || !goal?.trim() ? T.muted : T.amber,
+            color: "#000",
+            border: `1px solid ${running || !goal?.trim() ? T.muted : T.amber}`,
+            cursor: (running || !goal?.trim()) ? "not-allowed" : "pointer",
+            fontSize: 9, fontWeight: 700, fontFamily: "'Syne',sans-serif",
+            textTransform: "uppercase", letterSpacing: "1px",
+            opacity: (running || !goal?.trim()) ? 0.5 : 1,
+          }}>
+          Run
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Chart({ data, xKey, yKey, color }) {
-  const w = 700,
-    h = 120,
-    pl = 40,
-    pr = 14,
-    pt = 6,
-    pb = 20,
-    cw = w - pl - pr,
-    ch = h - pt - pb;
-  const xV = data.map((d) => d[xKey]),
-    yV = data.map((d) => d[yKey] || 0),
-    xM = Math.min(...xV),
-    xX = Math.max(...xV),
-    yM = Math.min(...yV),
-    yX = Math.max(...yV),
-    xR = xX - xM || 1,
-    yR = yX - yM || 1;
+  const w = 700, h = 120, pl = 40, pr = 14, pt = 6, pb = 20;
+  const cw = w - pl - pr, ch = h - pt - pb;
+  const xV = data.map((d) => d[xKey]), yV = data.map((d) => d[yKey] || 0);
+  const xM = Math.min(...xV), xX = Math.max(...xV);
+  const yM = Math.min(...yV), yX = Math.max(...yV);
+  const xR = xX - xM || 1, yR = yX - yM || 1;
   const pts = data.map((d) => ({
-      x: pl + ((d[xKey] - xM) / xR) * cw,
-      y: pt + ch - (((d[yKey] || 0) - yM) / yR) * ch,
-    })),
-    ln = pts.map((p) => `${p.x},${p.y}`).join(" "),
-    fl = pts.map((p) => `${p.x},${p.y}`).join(" "),
-    bs = `${pl},${pt + ch} ${pl + cw},${pt + ch}`;
+    x: pl + ((d[xKey] - xM) / xR) * cw,
+    y: pt + ch - (((d[yKey] || 0) - yM) / yR) * ch,
+  }));
+  const ln = pts.map((p) => `${p.x},${p.y}`).join(" ");
+  const fl = pts.map((p) => `${p.x},${p.y}`).join(" ");
+  const bs = `${pl},${pt + ch} ${pl + cw},${pt + ch}`;
   return (
     <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: "100%", display: "block" }}>
       <defs>
-        <linearGradient id="af" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={`af-${color.replace("#","")}`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity="0.18" />
           <stop offset="100%" stopColor={color} stopOpacity="0.02" />
         </linearGradient>
       </defs>
       {[0.25, 0.5, 0.75].map((f, i) => (
-        <line
-          key={i}
-          x1={pl}
-          y1={pt + ch * f}
-          x2={pl + cw}
-          y2={pt + ch * f}
-          stroke={T.border}
-          strokeWidth="1"
-          strokeDasharray="3 3"
-        />
+        <line key={i} x1={pl} y1={pt + ch * f} x2={pl + cw} y2={pt + ch * f}
+          stroke={T.border} strokeWidth="1" strokeDasharray="3 3" />
       ))}
-      <polygon points={`${fl} ${bs}`} fill="url(#af)" />
-      <polyline
-        points={ln}
-        fill="none"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
+      <polygon points={`${fl} ${bs}`} fill={`url(#af-${color.replace("#","")})`} />
+      <polyline points={ln} fill="none" stroke={color} strokeWidth="2"
+        strokeLinejoin="round" strokeLinecap="round" />
       {pts.map((p, i) => (
         <circle key={i} cx={p.x} cy={p.y} r="2.5" fill={color} stroke={T.card} strokeWidth="1.5" />
       ))}
-      {pts.length > 0 &&
-        (() => {
-          const l = pts[pts.length - 1];
-          return <circle cx={l.x} cy={l.y} r="5" fill={`${color}25`} />;
-        })()}
+      {pts.length > 0 && (() => {
+        const last = pts[pts.length - 1];
+        return <circle cx={last.x} cy={last.y} r="5" fill={`${color}25`} />;
+      })()}
       <text x={pl - 4} y={pt + 4} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">
         {yX.toFixed(2)}
       </text>
-      <text
-        x={pl - 4}
-        y={pt + ch + 4}
-        fill={T.muted}
-        fontSize="8"
-        textAnchor="end"
-        fontFamily="DM Mono"
-      >
+      <text x={pl - 4} y={pt + ch + 4} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">
         {yM.toFixed(2)}
       </text>
-      <text x={pl} y={h - 2} fill={T.muted} fontSize="8" fontFamily="DM Mono">
-        {xM}
-      </text>
-      <text x={w - pr} y={h - 2} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">
-        {xX}
-      </text>
+      <text x={pl} y={h - 2} fill={T.muted} fontSize="8" fontFamily="DM Mono">{xM}</text>
+      <text x={w - pr} y={h - 2} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{xX}</text>
     </svg>
   );
 }
@@ -1219,78 +1367,41 @@ function Chart({ data, xKey, yKey, color }) {
 function StatsPanel({ chartData, tokens }) {
   const best = chartData.length > 0 ? Math.max(...chartData.map((d) => d.sharpe || 0)) : null;
   return (
-    <div
-      style={{
-        background: T.card,
-        borderRadius: "0 8px 0 8px",
-        border: `1px solid ${T.border}`,
-        display: "flex",
-        flexDirection: "column",
-        padding: "12px 14px",
-        height: "100%",
-        position: "relative",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 2,
-          background: `linear-gradient(90deg,${T.teal},transparent)`,
-        }}
-      />
-      <h2
-        style={{
-          fontFamily: "'Syne',sans-serif",
-          fontSize: 10,
-          fontWeight: 600,
-          color: T.muted,
-          textTransform: "uppercase",
-          letterSpacing: "2px",
-          marginBottom: 12,
-        }}
-      >
+    <div style={{
+      background: T.card,
+      borderRadius: "0 8px 0 8px",
+      border: `1px solid ${T.border}`,
+      display: "flex", flexDirection: "column",
+      padding: "12px 14px",
+      height: "100%",
+      position: "relative",
+    }}>
+      <div style={{
+        position: "absolute", top: 0, left: 0, right: 0, height: 2,
+        background: `linear-gradient(90deg,${T.teal},transparent)`,
+      }} />
+      <h2 style={{
+        fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
+        color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
+        marginBottom: 10,
+      }}>
         Run Stats
       </h2>
-      <StatRow label="Iterations" value={chartData.length || "—"} />
-      <StatRow label="Best Sharpe" value={best != null ? best.toFixed(2) : "—"} color={T.amber} />
+      <StatRow label="Iterations" value={chartData.length || "\u2014"} />
+      <StatRow label="Best Sharpe" value={best != null ? best.toFixed(2) : "\u2014"} color={T.amber} />
       <div style={{ flex: 1 }} />
       <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 8, marginTop: 4 }}>
-        <StatRow
-          label="Total Tokens"
-          value={tokens.total_tokens?.toLocaleString() || "0"}
-          color={T.gold}
-        />
+        <StatRow label="Total Tokens" value={tokens.total_tokens?.toLocaleString() || "0"} color={T.gold} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6 }}>
           <div style={{ background: T.surface, borderRadius: "0 4px 0 4px", padding: "4px 8px" }}>
-            <div style={{ fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
-              ↑ Prompt
-            </div>
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: T.text,
-                fontFamily: "'DM Mono',monospace",
-              }}
-            >
+            <div style={{ fontSize: 7, color: T.muted, fontFamily: "'DM Mono',monospace" }}>Prompt</div>
+            <div style={{ fontSize: 10, fontWeight: 600, color: T.text, fontFamily: "'DM Mono',monospace" }}>
               {fmtNum(tokens.prompt_tokens)}
             </div>
           </div>
           <div style={{ background: T.surface, borderRadius: "0 4px 0 4px", padding: "4px 8px" }}>
-            <div style={{ fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
-              ↓ Completion
-            </div>
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: T.text,
-                fontFamily: "'DM Mono',monospace",
-              }}
-            >
+            <div style={{ fontSize: 7, color: T.muted, fontFamily: "'DM Mono',monospace" }}>Completion</div>
+            <div style={{ fontSize: 10, fontWeight: 600, color: T.text, fontFamily: "'DM Mono',monospace" }}>
               {fmtNum(tokens.completion_tokens)}
             </div>
           </div>
@@ -1302,23 +1413,15 @@ function StatsPanel({ chartData, tokens }) {
 
 function StatRow({ label, value, color }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "3px 0",
-      }}
-    >
-      <span style={{ fontSize: 11, color: T.secondary }}>{label}</span>
-      <span
-        style={{
-          fontSize: 12,
-          fontWeight: 700,
-          color: color || T.text,
-          fontFamily: "'DM Mono',monospace",
-        }}
-      >
+    <div style={{
+      display: "flex", justifyContent: "space-between",
+      alignItems: "center", padding: "3px 0",
+    }}>
+      <span style={{ fontSize: 10, color: T.secondary }}>{label}</span>
+      <span style={{
+        fontSize: 11, fontWeight: 700, color: color || T.text,
+        fontFamily: "'DM Mono',monospace",
+      }}>
         {value}
       </span>
     </div>
@@ -1326,796 +1429,900 @@ function StatRow({ label, value, color }) {
 }
 
 const LogPanel = React.forwardRef(function LogPanel({ events }, ref) {
+  const [collapsed, setCollapsed] = React.useState(true);
   return (
-    <div
-      className="r3"
-      style={{
-        background: T.card,
-        borderRadius: "0 6px 0 6px",
-        border: `1px solid ${T.border}`,
-        maxHeight: 70,
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-      }}
-    >
+    <div className="r4" style={{
+      background: T.card,
+      borderRadius: "0 6px 0 6px",
+      border: `1px solid ${T.border}`,
+      maxHeight: collapsed ? 30 : 300,
+      display: "flex",
+      flexDirection: "column",
+      overflow: "hidden",
+      transition: "max-height 0.3s ease",
+    }}>
       <div
         style={{
-          padding: "4px 14px 0",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
+          padding: "4px 14px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          cursor: "pointer", flexShrink: 0,
         }}
+        onClick={() => setCollapsed(!collapsed)}
       >
-        <h2
-          style={{
-            fontFamily: "'Syne',sans-serif",
-            fontSize: 9,
-            fontWeight: 600,
-            color: T.muted,
-            textTransform: "uppercase",
-            letterSpacing: "2px",
-          }}
-        >
+        <h2 style={{
+          fontFamily: "'Syne',sans-serif", fontSize: 8, fontWeight: 600,
+          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
+        }}>
           Event Log
         </h2>
-        <span style={{ fontSize: 9, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
-          {events.length}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
+            {events.length}
+          </span>
+          <button style={{
+            background: "transparent", border: `1px solid ${T.border}`,
+            color: T.muted, borderRadius: "0 3px 0 3px",
+            padding: "1px 6px", cursor: "pointer", fontSize: 8,
+            lineHeight: 1.4,
+          }}>
+            {collapsed ? "\u25BC" : "\u25B2"}
+          </button>
+        </div>
       </div>
-      <div
-        ref={ref}
-        style={{
-          flex: 1,
-          overflowY: "auto",
+      {!collapsed && (
+        <div ref={ref} style={{
+          flex: 1, overflowY: "auto",
           padding: "2px 14px 4px",
-          fontSize: 10.5,
-          fontFamily: "'DM Mono',monospace",
-          lineHeight: 1.8,
-          color: T.secondary,
-        }}
-      >
-        {events.length === 0 ? (
-          <span style={{ color: T.muted }}>Waiting for events…</span>
-        ) : (
-          events.map((evt) => (
-            <div key={evt.id} style={{ display: "flex", gap: 8 }}>
-              <span style={{ color: T.muted, flexShrink: 0 }}>{evt.timestamp}</span>
-              <span
-                style={{
-                  color:
-                    evt.type === "anomaly" ? T.coral : evt.type === "decay_alert" ? T.gold : T.teal,
-                  flexShrink: 0,
-                }}
-              >
-                [{evt.type}]
-              </span>
-              <span
-                style={{
-                  color: T.muted,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {JSON.stringify(evt.payload).slice(0, 180)}
-              </span>
-            </div>
-          ))
-        )}
-      </div>
+          fontSize: 10, fontFamily: "'DM Mono',monospace",
+          lineHeight: 1.8, color: T.secondary,
+        }}>
+          {events.length === 0 ? (
+            <span style={{ color: T.muted }}>Waiting for events...</span>
+          ) : (
+            events.map((evt) => (
+              <div key={evt.id} style={{ display: "flex", gap: 8 }}>
+                <span style={{ color: T.muted, flexShrink: 0, fontSize: 9 }}>{evt.timestamp}</span>
+                <span style={{
+                  color: evt.type === "anomaly" ? T.coral
+                       : evt.type === "decay_alert" ? T.gold
+                       : evt.type === "run_error" ? T.coral
+                       : T.teal,
+                  flexShrink: 0, fontSize: 9,
+                }}>
+                  [{evt.type}]
+                </span>
+                <span style={{
+                  color: T.text,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  fontSize: 9,
+                }}>
+                  {typeof evt.payload === "string" ? evt.payload.slice(0, 180)
+                   : JSON.stringify(evt.payload).slice(0, 180)}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 });
 
+const btnStyle = (color, disabled) => ({
+  background: disabled ? 'var(--bg-elevated)' : color,
+  color: disabled ? 'var(--text-muted)' : '#fff',
+  border: `1px solid ${disabled ? 'var(--border)' : 'transparent'}`,
+  borderRadius: 'var(--radius-sm)',
+  padding: '6px 14px',
+  cursor: disabled ? 'not-allowed' : 'pointer',
+  fontFamily: 'DM Mono',
+  fontSize: 11,
+  fontWeight: 500,
+  transition: 'all 0.2s ease',
+});
+
 // ════════════════════════════════════════════
-// DASHBOARD VIEW (New)
+// DASHBOARD VIEW
 // ════════════════════════════════════════════
-function DashboardView({ autonomousState, circuitBreaker, regimeSnapshot, positions, tokens, iterationData }) {
+function DashboardView({
+  autonomousState, circuitBreaker, regimeSnapshot, positions, tokens,
+  iterationData, loading, startupStatus, riskPortfolio, dataHealth,
+  startAutonomous, stopAutonomous, pauseAutonomous, resumeAutonomous,
+  autoStarting, autoStopping, autoPausing,
+  haltCircuitBreaker, clearCircuitBreaker,
+}) {
+  const isRunning = autonomousState?.is_running;
+  const isPaused = autonomousState?.is_paused;
+
+  const LD = (key, children) => loading[key] ? (
+    <div style={{ padding: 8 }}><Skeleton width="100%" height={60} /></div>
+  ) : children;
+
   return (
-    <div
-      style={{
-        flex: 1,
-        minHeight: 0,
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        gap: 12,
-        overflow: "auto",
-        padding: "2px 0",
-      }}
-    >
-      {/* Top-left: Auto Loop Status */}
-      <div
-        className="r1"
-        style={{
-          background: T.card,
-          borderRadius: "0 8px 0 8px",
-          border: `1px solid ${T.border}`,
-          padding: 14,
-          position: "relative",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 2,
-            background: `linear-gradient(90deg,${T.amber},transparent)`,
-          }}
-        />
-        <h2
-          style={{
-            fontFamily: "'Syne',sans-serif",
-            fontSize: 10,
-            fontWeight: 600,
-            color: T.muted,
-            textTransform: "uppercase",
-            letterSpacing: "2px",
-            marginBottom: 10,
-          }}
-        >
-          ◈ Autonomous Loop
-        </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <MiniStat
-            label="Status"
-            value={autonomousState?.is_running ? "Active" : "Standing by"}
-            color={autonomousState?.is_running ? T.sage : T.muted}
-          />
-          <MiniStat label="Regime" value={autonomousState?.last_regime || "—"} color={T.amber} />
-          <MiniStat label="Cycles" value={autonomousState?.total_cycles || 0} color={T.teal} />
-          <MiniStat
-            label="Goals"
-            value={autonomousState?.total_goals_generated || 0}
-            color={T.gold}
-          />
-        </div>
-        {autonomousState?.current_goal && (
-          <div
-            style={{
-              marginTop: 8,
-              padding: "6px 8px",
-              background: T.surface,
-              borderRadius: 4,
-              border: `1px solid ${T.border}`,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 9,
-                color: T.muted,
-                fontFamily: "'DM Mono',monospace",
-                marginBottom: 2,
-              }}
-            >
-              Current goal
-            </div>
-            <div style={{ fontSize: 10.5, color: T.text, lineHeight: 1.4 }}>
-              {autonomousState.current_goal}
-            </div>
-          </div>
-        )}
-        {autonomousState?.last_error && (
-          <div
-            style={{
-              marginTop: 6,
-              padding: "4px 8px",
-              background: `${T.coral}10`,
-              borderRadius: 4,
-              border: `1px solid ${T.coral}30`,
-            }}
-          >
-            <div style={{ fontSize: 9, color: T.coral, fontFamily: "'DM Mono',monospace" }}>
-              Error: {autonomousState.last_error}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Top-right: Circuit Breaker + Risk */}
-      <div
-        className="r2"
-        style={{
-          background: T.card,
-          borderRadius: "0 8px 0 8px",
-          border: `1px solid ${T.border}`,
-          padding: 14,
-          position: "relative",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 2,
-            background: `linear-gradient(90deg,${T.coral},transparent)`,
-          }}
-        />
-        <h2
-          style={{
-            fontFamily: "'Syne',sans-serif",
-            fontSize: 10,
-            fontWeight: 600,
-            color: T.muted,
-            textTransform: "uppercase",
-            letterSpacing: "2px",
-            marginBottom: 10,
-          }}
-        >
-          ▣ Circuit Breaker
-        </h2>
-        <div
-          style={{
-            padding: "8px 12px",
-            borderRadius: 6,
-            background: circuitBreaker?.halted ? `${T.coral}15` : T.surface,
-            border: `1px solid ${circuitBreaker?.halted ? T.coral : T.border}`,
-            marginBottom: 10,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: circuitBreaker?.halted ? T.coral : T.sage,
-                animation: circuitBreaker?.halted ? "pulse 1.5s ease-in-out infinite" : "none",
-              }}
-            />
-            <span
-              style={{
-                fontSize: 13,
-                fontWeight: 700,
-                color: circuitBreaker?.halted ? T.coral : T.sage,
-                fontFamily: "'DM Mono',monospace",
-              }}
-            >
-              {circuitBreaker?.halted ? "HALTED" : "OPERATIONAL"}
-            </span>
-          </div>
-          {circuitBreaker?.reason && (
-            <div
-              style={{
-                fontSize: 10,
-                color: T.muted,
-                marginTop: 4,
-                fontFamily: "'DM Mono',monospace",
-              }}
-            >
-              {circuitBreaker.reason}
-            </div>
-          )}
-        </div>
-        {/* Regime Snapshot */}
-        <h2
-          style={{
-            fontFamily: "'Syne',sans-serif",
-            fontSize: 10,
-            fontWeight: 600,
-            color: T.muted,
-            textTransform: "uppercase",
-            letterSpacing: "2px",
-            marginBottom: 6,
-          }}
-        >
-          ◈ Regime Map
-        </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-          {["strong_uptrend", "ranging", "volatile", "low_liquidity"].map((r) => {
-            const active = regimeSnapshot?.regime === r;
-            const c = active ? T.amber : T.muted;
-            return (
-              <div
-                key={r}
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: 4,
-                  background: `${c}08`,
-                  border: `1px solid ${active ? T.amber : T.border}`,
-                  opacity: active ? 1 : 0.5,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 8,
-                    color: T.muted,
-                    fontFamily: "'DM Mono',monospace",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {r.replace("_", " ")}
-                </div>
-                {active && (
-                  <div style={{ fontSize: 9, color: T.amber, fontWeight: 600 }}>● ACTIVE</div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Bottom-left: Live Positions */}
-      <div
-        className="r3"
-        style={{
-          background: T.card,
-          borderRadius: "0 8px 0 8px",
-          border: `1px solid ${T.border}`,
-          padding: 14,
-          position: "relative",
-          gridRow: "2",
-          maxHeight: 250,
-          overflow: "auto",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 2,
-            background: `linear-gradient(90deg,${T.teal},transparent)`,
-          }}
-        />
-        <h2
-          style={{
-            fontFamily: "'Syne',sans-serif",
-            fontSize: 10,
-            fontWeight: 600,
-            color: T.muted,
-            textTransform: "uppercase",
-            letterSpacing: "2px",
-            marginBottom: 8,
-          }}
-        >
-          ◉ Live Positions
-        </h2>
-        {positions.length === 0 ? (
-          <div style={{ textAlign: "center", padding: 24 }}>
-            <div style={{ fontSize: 11, color: T.muted }}>No open positions</div>
-            <div style={{ fontSize: 9, color: T.muted, marginTop: 4 }}>
-              Strategies will appear here when signals fire
-            </div>
-          </div>
-        ) : (
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "collapse",
-              fontSize: 10.5,
-              fontFamily: "'DM Mono',monospace",
-            }}
-          >
-            <thead>
-              <tr style={{ color: T.muted }}>
-                {["Pair", "Side", "Entry", "PnL%", "Stop", "Time"].map((h) => (
-                  <th
-                    key={h}
-                    style={{
-                      textAlign: "left",
-                      padding: "4px 6px",
-                      borderBottom: `1px solid ${T.border}`,
-                      fontWeight: 600,
-                    }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {positions.map((p, i) => (
-                <tr key={i}>
-                  <td style={{ padding: "4px 6px", color: T.text }}>{p.pair || "—"}</td>
-                  <td style={{ padding: "4px 6px", color: p.side === "buy" ? T.sage : T.coral }}>
-                    {p.side || "—"}
-                  </td>
-                  <td style={{ padding: "4px 6px", color: T.text }}>${p.entry_price || "—"}</td>
-                  <td
-                    style={{ padding: "4px 6px", color: (p.pnl_pct || 0) >= 0 ? T.sage : T.coral }}
-                  >
-                    {p.pnl_pct != null ? `${(p.pnl_pct * 100).toFixed(1)}%` : "—"}
-                  </td>
-                  <td style={{ padding: "4px 6px", color: T.muted }}>—</td>
-                  <td style={{ padding: "4px 6px", color: T.muted }}>
-                    {p.entry_time ? new Date(p.entry_time).toLocaleTimeString() : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Bottom-right: Research Results */}
-      <div
-        className="r4"
-        style={{
-          background: T.card,
-          borderRadius: "0 8px 0 8px",
-          border: `1px solid ${T.border}`,
-          padding: 14,
-          position: "relative",
-          gridRow: "2",
-          maxHeight: 250,
-          overflow: "auto",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 2,
-            background: `linear-gradient(90deg,${T.gold},transparent)`,
-          }}
-        />
-        <h2
-          style={{
-            fontFamily: "'Syne',sans-serif",
-            fontSize: 10,
-            fontWeight: 600,
-            color: T.muted,
-            textTransform: "uppercase",
-            letterSpacing: "2px",
-            marginBottom: 10,
-          }}
-        >
-          ◈ Research Results
-        </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <MiniStat
-            label="Best Sharpe"
-            value={iterationData?.best_sharpe?.toFixed(2) || "—"}
-            color={T.amber}
-          />
-          <MiniStat
-            label="Discarded"
-            value={iterationData?.discarded_count || 0}
-            color={T.coral}
-          />
-          <MiniStat
-            label="Kept"
-            value={iterationData?.kept_count || 0}
-            color={T.sage}
-          />
-          <MiniStat
-            label="Total Iterations"
-            value={iterationData?.results?.length || 0}
-            color={T.teal}
-          />
-        </div>
-        {iterationData?.results?.length > 0 && (
-          <div
-            style={{
-              marginTop: 10,
-              maxHeight: 120,
-              overflowY: "auto",
-              fontSize: 9.5,
-              fontFamily: "'DM Mono',monospace",
-            }}
-          >
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ color: T.muted, fontSize: 8, textTransform: "uppercase" }}>
-                  <th style={{ textAlign: "left", padding: "2px 4px" }}>It</th>
-                  <th style={{ textAlign: "left", padding: "2px 4px" }}>Sharpe</th>
-                  <th style={{ textAlign: "left", padding: "2px 4px" }}>WR</th>
-                  <th style={{ textAlign: "left", padding: "2px 4px" }}>DD</th>
-                  <th style={{ textAlign: "left", padding: "2px 4px" }}>Trades</th>
-                  <th style={{ textAlign: "left", padding: "2px 4px" }}>Verdict</th>
-                </tr>
-              </thead>
-              <tbody>
-                {iterationData.results.slice(-20).reverse().map((r, i) => (
-                  <tr key={i} style={{ borderTop: `1px solid ${T.border}20` }}>
-                    <td style={{ padding: "2px 4px", color: T.muted }}>{r.iteration}</td>
-                    <td style={{
-                      padding: "2px 4px",
-                      color: r.sharpe_ratio >= 0.8 ? T.sage : T.coral
-                    }}>{r.sharpe_ratio?.toFixed(2)}</td>
-                    <td style={{ padding: "2px 4px", color: T.text }}>
-                      {r.win_rate ? `${(r.win_rate * 100).toFixed(0)}%` : "—"}
-                    </td>
-                    <td style={{ padding: "2px 4px", color: T.text }}>
-                      {r.max_drawdown ? `${(Math.abs(r.max_drawdown) * 100).toFixed(1)}%` : "—"}
-                    </td>
-                    <td style={{ padding: "2px 4px", color: T.text }}>{r.total_trades || 0}</td>
-                    <td style={{
-                      padding: "2px 4px",
-                      color: r.verdict === "kept" || r.verdict === "converged" ? T.sage : T.coral
-                    }}>{r.verdict}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MiniStat({ label, value, color }) {
-  return (
-    <div
-      style={{
-        background: T.surface,
-        borderRadius: "0 4px 0 4px",
-        padding: "6px 8px",
-        border: `1px solid ${T.border}`,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 8,
-          color: T.muted,
-          fontFamily: "'DM Mono',monospace",
-          textTransform: "uppercase",
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontSize: 16,
-          fontWeight: 700,
-          color: color || T.text,
-          fontFamily: "'DM Mono',monospace",
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════
-// STRATEGY LIBRARY VIEW (New)
-// ════════════════════════════════════════════
-function StrategyLibraryView({ strategies }) {
-  return (
-    <div
-      className="r1"
-      style={{
-        flex: 1,
-        minHeight: 0,
-        overflow: "auto",
+    <div className="dash-grid" style={{
+      flex: 1, minHeight: 0,
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 10,
+      overflow: "auto",
+      padding: "2px 0",
+    }}>
+      {/* ── Top-left: Autonomous Loop ── */}
+      <div className="r1" style={{
         background: T.card,
         borderRadius: "0 8px 0 8px",
         border: `1px solid ${T.border}`,
         padding: 14,
         position: "relative",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 2,
-          background: `linear-gradient(90deg,${T.teal},transparent)`,
-        }}
-      />
-      <h2
-        style={{
-          fontFamily: "'Syne',sans-serif",
-          fontSize: 10,
-          fontWeight: 600,
-          color: T.muted,
-          textTransform: "uppercase",
-          letterSpacing: "2px",
+      }}>
+        <div style={{
+          position: "absolute", top: 0, left: 0, right: 0, height: 2,
+          background: `linear-gradient(90deg,${T.amber},transparent)`,
+        }} />
+        <h2 style={{
+          fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
+          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
           marginBottom: 10,
-        }}
-      >
-        ◉ Strategy Library
-      </h2>
-      {strategies.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 40 }}>
-          <div style={{ fontSize: 28, color: T.muted, opacity: 0.2, marginBottom: 8 }}>◉</div>
-          <div style={{ fontSize: 12, color: T.muted }}>No deployable strategies yet</div>
-          <div style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>
+        }}>
+          Autonomous Loop
+        </h2>
+        {LD("autonomous", (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <div style={{
+                width: 10, height: 10, borderRadius: "50%",
+                background: isRunning ? (isPaused ? T.gold : T.sage) : T.muted,
+                animation: isRunning && !isPaused ? "pulse 1.5s ease-in-out infinite" : "none",
+              }} />
+              <span style={{
+                fontSize: 14, fontWeight: 700,
+                color: isRunning ? (isPaused ? T.gold : T.sage) : T.muted,
+                fontFamily: "'DM Mono',monospace",
+              }}>
+                {isRunning ? (isPaused ? "PAUSED" : "RUNNING") : "STOPPED"}
+              </span>
+            </div>
+
+            {autonomousState?.current_goal && (
+              <div style={{
+                marginBottom: 10,
+                padding: "6px 10px",
+                background: T.surface,
+                borderRadius: 4,
+                border: `1px solid ${T.border}`,
+              }}>
+                <div style={{ fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace", marginBottom: 2 }}>
+                  Current Goal
+                </div>
+                <div style={{ fontSize: 10.5, color: T.text, lineHeight: 1.4 }}>
+                  {autonomousState.current_goal}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 10 }}>
+              <MiniStat label="Cycles" value={autonomousState?.total_cycles || 0} color={T.teal} small />
+              <MiniStat label="Sharpe" value={autonomousState?.current_sharpe?.toFixed(2) || "\u2014"} color={T.amber} small />
+              <MiniStat label="Best" value={autonomousState?.current_best_sharpe?.toFixed(2) || "\u2014"} color={T.sage} small />
+            </div>
+
+            {autonomousState?.last_error && (
+              <div style={{
+                padding: "4px 8px",
+                background: `${T.coral}10`,
+                borderRadius: 4,
+                border: `1px solid ${T.coral}30`,
+                marginBottom: 10,
+              }}>
+                <div style={{ fontSize: 9, color: T.coral, fontFamily: "'DM Mono',monospace" }}>
+                  Error: {autonomousState.last_error}
+                </div>
+              </div>
+            )}
+          </>
+        ))}
+
+        {/* Action Buttons */}
+        <div style={{ display: "flex", gap: 6 }}>
+          {!isRunning ? (
+            <button onClick={startAutonomous} disabled={autoStarting}
+              style={btnStyle(autoStarting ? T.gold : T.teal, autoStarting)}>
+              {autoStarting ? "Starting..." : "Start"}
+            </button>
+          ) : (
+            <>
+              {!isPaused ? (
+                <button onClick={pauseAutonomous} disabled={autoPausing}
+                  style={btnStyle(T.gold, autoPausing)}>
+                  Pause
+                </button>
+              ) : (
+                <button onClick={resumeAutonomous} disabled={autoPausing}
+                  style={btnStyle(T.sage, autoPausing)}>
+                  Resume
+                </button>
+              )}
+              <button onClick={stopAutonomous} disabled={autoStopping}
+                style={btnStyle(T.coral, autoStopping)}>
+                Stop
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Top-right: Circuit Breaker + Regime ── */}
+      <div className="r2" style={{
+        background: T.card,
+        borderRadius: "0 8px 0 8px",
+        border: `1px solid ${T.border}`,
+        padding: 14,
+        position: "relative",
+      }}>
+        <div style={{
+          position: "absolute", top: 0, left: 0, right: 0, height: 2,
+          background: `linear-gradient(90deg,${T.coral},transparent)`,
+        }} />
+        <h2 style={{
+          fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
+          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
+          marginBottom: 10,
+        }}>
+          Circuit Breaker &amp; Regime
+        </h2>
+
+        {/* CB Status */}
+        {LD("circuit", (
+          <div style={{
+            padding: "8px 12px",
+            borderRadius: 6,
+            background: circuitBreaker?.halted ? `${T.coral}15` : T.surface,
+            border: `1px solid ${circuitBreaker?.halted ? T.coral : T.border}`,
+            marginBottom: 10,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{
+                width: 8, height: 8, borderRadius: "50%",
+                background: circuitBreaker?.halted ? T.coral : T.sage,
+                animation: circuitBreaker?.halted ? "pulse 1.5s ease-in-out infinite" : "none",
+              }} />
+              <span style={{
+                fontSize: 12, fontWeight: 700,
+                color: circuitBreaker?.halted ? T.coral : T.sage,
+                fontFamily: "'DM Mono',monospace",
+              }}>
+                {circuitBreaker?.halted ? "HALTED" : "OPERATIONAL"}
+              </span>
+            </div>
+            {circuitBreaker?.reason && (
+              <div style={{ fontSize: 9, color: T.muted, marginTop: 4, fontFamily: "'DM Mono',monospace" }}>
+                {circuitBreaker.reason}
+              </div>
+            )}
+            {circuitBreaker?.triggered_by && (
+              <div style={{ fontSize: 8, color: T.muted, marginTop: 2, fontFamily: "'DM Mono',monospace" }}>
+                Triggered by: {circuitBreaker.triggered_by}
+              </div>
+            )}
+            {circuitBreaker?.resume_after && (
+              <div style={{ fontSize: 8, color: T.gold, marginTop: 2, fontFamily: "'DM Mono',monospace" }}>
+                Resume after: {circuitBreaker.resume_after}
+              </div>
+            )}
+            {/* Circuit Breaker Action Buttons */}
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <button onClick={haltCircuitBreaker}
+                style={{
+                  padding: "4px 10px", borderRadius: "0 4px 0 4px",
+                  background: "transparent", color: T.coral,
+                  border: `1px solid ${T.coral}`,
+                  cursor: "pointer", fontSize: 8, fontWeight: 700,
+                  fontFamily: "'Syne',sans-serif",
+                  textTransform: "uppercase", letterSpacing: "1px",
+                }}>
+                Halt
+              </button>
+              <button onClick={clearCircuitBreaker}
+                style={{
+                  padding: "4px 10px", borderRadius: "0 4px 0 4px",
+                  background: "transparent", color: T.sage,
+                  border: `1px solid ${T.sage}`,
+                  cursor: "pointer", fontSize: 8, fontWeight: 700,
+                  fontFamily: "'Syne',sans-serif",
+                  textTransform: "uppercase", letterSpacing: "1px",
+                }}>
+                Clear
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {/* Regime */}
+        {LD("regime", (
+          regimeSnapshot ? (
+            <>
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                marginBottom: 6,
+              }}>
+                <div>
+                  <div style={{
+                    fontSize: 13, fontWeight: 700, color: T.amber,
+                    fontFamily: "'DM Mono',monospace", textTransform: "uppercase",
+                  }}>
+                    {regimeSnapshot.regime?.replace(/_/g, " ") || "\u2014"}
+                  </div>
+                  {regimeSnapshot.confidence != null && (
+                    <div style={{
+                      fontSize: 9, color: T.muted, fontFamily: "'DM Mono',monospace",
+                      marginTop: 1,
+                    }}>
+                      Confidence: {(regimeSnapshot.confidence * 100).toFixed(0)}%
+                    </div>
+                  )}
+                </div>
+                {regimeSnapshot.adx != null && (
+                  <MiniStat label="ADX" value={regimeSnapshot.adx.toFixed(1)} color={regimeSnapshot.adx > 25 ? T.teal : T.muted} small />
+                )}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginTop: 6 }}>
+                {regimeSnapshot.atr_pct != null && (
+                  <MiniStat label="ATR%" value={(regimeSnapshot.atr_pct * 100).toFixed(1) + "%"} color={T.gold} small />
+                )}
+                {regimeSnapshot.sma200_distance != null && (
+                  <MiniStat label="200SMA Dist" value={regimeSnapshot.sma200_distance?.toFixed(2) || "\u2014"} color={T.secondary} small />
+                )}
+              </div>
+              {regimeSnapshot.recommended_strategies?.length > 0 && (
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ fontSize: 7, color: T.muted, fontFamily: "'DM Mono',monospace", marginBottom: 2 }}>
+                    Recommended: {regimeSnapshot.recommended_strategies.join(", ")}
+                  </div>
+                </div>
+              )}
+              {regimeSnapshot.discouraged_strategies?.length > 0 && (
+                <div style={{ marginTop: 2 }}>
+                  <div style={{ fontSize: 7, color: T.coral, fontFamily: "'DM Mono',monospace" }}>
+                    Avoid: {regimeSnapshot.discouraged_strategies.join(", ")}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ fontSize: 10, color: T.muted }}>No regime data yet.</div>
+          )
+        ))}
+      </div>
+
+      {/* ── Bottom-left: Research Results ── */}
+      <div className="r3" style={{
+        background: T.card,
+        borderRadius: "0 8px 0 8px",
+        border: `1px solid ${T.border}`,
+        padding: 14,
+        position: "relative",
+        maxHeight: 280,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+      }}>
+        <div style={{
+          position: "absolute", top: 0, left: 0, right: 0, height: 2,
+          background: `linear-gradient(90deg,${T.gold},transparent)`,
+        }} />
+        <h2 style={{
+          fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
+          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
+          marginBottom: 10,
+        }}>
+          Research Results
+        </h2>
+        {LD("iterations", (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginBottom: 10 }}>
+              <MiniStat label="Best Sharpe" value={iterationData?.best_sharpe?.toFixed(2) || "\u2014"} color={T.amber} small />
+              <MiniStat label="Discarded" value={iterationData?.discarded_count || 0} color={T.coral} small />
+              <MiniStat label="Kept" value={iterationData?.kept_count || 0} color={T.sage} small />
+              <MiniStat label="Total It" value={iterationData?.results?.length || 0} color={T.teal} small />
+            </div>
+            {iterationData?.results?.length > 0 && (
+              <div style={{ flex: 1, overflowY: "auto", fontSize: 9, fontFamily: "'DM Mono',monospace" }}>
+                <table className="data-table" style={{ fontSize: 9 }}>
+                  <thead>
+                    <tr>
+                      <th>It</th><th>Sharpe</th><th>WR</th><th>DD</th><th>Trades</th><th>Verdict</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {iterationData.results.slice(-30).reverse().map((r, i) => (
+                      <tr key={i}>
+                        <td style={{ padding: "2px 6px", color: T.muted }}>{r.iteration}</td>
+                        <td style={{
+                          padding: "2px 6px",
+                          color: r.sharpe_ratio >= 0.8 ? T.sage : r.sharpe_ratio >= 0 ? T.text : T.coral
+                        }}>{r.sharpe_ratio?.toFixed(2) || "\u2014"}</td>
+                        <td style={{ padding: "2px 6px", color: T.text }}>
+                          {r.win_rate ? `${(r.win_rate * 100).toFixed(0)}%` : "\u2014"}
+                        </td>
+                        <td style={{ padding: "2px 6px", color: T.text }}>
+                          {r.max_drawdown ? `${(Math.abs(r.max_drawdown) * 100).toFixed(1)}%` : "\u2014"}
+                        </td>
+                        <td style={{ padding: "2px 6px", color: T.text }}>{r.total_trades || 0}</td>
+                        <td style={{
+                          padding: "2px 6px",
+                          color: r.verdict === "kept" || r.verdict === "converged" ? T.sage : T.coral,
+                          fontWeight: 600,
+                        }}>
+                          {r.verdict === "kept" ? "KEPT" : r.verdict === "converged" ? "KEPT" : r.verdict === "discarded" ? "DISCARDED" : r.verdict || "\u2014"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        ))}
+      </div>
+
+      {/* ── Bottom-right: Live Positions ── */}
+      <div className="r4" style={{
+        background: T.card,
+        borderRadius: "0 8px 0 8px",
+        border: `1px solid ${T.border}`,
+        padding: 14,
+        position: "relative",
+        maxHeight: 280,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+      }}>
+        <div style={{
+          position: "absolute", top: 0, left: 0, right: 0, height: 2,
+          background: `linear-gradient(90deg,${T.teal},transparent)`,
+        }} />
+        <h2 style={{
+          fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
+          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
+          marginBottom: 8,
+        }}>
+          Live Positions
+        </h2>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 8 }}>
+          <MiniStat label="Open Positions" value={riskPortfolio?.total_open_positions ?? positions.length} color={T.teal} small />
+          <MiniStat label="Daily PnL" value={fmtPnl(riskPortfolio?.daily_pnl_pct)} color={(riskPortfolio?.daily_pnl_pct || 0) >= 0 ? T.sage : T.coral} small />
+        </div>
+        {LD("positions", (
+          positions.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 20 }}>
+              <div style={{ fontSize: 10, color: T.muted }}>No open positions</div>
+              <div style={{ fontSize: 8, color: T.muted, marginTop: 4 }}>
+                Signals will appear when opportunities are detected
+              </div>
+            </div>
+          ) : (
+            <div style={{ flex: 1, overflowY: "auto" }}>
+              <table className="data-table" style={{ fontSize: 9.5 }}>
+                <thead>
+                  <tr>
+                    <th>Pair</th><th>Side</th><th>Size</th><th>Entry</th><th>PnL</th><th>Duration</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {positions.map((p, i) => (
+                    <tr key={i}>
+                      <td style={{ padding: "4px 6px", color: T.text, fontWeight: 600 }}>{p.pair || "\u2014"}</td>
+                      <td style={{
+                        padding: "4px 6px",
+                        color: p.side === "buy" || p.side === "long" ? T.sage : T.coral,
+                        fontWeight: 600,
+                      }}>
+                        {(p.side || "\u2014").toUpperCase()}
+                      </td>
+                      <td style={{ padding: "4px 6px", color: T.text }}>{p.size || "\u2014"}</td>
+                      <td style={{ padding: "4px 6px", color: T.text }}>
+                        {p.entry_price ? `$${p.entry_price}` : "\u2014"}
+                      </td>
+                      <td style={{
+                        padding: "4px 6px",
+                        color: (p.pnl_pct || 0) >= 0 ? T.sage : T.coral,
+                        fontWeight: 600,
+                      }}>
+                        {fmtPnl(p.pnl_pct)}
+                      </td>
+                      <td style={{ padding: "4px 6px", color: T.muted }}>
+                        {p.entry_time ? new Date(p.entry_time).toLocaleTimeString() : "\u2014"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        ))}
+      </div>
+
+      {/* ── Row 2: Portfolio, Startup, Data Health ── */}
+      <div className="dash-row-3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
+        {/* Portfolio Risk */}
+        <div className="r5" style={{
+          background: T.card, borderRadius: "0 8px 0 8px",
+          border: `1px solid ${T.border}`, padding: 14,
+          position: "relative",
+        }}>
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg,${T.gold},transparent)` }} />
+          <h2 style={{ fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600, color: T.muted, textTransform: "uppercase", letterSpacing: "2px", marginBottom: 10 }}>
+            Portfolio Risk
+          </h2>
+          {riskPortfolio ? (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+              <MiniStat label="Open" value={riskPortfolio.total_open_positions ?? "\u2014"} color={T.teal} small />
+              <MiniStat label="Daily PnL" value={fmtPnl(riskPortfolio.daily_pnl_pct)} color={(riskPortfolio.daily_pnl_pct||0) >= 0 ? T.sage : T.coral} small />
+              <MiniStat label="Weekly PnL" value={fmtPnl(riskPortfolio.weekly_pnl_pct)} color={(riskPortfolio.weekly_pnl_pct||0) >= 0 ? T.sage : T.coral} small />
+              <MiniStat label="Max DD" value={riskPortfolio.max_drawdown != null ? `${(Math.abs(riskPortfolio.max_drawdown)*100).toFixed(1)}%` : "\u2014"} color={T.coral} small />
+            </div>
+          ) : (
+            <div style={{ fontSize: 10, color: T.muted }}>Waiting for data...</div>
+          )}
+        </div>
+
+        {/* Startup Status */}
+        <div className="r5" style={{
+          background: T.card, borderRadius: "0 8px 0 8px",
+          border: `1px solid ${T.border}`, padding: 14,
+          position: "relative",
+        }}>
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg,${T.sage},transparent)` }} />
+          <h2 style={{ fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600, color: T.muted, textTransform: "uppercase", letterSpacing: "2px", marginBottom: 10 }}>
+            Startup Tasks
+          </h2>
+          {startupStatus?.tasks ? (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+              {Object.entries(startupStatus.tasks).map(([k, t]) => {
+                const c = t.status === "running" ? T.sage : t.status === "failed" ? T.coral : t.status === "stopped" ? T.muted : T.gold;
+                return (
+                  <div key={k} style={{ padding: "4px 8px", background: T.surface, borderRadius: 4, border: `1px solid ${T.border}` }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+                      <span style={{ fontSize: 7, color: T.muted, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        {k.replace(/_/g, " ")}
+                      </span>
+                      <span style={{ fontSize: 7, color: c, fontFamily: "'DM Mono',monospace", fontWeight: 600, flexShrink: 0 }}>
+                        {t.status}
+                      </span>
+                    </div>
+                    {t.error && <div style={{ fontSize: 7, color: T.coral, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.error}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ fontSize: 10, color: T.muted }}>No startup data</div>
+          )}
+        </div>
+
+        {/* Data Health */}
+        <div className="r6" style={{
+          background: T.card, borderRadius: "0 8px 0 8px",
+          border: `1px solid ${T.border}`, padding: 14,
+          position: "relative",
+        }}>
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg,${T.teal},transparent)` }} />
+          <h2 style={{ fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600, color: T.muted, textTransform: "uppercase", letterSpacing: "2px", marginBottom: 10 }}>
+            Data Sources
+          </h2>
+          {dataHealth && Object.keys(dataHealth).length > 0 ? (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+              {Object.entries(dataHealth).slice(0, 6).map(([name, s]) => {
+                const h = s.is_healthy !== false;
+                return (
+                  <div key={name} style={{ padding: "4px 8px", background: T.surface, borderRadius: 4, border: `1px solid ${T.border}` }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: 7, color: T.muted, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.5px" }}>{name.replace(/_/g, " ")}</span>
+                      <span style={{ fontSize: 7, color: h ? T.sage : T.coral }}>{h ? "OK" : "DOWN"}</span>
+                    </div>
+                    {s.last_success && <div style={{ fontSize: 7, color: T.muted, marginTop: 1 }}>{new Date(s.last_success).toLocaleTimeString()}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ fontSize: 10, color: T.muted }}>No source data</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+// ════════════════════════════════════════════
+// STRATEGY LIBRARY VIEW
+// ════════════════════════════════════════════
+function StrategyLibraryView({ strategies }) {
+  const [search, setSearch] = useState("");
+  const [regimeFilter, setRegimeFilter] = useState("all");
+
+  const regimes = useMemo(() => {
+    const s = new Set();
+    (strategies||[]).forEach(r => { if (r.regime) s.add(r.regime); });
+    return ["all", ...Array.from(s)];
+  }, [strategies]);
+
+  const filtered = useMemo(() => {
+    let items = strategies || [];
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      items = items.filter((s) =>
+        (s.strategy_type || s.name || "").toLowerCase().includes(q) ||
+        (s.regime || s.metadata?.regime || "").toLowerCase().includes(q)
+      );
+    }
+    if (regimeFilter !== "all") items = items.filter(s => s.regime === regimeFilter);
+    return items;
+  }, [strategies, search, regimeFilter]);
+
+  return (
+    <div className="r1" style={{
+      flex: 1, minHeight: 0,
+      overflow: "hidden",
+      display: "flex",
+      flexDirection: "column",
+      background: T.card,
+      borderRadius: "0 8px 0 8px",
+      border: `1px solid ${T.border}`,
+      padding: 14,
+      position: "relative",
+    }}>
+      <div style={{
+        position: "absolute", top: 0, left: 0, right: 0, height: 2,
+        background: `linear-gradient(90deg,${T.teal},transparent)`,
+      }} />
+
+      {/* Header + Search */}
+      <div style={{
+        display: "flex", alignItems: "center",
+        justifyContent: "space-between", gap: 12,
+        marginBottom: 10, flexShrink: 0,
+      }}>
+        <h2 style={{
+          fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
+          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
+        }}>
+          Strategy Library ({filtered.length})
+        </h2>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input
+            type="text"
+            placeholder="Filter strategies..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              width: 140,
+              padding: "6px 10px",
+              borderRadius: "0 4px 0 4px",
+              background: T.surface,
+              border: `1px solid ${T.border}`,
+              color: T.text,
+              fontSize: 10,
+              fontFamily: "'DM Mono',monospace",
+              outline: "none",
+            }}
+          />
+          <select
+            value={regimeFilter}
+            onChange={e => setRegimeFilter(e.target.value)}
+            style={{
+              padding: "6px 10px",
+              borderRadius: "0 4px 0 4px",
+              background: T.surface,
+              border: `1px solid ${T.border}`,
+              color: T.text,
+              fontSize: 10,
+              fontFamily: "'DM Mono',monospace",
+              cursor: "pointer",
+              outline: "none",
+            }}
+          >
+            {regimes.map(r => (
+              <option key={r} value={r}>{r === "all" ? "All Regimes" : r.replace(/_/g, " ")}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 40, flex: 1 }}>
+          <div style={{ fontSize: 24, color: T.muted, opacity: 0.2, marginBottom: 8 }}>◉</div>
+          <div style={{ fontSize: 11, color: T.muted }}>
+            {strategies.length === 0
+              ? "No deployable strategies yet"
+              : "No strategies match your filter"}
+          </div>
+          <div style={{ fontSize: 9, color: T.muted, marginTop: 4 }}>
             Run autonomous research to discover strategies
           </div>
         </div>
       ) : (
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            fontSize: 11,
-            fontFamily: "'DM Mono',monospace",
-          }}
-        >
-          <thead>
-            <tr style={{ color: T.muted }}>
-              {["Name", "Type", "Regime", "Sharpe", "Win Rate", "Max DD", "Status"].map((h) => (
-                <th
-                  key={h}
-                  style={{
-                    textAlign: "left",
-                    padding: "6px 8px",
-                    borderBottom: `1px solid ${T.border}`,
-                    fontWeight: 600,
-                  }}
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {strategies.map((s, i) => {
-              const sharpe = s.sharpe || s.metadata?.sharpe || 0;
-              const wr = s.win_rate || s.metadata?.win_rate || 0;
-              const dd = s.max_drawdown || s.metadata?.max_drawdown || 0;
-              const status = dd != null && dd > 0.1 ? "⚠ DECAYING" : "● ACTIVE";
-              return (
-                <tr key={i}>
-                  <td style={{ padding: "5px 8px", color: T.text }}>
-                    {s.strategy_type || s.name || "—"}
-                  </td>
-                  <td style={{ padding: "5px 8px", color: T.secondary }}>
-                    {s.strategy_type || "—"}
-                  </td>
-                  <td style={{ padding: "5px 8px", color: T.amber }}>
-                    {s.regime || s.metadata?.regime || "—"}
-                  </td>
-                  <td style={{ padding: "5px 8px", color: sharpe >= 1 ? T.sage : T.coral }}>
-                    {typeof sharpe === "number" ? sharpe.toFixed(2) : "—"}
-                  </td>
-                  <td style={{ padding: "5px 8px", color: T.text }}>
-                    {typeof wr === "number" ? `${(wr * 100).toFixed(0)}%` : "—"}
-                  </td>
-                  <td style={{ padding: "5px 8px", color: dd < 0.05 ? T.sage : T.coral }}>
-                    {typeof dd === "number" ? `${(dd * 100).toFixed(1)}%` : "—"}
-                  </td>
-                  <td
-                    style={{
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Name</th><th>Type</th><th>Regime</th><th>Sharpe</th><th>Win Rate</th><th>Max DD</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((s, i) => {
+                const sharpe = s.sharpe || s.metadata?.sharpe || 0;
+                const wr = s.win_rate || s.metadata?.win_rate || 0;
+                const dd = Math.abs(s.max_drawdown || s.metadata?.max_drawdown || 0);
+                const name = s.strategy_type || s.name || "Unnamed";
+                const type = s.strategy_type || "\u2014";
+                const regime = s.regime || s.metadata?.regime || "\u2014";
+                const status = dd > 0.1 ? "\u26A0 Decaying" : "\u25CF Active";
+                return (
+                  <tr key={i}>
+                    <td style={{ padding: "5px 8px", color: T.text, fontWeight: 600, fontSize: 10 }}>
+                      {name}
+                    </td>
+                    <td style={{ padding: "5px 8px", color: T.secondary }}>{type}</td>
+                    <td style={{ padding: "5px 8px", color: T.amber }}>{regime}</td>
+                    <td style={{
                       padding: "5px 8px",
-                      color: status.includes("DECAY") ? T.gold : T.sage,
-                    }}
-                  >
-                    {status}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      color: sharpe >= 0.8 ? T.sage : sharpe >= 0 ? T.text : T.coral,
+                      fontWeight: 700,
+                    }}>
+                      {typeof sharpe === "number" ? sharpe.toFixed(2) : "\u2014"}
+                    </td>
+                    <td style={{ padding: "5px 8px", color: T.text }}>
+                      {typeof wr === "number" ? `${(wr * 100).toFixed(0)}%` : "\u2014"}
+                    </td>
+                    <td style={{
+                      padding: "5px 8px",
+                      color: dd < 0.05 ? T.sage : dd < 0.1 ? T.gold : T.coral,
+                    }}>
+                      {typeof dd === "number" ? `${(dd * 100).toFixed(1)}%` : "\u2014"}
+                    </td>
+                    <td style={{
+                      padding: "5px 8px",
+                      color: status.includes("Active") ? T.sage : T.gold,
+                      fontWeight: 600,
+                    }}>
+                      {status}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
 }
 
 // ════════════════════════════════════════════
-// SIGNAL FEED VIEW (New)
+// SIGNAL FEED VIEW
 // ════════════════════════════════════════════
 function SignalFeedView({ signals }) {
+  const data = useMemo(() => {
+    return Array.isArray(signals) ? [...signals].reverse().slice(0, 100) : [];
+  }, [signals]);
+
   return (
-    <div
-      className="r1"
-      style={{
-        flex: 1,
-        minHeight: 0,
-        overflow: "auto",
-        background: T.card,
-        borderRadius: "0 8px 0 8px",
-        border: `1px solid ${T.border}`,
-        padding: 14,
-        position: "relative",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 2,
-          background: `linear-gradient(90deg,${T.gold},transparent)`,
-        }}
-      />
-      <h2
-        style={{
-          fontFamily: "'Syne',sans-serif",
-          fontSize: 10,
-          fontWeight: 600,
-          color: T.muted,
-          textTransform: "uppercase",
-          letterSpacing: "2px",
-          marginBottom: 10,
-        }}
-      >
-        ○ Signal Feed
+    <div className="r1" style={{
+      flex: 1, minHeight: 0,
+      overflow: "hidden",
+      display: "flex",
+      flexDirection: "column",
+      background: T.card,
+      borderRadius: "0 8px 0 8px",
+      border: `1px solid ${T.border}`,
+      padding: 14,
+      position: "relative",
+    }}>
+      <div style={{
+        position: "absolute", top: 0, left: 0, right: 0, height: 2,
+        background: `linear-gradient(90deg,${T.gold},transparent)`,
+      }} />
+      <h2 style={{
+        fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
+        color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
+        marginBottom: 10, flexShrink: 0,
+      }}>
+        Signal Feed ({data.length})
       </h2>
-      {signals.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 40 }}>
-          <div style={{ fontSize: 28, color: T.muted, opacity: 0.2, marginBottom: 8 }}>○</div>
-          <div style={{ fontSize: 12, color: T.muted }}>No signals evaluated yet</div>
-          <div style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>
+
+      {data.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 40, flex: 1 }}>
+          <div style={{ fontSize: 24, color: T.muted, opacity: 0.2, marginBottom: 8 }}>○</div>
+          <div style={{ fontSize: 11, color: T.muted }}>No signals evaluated yet</div>
+          <div style={{ fontSize: 9, color: T.muted, marginTop: 4 }}>
             Signals appear here when the scanner detects opportunities
           </div>
         </div>
       ) : (
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            fontSize: 10.5,
-            fontFamily: "'DM Mono',monospace",
-          }}
-        >
-          <thead>
-            <tr style={{ color: T.muted }}>
-              {["Time", "Pair", "Signal", "Strategy", "Confidence", "Regime", "Status"].map((h) => (
-                <th
-                  key={h}
-                  style={{
-                    textAlign: "left",
-                    padding: "5px 8px",
-                    borderBottom: `1px solid ${T.border}`,
-                    fontWeight: 600,
-                  }}
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {[...signals]
-              .reverse()
-              .slice(0, 100)
-              .map((s, i) => {
-                const sig = s.signal || {};
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Time</th><th>Pair</th><th>Signal</th><th>Strategy</th><th>Confidence</th><th>Regime</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((s, i) => {
+                const sig = s.signal || s;
+                const isBuy = (sig.signal || "").toLowerCase() === "buy";
+                const isSell = (sig.signal || "").toLowerCase() === "sell";
+                const conf = sig.confidence != null ? sig.confidence : 0;
+                const time = s.time || (sig.timestamp ? new Date(sig.timestamp).toLocaleTimeString() : "\u2014");
                 return (
-                  <tr key={i}>
-                    <td style={{ padding: "4px 8px", color: T.muted }}>{s.time || "—"}</td>
-                    <td style={{ padding: "4px 8px", color: T.text }}>{sig.pair || "—"}</td>
-                    <td
-                      style={{
-                        padding: "4px 8px",
-                        color:
-                          sig.signal === "buy" ? T.sage : sig.signal === "sell" ? T.coral : T.muted,
-                        fontWeight: 600,
-                      }}
-                    >
-                      {sig.signal || "hold"}
+                  <tr key={s.id || i}>
+                    <td style={{ padding: "4px 8px", color: T.muted, fontFamily: "'DM Mono',monospace", fontSize: 9 }}>
+                      {time}
+                    </td>
+                    <td style={{ padding: "4px 8px", color: T.text, fontWeight: 600 }}>
+                      {sig.pair || "\u2014"}
+                    </td>
+                    <td style={{ padding: "4px 8px" }}>
+                      <span style={{
+                        display: "inline-block",
+                        padding: "1px 8px",
+                        borderRadius: "0 4px 0 4px",
+                        background: isBuy ? `${T.sage}20` : isSell ? `${T.coral}20` : `${T.muted}15`,
+                        color: isBuy ? T.sage : isSell ? T.coral : T.muted,
+                        fontWeight: 700,
+                        fontSize: 9,
+                        fontFamily: "'DM Mono',monospace",
+                        textTransform: "uppercase",
+                      }}>
+                        {sig.signal || "hold"}
+                      </span>
                     </td>
                     <td style={{ padding: "4px 8px", color: T.secondary }}>
-                      {sig.strategy_type || "—"}
+                      {sig.strategy_type || "\u2014"}
                     </td>
-                    <td
-                      style={{
-                        padding: "4px 8px",
-                        color: sig.confidence >= 0.6 ? T.sage : T.muted,
-                      }}
-                    >
-                      {sig.confidence != null ? `${(sig.confidence * 100).toFixed(0)}%` : "—"}
+                    <td style={{ padding: "4px 8px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <div style={{
+                          width: 50,
+                          height: 4,
+                          background: T.surface,
+                          borderRadius: 2,
+                          overflow: "hidden",
+                        }}>
+                          <div style={{
+                            width: `${Math.min(conf * 100, 100)}%`,
+                            height: "100%",
+                            background: conf >= 0.6 ? T.sage : conf >= 0.3 ? T.gold : T.muted,
+                            borderRadius: 2,
+                            transition: "width 0.3s",
+                          }} />
+                        </div>
+                        <span style={{
+                          fontSize: 9,
+                          color: conf >= 0.6 ? T.sage : conf >= 0.3 ? T.gold : T.muted,
+                          fontFamily: "'DM Mono',monospace",
+                          fontWeight: 600,
+                        }}>
+                          {(conf * 100).toFixed(0)}%
+                        </span>
+                      </div>
                     </td>
-                    <td style={{ padding: "4px 8px", color: T.amber }}>{sig.regime || "—"}</td>
-                    <td
-                      style={{
-                        padding: "4px 8px",
-                        color: sig.type === "executed" ? T.sage : T.muted,
-                      }}
-                    >
-                      {sig.type || "evaluated"}
+                    <td style={{ padding: "4px 8px", color: T.amber, fontSize: 9 }}>
+                      {sig.regime || "\u2014"}
+                    </td>
+                    <td style={{
+                      padding: "4px 8px",
+                      color: sig.type === "executed" ? T.sage : T.muted,
+                      fontWeight: 600,
+                      fontSize: 9,
+                    }}>
+                      {sig.type === "executed" ? "EXECUTED" : "EVALUATED"}
                     </td>
                   </tr>
                 );
               })}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
@@ -2129,80 +2336,60 @@ function Modal({ goal, setGoal, cycles, setCycles, iters, setIters, onStart, onC
   return (
     <div
       style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1000,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "rgba(0,0,0,0.7)",
-        backdropFilter: "blur(3px)",
+        position: "fixed", inset: 0, zIndex: 1000,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "rgba(0,0,0,0.75)",
+        backdropFilter: "blur(4px)",
+        WebkitBackdropFilter: "blur(4px)",
       }}
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 440,
+          width: 460,
           maxWidth: "90vw",
           animation: "stampIn 0.3s ease-out",
           background: T.card,
           borderRadius: "0 14px 0 14px",
           border: `1px solid ${T.border}`,
-          padding: 26,
+          padding: 28,
           position: "relative",
           overflow: "hidden",
         }}
       >
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: 36,
-            height: 36,
-            borderTop: `2px solid ${T.amber}`,
-            borderLeft: `2px solid ${T.amber}`,
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            bottom: 0,
-            right: 0,
-            width: 36,
-            height: 36,
-            borderBottom: `2px solid ${T.teal}`,
-            borderRight: `2px solid ${T.teal}`,
-          }}
-        />
-        <div style={{ marginBottom: 20 }}>
-          <div
-            style={{
-              fontFamily: "'Syne',sans-serif",
-              fontSize: 18,
-              fontWeight: 700,
-              color: T.text,
-            }}
-          >
+        {/* Corner accents */}
+        <div style={{
+          position: "absolute", top: 0, left: 0,
+          width: 36, height: 36,
+          borderTop: `2px solid ${T.amber}`,
+          borderLeft: `2px solid ${T.amber}`,
+        }} />
+        <div style={{
+          position: "absolute", bottom: 0, right: 0,
+          width: 36, height: 36,
+          borderBottom: `2px solid ${T.teal}`,
+          borderRight: `2px solid ${T.teal}`,
+        }} />
+
+        <div style={{ marginBottom: 22 }}>
+          <div style={{
+            fontFamily: "'Syne',sans-serif",
+            fontSize: 18, fontWeight: 700, color: T.text,
+          }}>
             New Research Run
           </div>
-          <p style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>
-            Configure experiment parameters
+          <p style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>
+            Configure research experiment parameters
           </p>
         </div>
-        <label
-          style={{
-            fontSize: 10,
-            color: T.muted,
-            fontWeight: 600,
-            marginBottom: 4,
-            display: "block",
-            textTransform: "uppercase",
-            letterSpacing: "1.5px",
-            fontFamily: "'Syne',sans-serif",
-          }}
-        >
+
+        <label style={{
+          fontSize: 9, color: T.muted, fontWeight: 600,
+          display: "block", textTransform: "uppercase",
+          letterSpacing: "1.5px", fontFamily: "'Syne',sans-serif",
+          marginBottom: 4,
+        }}>
           Goal
         </label>
         <textarea
@@ -2210,95 +2397,53 @@ function Modal({ goal, setGoal, cycles, setCycles, iters, setIters, onStart, onC
           value={input}
           onChange={(e) => setInput(e.target.value)}
           style={{
-            width: "100%",
-            resize: "vertical",
-            fontFamily: "'Sora',sans-serif",
-            fontSize: 12,
+            width: "100%", resize: "vertical",
+            fontFamily: "'Sora',sans-serif", fontSize: 11.5,
             padding: "10px 14px",
             borderRadius: "0 6px 0 6px",
             background: T.surface,
             border: `1px solid ${T.border}`,
             color: T.text,
-            marginBottom: 16,
+            marginBottom: 18,
             outline: "none",
           }}
         />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 22 }}>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 24 }}>
           <div>
-            <label
-              style={{
-                fontSize: 10,
-                color: T.muted,
-                fontWeight: 600,
-                display: "block",
-                textTransform: "uppercase",
-                letterSpacing: "1.5px",
-                fontFamily: "'Syne',sans-serif",
-                marginBottom: 4,
-              }}
-            >
-              Cycles
+            <label style={{
+              fontSize: 9, color: T.muted, fontWeight: 600,
+              display: "block", textTransform: "uppercase",
+              letterSpacing: "1.5px", fontFamily: "'Syne',sans-serif",
+              marginBottom: 2,
+            }}>
+              Max Cycles: <span style={{ color: T.amber, fontFamily: "'DM Mono',monospace" }}>{cycles}</span>
             </label>
-            <select
-              value={cycles}
-              onChange={(e) => setCycles(Number(e.target.value))}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "0 6px 0 6px",
-                background: T.surface,
-                border: `1px solid ${T.border}`,
-                color: T.text,
-                fontSize: 12,
-                cursor: "pointer",
-                fontFamily: "'Sora',sans-serif",
-              }}
-            >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+            <input type="range" min={1} max={10} value={cycles}
+              onChange={e => setCycles(Number(e.target.value))}
+              style={{ width: "100%", margin: "8px 0" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
+              <span>1</span><span>10</span>
+            </div>
           </div>
           <div>
-            <label
-              style={{
-                fontSize: 10,
-                color: T.muted,
-                fontWeight: 600,
-                display: "block",
-                textTransform: "uppercase",
-                letterSpacing: "1.5px",
-                fontFamily: "'Syne',sans-serif",
-                marginBottom: 4,
-              }}
-            >
-              Iterations
+            <label style={{
+              fontSize: 9, color: T.muted, fontWeight: 600,
+              display: "block", textTransform: "uppercase",
+              letterSpacing: "1.5px", fontFamily: "'Syne',sans-serif",
+              marginBottom: 2,
+            }}>
+              Max Iterations: <span style={{ color: T.amber, fontFamily: "'DM Mono',monospace" }}>{iters}</span>
             </label>
-            <select
-              value={iters}
-              onChange={(e) => setIters(Number(e.target.value))}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "0 6px 0 6px",
-                background: T.surface,
-                border: `1px solid ${T.border}`,
-                color: T.text,
-                fontSize: 12,
-                cursor: "pointer",
-                fontFamily: "'Sora',sans-serif",
-              }}
-            >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+            <input type="range" min={1} max={10} value={iters}
+              onChange={e => setIters(Number(e.target.value))}
+              style={{ width: "100%", margin: "8px 0" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
+              <span>1</span><span>10</span>
+            </div>
           </div>
         </div>
+
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button
             style={{
@@ -2307,7 +2452,7 @@ function Modal({ goal, setGoal, cycles, setCycles, iters, setIters, onStart, onC
               border: `1px solid ${T.border}`,
               background: T.elevated,
               color: T.text,
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 600,
               cursor: "pointer",
               fontFamily: "'Sora',sans-serif",
@@ -2322,16 +2467,15 @@ function Modal({ goal, setGoal, cycles, setCycles, iters, setIters, onStart, onC
               borderRadius: "0 6px 0 6px",
               border: `1px solid ${T.amber}`,
               background: T.amber,
-              color: "#fff",
-              fontSize: 12,
-              fontWeight: 600,
+              color: "#000",
+              fontSize: 11,
+              fontWeight: 700,
               cursor: "pointer",
-              fontFamily: "'Sora',sans-serif",
+              fontFamily: "'Syne',sans-serif",
+              textTransform: "uppercase",
+              letterSpacing: "1px",
             }}
-            onClick={() => {
-              setGoal(input);
-              onStart(input);
-            }}
+            onClick={() => { setGoal(input); onStart(input); }}
           >
             Start Run
           </button>
@@ -2340,8 +2484,8 @@ function Modal({ goal, setGoal, cycles, setCycles, iters, setIters, onStart, onC
     </div>
   );
 }
+}
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-</script>
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);</script>
   </body>
 </html>

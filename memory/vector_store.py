@@ -6,6 +6,7 @@ for the research agent and tracks deployable strategies across approval
 lifecycle stages.
 """
 
+import hashlib
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -76,7 +77,7 @@ class VectorStore:
     ) -> None:
         """Store a piece of insight text into vector memory."""
         metadata = metadata or {}
-        doc_id = doc_id or str(hash(text))[:16]
+        doc_id = doc_id or hashlib.md5(text.encode()).hexdigest()[:16]
         self.collection.upsert(
             documents=[text],
             metadatas=[metadata],

@@ -60,18 +60,14 @@ class MarketRegimeDetector:
             return 0.0
         return (current_dominance - mean) / std
 
-    def _get_social_signal(self, slug: str = "bitcoin") -> Optional[float]:
-        """Fetch Santiment social dominance and return its z-score.
-
-        Returns None if Santiment is disabled or data unavailable.
-        """
+    async def _fetch_social_signal_async(self, slug: str = "bitcoin") -> Optional[float]:
+        """Fetch Santiment social dominance asynchronously."""
         if not getattr(settings, "SANTIMENT_ENABLED", False):
             return None
         try:
             from data.santiment_fetcher import SantimentFetcher
-            import asyncio
             fetcher = SantimentFetcher()
-            signal = asyncio.run(fetcher.get_signal(slug))
+            signal = await fetcher.get_signal(slug)
             if signal is None or signal.social_dominance_pct is None:
                 return None
             # Record in history and compute z-score
@@ -80,6 +76,23 @@ class MarketRegimeDetector:
             if len(self._dominance_history) > 50:
                 self._dominance_history = self._dominance_history[-50:]
             return self._compute_dominance_zscore(signal.social_dominance_pct)
+        except Exception as exc:
+            logger.warning("Social signal fetch failed: %s", exc)
+            return None
+
+    def _get_social_signal(self, slug: str = "bitcoin") -> Optional[float]:
+        """Fetch Santiment social dominance synchronously (wraps async)."""
+        try:
+            import asyncio
+            loop = asyncio.get_running_loop()
+            future = asyncio.run_coroutine_threadsafe(
+                self._fetch_social_signal_async(slug), loop
+            )
+            return future.result(timeout=30)
+        except RuntimeError:
+            # No running loop — use asyncio.run()
+            import asyncio
+            return asyncio.run(self._fetch_social_signal_async(slug))
         except Exception as exc:
             logger.warning("Social signal fetch failed: %s", exc)
             return None

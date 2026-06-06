@@ -11,6 +11,8 @@ class Settings:
 
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     EXCHANGE_ID: str = os.getenv("EXCHANGE_ID", "binance")
+    EXCHANGE_API_KEY: str = os.getenv("EXCHANGE_API_KEY", "")
+    EXCHANGE_SECRET: str = os.getenv("EXCHANGE_SECRET", "")
     SYMBOL: str = os.getenv("SYMBOL", "BTC/USDT")
     TIMEFRAME: str = os.getenv("TIMEFRAME", "1h")
     DATA_LIMIT: int = int(os.getenv("DATA_LIMIT", "500"))

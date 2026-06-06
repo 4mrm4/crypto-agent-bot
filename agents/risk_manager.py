@@ -15,7 +15,7 @@ import json
 import logging
 import math
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -60,6 +60,7 @@ class CircuitBreakerState:
     _halt_reason: str = ""
     _halted_at: Optional[datetime] = None
     _resume_after: Optional[datetime] = None
+    _research_mode: ClassVar[bool] = False  # Skip hard halt during research cycles (hallucinated PnL)
 
     @classmethod
     def halt(cls, reason: str, duration_minutes: int = 60):
@@ -691,6 +692,15 @@ class RiskManagerAgent(BaseAgent):
                 logger.warning("Rejecting implausible weekly_pnl=%.4f (>90%%), treating as 0", weekly_pnl)
                 weekly_pnl = 0.0
 
+            # Skip hard halt during research mode — research uses hallucinated PnL, not real
+            if CircuitBreakerState._research_mode:
+                return json.dumps({
+                    "trading_allowed": True,
+                    "reason": f"Research mode: daily_pnl={daily_pnl:.4f} would halt in live mode",
+                    "daily_pnl_pct": round(daily_pnl, 4),
+                    "weekly_pnl_pct": round(weekly_pnl, 4),
+                })
+
             # Soft clamp: never raise AssertionError. If value > 1.0, treat as
             # percentage (divide by 100). If <= 0, use default.
             def _clamp_limit(raw: float, default: float) -> float:
@@ -806,7 +816,7 @@ class RiskManagerAgent(BaseAgent):
                 risk_score += 0.15
 
             # Verdict
-            if risk_score >= 0.5 or not concerns:
+            if risk_score >= 0.5 and concerns:
                 verdict = "reject"
             elif risk_score >= 0.3:
                 verdict = "cautious"

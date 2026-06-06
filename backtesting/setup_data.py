@@ -30,7 +30,7 @@ def ensure_data_available(
     start_date = start_date or DEFAULT_START
 
     ft_path = Path(ft_userdata_dir).resolve()
-    data_path = ft_path / "data" / "binance"
+    data_path = ft_path / "data" / settings.EXCHANGE_ID
 
     # Check if we have at least 30 days of 1h BTC data
     btc_files = []

@@ -82,16 +82,18 @@ class SentimentFetcher:
     def score_sentiment(self, news_items: list, fear_greed: Optional[dict] = None) -> float:
         """
         Returns sentiment score from -1.0 (very bearish) to +1.0 (very bullish).
-        Combines fear/greed index with news vote ratios.
+        Combines fear/greed index with news vote ratios using SENTIMENT_WEIGHTS.
         """
         score = 0.0
+        total_weight = 0
 
         if fear_greed:
+            total_weight += SENTIMENT_WEIGHTS["fear_greed"]
             fg_val = fear_greed.get("value", 50)
-            # Map 0-100 to -1 to +1
-            score += (fg_val - 50) / 50.0 * 0.6  # 60% weight
+            score += (fg_val - 50) / 50.0 * (SENTIMENT_WEIGHTS["fear_greed"] / 100.0)
 
         if news_items:
+            total_weight += SENTIMENT_WEIGHTS["cryptopanic"]
             vote_scores = []
             for item in news_items:
                 pos = item.get("votes_positive", 0)
@@ -100,7 +102,11 @@ class SentimentFetcher:
                 if total > 0:
                     vote_scores.append((pos - neg) / total)
             if vote_scores:
-                score += (sum(vote_scores) / len(vote_scores)) * 0.4  # 40% weight
+                score += (sum(vote_scores) / len(vote_scores)) * (SENTIMENT_WEIGHTS["cryptopanic"] / 100.0)
+
+        # Redistribute proportionally if some sources missing
+        if total_weight > 0 and total_weight < 100:
+            score /= (total_weight / 100.0)
 
         return max(-1.0, min(1.0, score))
 
@@ -135,20 +141,35 @@ class SentimentFetcher:
         ratio = pos / total  # 0.0-1.0
         return round(ratio, 4)
 
-    def _fetch_santiment(self, slug: str = "bitcoin") -> Optional[object]:
-        """Fetch Santiment signal synchronously. Returns SantimentSignal or None."""
+    async def _fetch_santiment_async(self, slug: str = "bitcoin") -> Optional[object]:
+        """Fetch Santiment signal asynchronously."""
         if not getattr(settings, "SANTIMENT_ENABLED", False):
             return None
         try:
             from data.santiment_fetcher import SantimentFetcher
             fetcher = SantimentFetcher()
-            signal = asyncio.run(fetcher.get_signal(slug))
+            signal = await fetcher.get_signal(slug)
             return signal
         except Exception as exc:
             logger.warning("Santiment fetch failed: %s", exc)
             return None
 
-    def get_combined_sentiment(
+    def _fetch_santiment(self, slug: str = "bitcoin") -> Optional[object]:
+        """Fetch Santiment signal synchronously (wraps async)."""
+        try:
+            loop = asyncio.get_running_loop()
+            future = asyncio.run_coroutine_threadsafe(
+                self._fetch_santiment_async(slug), loop
+            )
+            return future.result(timeout=30)
+        except RuntimeError:
+            # No running loop — use asyncio.run()
+            return asyncio.run(self._fetch_santiment_async(slug))
+        except Exception as exc:
+            logger.warning("Santiment fetch failed: %s", exc)
+            return None
+
+    async def get_combined_sentiment(
         self, slug: str = "bitcoin", currency: str = "BTC"
     ) -> CombinedSentiment:
         """
@@ -165,7 +186,7 @@ class SentimentFetcher:
         # Fetch all sources
         fg = self.get_fear_greed_index()
         cp_score = self.get_cryptopanic_sentiment_score(currency)
-        santiment_signal = self._fetch_santiment(slug)
+        santiment_signal = await self._fetch_santiment_async(slug)
 
         fg_value = fg.get("value", 50) if fg else 50
         fg_normalized = fg_value / 100.0  # 0.0-1.0
@@ -225,3 +246,17 @@ class SentimentFetcher:
             overall_score=overall,
             signal_count=signal_count,
         )
+
+    def get_combined_sentiment_sync(
+        self, slug: str = "bitcoin", currency: str = "BTC"
+    ) -> CombinedSentiment:
+        """Synchronous wrapper for get_combined_sentiment."""
+        try:
+            loop = asyncio.get_running_loop()
+            future = asyncio.run_coroutine_threadsafe(
+                self.get_combined_sentiment(slug, currency), loop
+            )
+            return future.result(timeout=30)
+        except RuntimeError:
+            # No running loop — use asyncio.run()
+            return asyncio.run(self.get_combined_sentiment(slug, currency))

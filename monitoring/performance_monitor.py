@@ -169,9 +169,13 @@ class PerformanceMonitor:
     def compute_rolling_sharpe(
         self,
         trade_history: List[dict],
-        window_days: int = 30,
+        window_trades: int = 30,
     ) -> List[float]:
-        """Rolling Sharpe ratio for trend detection."""
+        """Rolling Sharpe ratio for trend detection.
+
+        Uses a trade-count rolling window (last N trades), NOT a time window.
+        If daily data is needed, resample before calling.
+        """
         if not trade_history:
             return []
 
@@ -180,12 +184,12 @@ class PerformanceMonitor:
 
         df = pd.DataFrame(trade_history)
         returns = df.get("pnl_pct", df.get("return_pct", df.get("profit_pct", [0])))
-        rolling = returns.rolling(window=window_days)
+        rolling = returns.rolling(window=window_trades)
 
         rolling_sharpes = []
         for i in range(len(rolling)):
             window = rolling.iloc[i]
-            if len(window) >= window_days:
+            if len(window) >= window_trades:
                 mean_r = window.mean()
                 std_r = window.std()
                 if std_r > 0:

@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from backtesting.data_split import DATA_SPLIT
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -157,11 +158,12 @@ class SyntheticValidator:
                 # Generate random walk with a different seed each time
                 df_synthetic = self.generate_random_walk(seed=i)
 
-                # Run backtest on synthetic data
+                # Run backtest on synthetic data (using dataframe_override to skip Freqtrade)
                 result = engine.run_backtest(
                     strategy_params=strategy_params,
                     strategy_type=strategy_type,
-                    timerange="20170101-20231231",  # Dummy — won't matter since we can't pass synthetic df
+                    timerange="20170101-20231231",
+                    dataframe_override={settings.SYMBOL: df_synthetic},
                 )
 
                 sharpe = float(result.get("sharpe_ratio", 0))
@@ -254,6 +256,7 @@ class SyntheticValidator:
                     strategy_params=strategy_params,
                     strategy_type=strategy_type,
                     timerange="20170101-20231231",
+                    dataframe_override={settings.SYMBOL: df_permuted},
                 )
                 perm_sharpe = float(perm_result.get("sharpe_ratio", 0))
                 permuted_sharpes.append(perm_sharpe)
