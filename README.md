@@ -449,6 +449,17 @@ Opens at `http://127.0.0.1:8765`. Features:
 - **Auto-scrolling event log**: complete WebSocket event stream
 - **Run New Goal modal**: configure cycles, iterations, and goal text
 
+## Knowledge Graph
+
+An interactive knowledge graph of the entire codebase is available at `graphify-out/graph.html` — open it in a browser to explore.
+
+- **2,617 nodes** — every class, function, file, method, and concept
+- **4,763 edges** — calls, imports, contains, uses, references, method relationships
+- **207 communities** — automatically detected subsystems (API server, backtesting, data fetching, agents, etc.)
+- **Top hubs**: BacktestEngine (deg=94), MarketDataFetcher (deg=86), StateBroker (deg=73), TradingDatabase (deg=58), VectorStore (deg=56)
+
+Regenerate locally: `pip install graphifyy && /graphify .` (requires OpenClaude).
+
 ## Configuration (.env)
 
 | Variable | Default | Description |
