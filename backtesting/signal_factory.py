@@ -185,22 +185,26 @@ def _signal_sentiment_driven(df: pd.DataFrame, params: dict) -> pd.Series:
 
 
 def _signal_multi_timeframe(df: pd.DataFrame, params: dict) -> pd.Series:
-    sma20 = _s(ta.SMA(df["close"].values, timeperiod=20))
-    sma50 = _s(ta.SMA(df["close"].values, timeperiod=50))
-    rsi = _s(ta.RSI(df["close"].values, timeperiod=14))
-    sma80 = _s(ta.SMA(df["close"].values, timeperiod=80))
-    sma200 = _s(ta.SMA(df["close"].values, timeperiod=200))
-    adx = _s(ta.ADX(df["high"].values, df["low"].values, df["close"].values, timeperiod=14))
+    fast_ma = _s(ta.SMA(df["close"].values, timeperiod=params.get("fast_ma", 10)))
+    slow_ma = _s(ta.SMA(df["close"].values, timeperiod=params.get("slow_ma", 30)))
+    rsi = _s(ta.RSI(df["close"].values, timeperiod=params.get("rsi_period", 14)))
+    sma80 = _s(ta.SMA(df["close"].values, timeperiod=params.get("higher_tf_fast", 80)))
+    sma200 = _s(ta.SMA(df["close"].values, timeperiod=params.get("higher_tf_slow", 200)))
+    adx = _s(ta.ADX(df["high"].values, df["low"].values, df["close"].values,
+                    timeperiod=params.get("adx_period", 14)))
+    adx_threshold = params.get("adx_threshold", 20)
+    rsi_oversold = params.get("rsi_oversold", 40)
+    rsi_overbought = params.get("rsi_overbought", 70)
     entry = (
-        (sma20.shift(1) <= sma50.shift(1)) &
-        (sma20 > sma50) &
+        (fast_ma.shift(1) <= slow_ma.shift(1)) &
+        (fast_ma > slow_ma) &
         (df["close"] > sma200) &
-        (adx > 20) &
-        (rsi > 40) & (rsi < 70)
+        (adx > adx_threshold) &
+        (rsi > rsi_oversold) & (rsi < rsi_overbought)
     )
     exit = (
-        (sma20.shift(1) >= sma50.shift(1)) &
-        (sma20 < sma50)
+        (fast_ma.shift(1) >= slow_ma.shift(1)) &
+        (fast_ma < slow_ma)
     ) | (df["close"] < sma200)
     return _build_signal(entry, exit)
 

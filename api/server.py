@@ -523,6 +523,26 @@ async def ws_run_events(websocket: WebSocket, run_id: str):
         pass
 
 
+@app.websocket("/ws/autonomous")
+async def ws_autonomous_events(websocket: WebSocket):
+    """WebSocket for autonomous loop events (dashboard live updates)."""
+    await websocket.accept()
+    event_bus = getattr(app.state, "event_bus", None)
+    if not event_bus:
+        await websocket.send_json({"type": "error", "payload": {"message": "No autonomous event bus"}, "timestamp": datetime.utcnow().isoformat()})
+        await websocket.close()
+        return
+
+    try:
+        async for event in event_bus.subscribe():
+            try:
+                await websocket.send_json(event)
+            except Exception:
+                break
+    except WebSocketDisconnect:
+        pass
+
+
 # ── Orchestration runner ──
 
 

@@ -319,32 +319,42 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
 
     "multi_timeframe": {
         "indicator_code": """
-        # 1h timeframe indicators (primary)
-        dataframe['sma20'] = ta.SMA(dataframe, timeperiod=20)
-        dataframe['sma50'] = ta.SMA(dataframe, timeperiod=50)
-        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=14)
-        # Proxy for 4h trend: use longer SMAs on 1h data (approx 4x periods)
-        dataframe['sma80'] = ta.SMA(dataframe, timeperiod=80)
-        dataframe['sma200'] = ta.SMA(dataframe, timeperiod=200)
-        dataframe['adx'] = ta.ADX(dataframe, timeperiod=14)
+        # Primary timeframe indicators
+        dataframe['fast_sma'] = ta.SMA(dataframe, timeperiod=self.fast_ma.value)
+        dataframe['slow_sma'] = ta.SMA(dataframe, timeperiod=self.slow_ma.value)
+        dataframe['rsi'] = ta.RSI(dataframe, timeperiod=self.rsi_period.value)
+        # Higher timeframe proxies (longer SMAs on same data)
+        dataframe['sma80'] = ta.SMA(dataframe, timeperiod=self.higher_tf_fast.value)
+        dataframe['sma200'] = ta.SMA(dataframe, timeperiod=self.higher_tf_slow.value)
+        dataframe['adx'] = ta.ADX(dataframe, timeperiod=self.adx_period.value)
     """,
         "entry_condition": """
-        # Short-term signal: 20 crosses above 50
-        (dataframe['sma20'].shift(1) <= dataframe['sma50'].shift(1)) &
-        (dataframe['sma20'] > dataframe['sma50']) &
+        # Short-term signal: fast SMA crosses above slow SMA
+        (dataframe['fast_sma'].shift(1) <= dataframe['slow_sma'].shift(1)) &
+        (dataframe['fast_sma'] > dataframe['slow_sma']) &
         # Long-term confirmation: price above 200 SMA (higher timeframe proxy)
         (dataframe['close'] > dataframe['sma200']) &
-        # Trend strength: ADX > 20
-        (dataframe['adx'] > 20) &
-        # RSI not overbought
-        (dataframe['rsi'] > 40) & (dataframe['rsi'] < 70)
+        # Trend strength: ADX above threshold
+        (dataframe['adx'] > self.adx_threshold.value) &
+        # RSI not overbought/oversold
+        (dataframe['rsi'] > self.rsi_oversold.value) & (dataframe['rsi'] < self.rsi_overbought.value)
     """,
         "exit_condition": """
-        (dataframe['sma20'].shift(1) >= dataframe['sma50'].shift(1)) &
-        (dataframe['sma20'] < dataframe['sma50']) |
+        (dataframe['fast_sma'].shift(1) >= dataframe['slow_sma'].shift(1)) &
+        (dataframe['fast_sma'] < dataframe['slow_sma']) |
         (dataframe['close'] < dataframe['sma200'])
     """,
-        "indicator_params_block": "",
-        "default_params": {"startup_candle_count": 205},
+        "indicator_params_block": """
+    fast_ma = IntParameter(5, 50, default=$fast_ma, space="buy")
+    slow_ma = IntParameter(20, 100, default=$slow_ma, space="buy")
+    adx_period = IntParameter(7, 21, default=$adx_period, space="buy")
+    adx_threshold = IntParameter(15, 40, default=$adx_threshold, space="buy")
+    rsi_period = IntParameter(10, 21, default=$rsi_period, space="buy")
+    rsi_oversold = IntParameter(30, 50, default=$rsi_oversold, space="buy")
+    rsi_overbought = IntParameter(60, 80, default=$rsi_overbought, space="sell")
+    higher_tf_fast = IntParameter(60, 120, default=$higher_tf_fast, space="buy")
+    higher_tf_slow = IntParameter(150, 250, default=$higher_tf_slow, space="buy")
+""",
+        "default_params": {"fast_ma": 10, "slow_ma": 30, "adx_period": 14, "adx_threshold": 20, "rsi_period": 14, "rsi_oversold": 40, "rsi_overbought": 70, "higher_tf_fast": 80, "higher_tf_slow": 200, "startup_candle_count": 205},
     },
 }

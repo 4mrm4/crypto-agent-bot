@@ -78,30 +78,29 @@ class EventBus:
         return callback
 
 
-def monkey_patch_hermes(orchestrator: Any, bus: EventBus, loop=None):
+def monkey_patch_hermes(orchestrator: Any, bus: EventBus):
     """Patch HermesOrchestrator methods to emit events to the bus.
 
     Simplified version of server.py's _patch_orchestrator — suitable for
     auto_research mode where there's no run_id.
+
+    Uses asyncio.get_running_loop() on each emit call to avoid caching
+    a destroyed loop reference (asyncio.run() creates + destroys loops).
     """
     import logging
     logger = logging.getLogger("event_bus.monkey_patch")
 
-    if loop is None:
+    def emit(event_type: str, payload: Dict[str, Any]):
+        """Publish an event to the bus from any thread.
+
+        Queries the running loop on each call — safe when called
+        from inside asyncio.run() in a thread pool, or from the
+        main event loop directly.
+        """
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            loop = None
-
-    def emit(event_type: str, payload: Dict[str, Any]):
-        nonlocal loop
-        if loop is None:
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                pass
-        if loop is None:
-            return
+            return  # No running loop — silently drop
         try:
             asyncio.run_coroutine_threadsafe(
                 bus.publish(event_type, payload), loop
@@ -152,9 +151,9 @@ def monkey_patch_hermes(orchestrator: Any, bus: EventBus, loop=None):
     if hasattr(orchestrator, "_run_research_goal"):
         orig_run = orchestrator._run_research_goal
 
-        def patched_run(goal, max_cycles=5, hypothesis="", iteration=1):
+        async def patched_run(goal, max_cycles=5, hypothesis="", iteration=1):
             emit("iteration_start", {"iteration": iteration, "goal": goal[:200]})
-            result = orig_run(goal, max_cycles=max_cycles, hypothesis=hypothesis, iteration=iteration)
+            result = await orig_run(goal, max_cycles=max_cycles, hypothesis=hypothesis, iteration=iteration)
             metrics = orchestrator._extract_metrics(result) if hasattr(orchestrator, "_extract_metrics") else {}
             emit("iteration_result", {
                 "iteration": iteration,

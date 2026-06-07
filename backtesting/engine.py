@@ -18,6 +18,7 @@ Architecture note -- extracted sibling modules (re-exported for compat):
 import ast
 import json
 import logging
+import re
 import uuid
 import os
 import shutil
@@ -442,7 +443,20 @@ class BacktestEngine:
     def _validate_strategy(self, source: str) -> None:
         """Parse the generated strategy Python for syntax errors before
         handing to Freqtrade. Raises ``ValueError`` on bad syntax so the
-        strategist agent can catch and regenerate."""
+        strategist agent can catch and regenerate.
+
+        Also detects unsubstituted $ placeholders from string.Template
+        that would corrupt the generated file."""
+        # Check for unsubstituted $ placeholders (but allow $$ which is
+        # string.Template's escape for a literal $)
+        placeholders = re.findall(r'(?<!\$)\$[a-zA-Z_]\w*', source)
+        if placeholders:
+            msg = (f"Generated strategy has {len(placeholders)} unsubstituted "
+                   f"template placeholders: {placeholders[:5]} — "
+                   f"LLM output contains '$' that safe_substitute couldn't resolve")
+            logger.error(msg)
+            raise ValueError(msg)
+
         try:
             ast.parse(source, filename="DynamicStrategy.py")
         except SyntaxError as e:

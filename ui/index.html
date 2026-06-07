@@ -381,6 +381,24 @@ function App() {
     return () => ws.close();
   }, [runId, wsReconnect]);
 
+  // ── WebSocket for Autonomous Loop (Dashboard live updates) ──
+  const [autoWsReconnect, setAutoWsReconnect] = useState(0);
+  useEffect(() => {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    let ws;
+    let closed = false;
+    function connect() {
+      ws = new WebSocket(`${proto}//${window.location.host}/ws/autonomous`);
+      ws.onmessage = (m) => {
+        try { processEvent(JSON.parse(m.data)); } catch (e) { /* ignore parse errors */ }
+      };
+      ws.onclose = () => { if (!closed) setTimeout(() => setAutoWsReconnect(n => n + 1), 3000); };
+      ws.onerror = () => ws.close();
+    }
+    connect();
+    return () => { closed = true; if (ws) ws.close(); };
+  }, [autoWsReconnect]);
+
   function processEvent(ev) {
     const { type, payload, timestamp } = ev;
     const ts = timestamp ? new Date(timestamp).toLocaleTimeString() : "";
@@ -2032,6 +2050,7 @@ function DashboardView({
       </div>
     </div>
   );
+}
 
 // ════════════════════════════════════════════
 // STRATEGY LIBRARY VIEW
@@ -2483,7 +2502,6 @@ function Modal({ goal, setGoal, cycles, setCycles, iters, setIters, onStart, onC
       </div>
     </div>
   );
-}
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);</script>

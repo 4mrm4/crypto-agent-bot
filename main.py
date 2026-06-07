@@ -88,39 +88,28 @@ def _make_orchestrator():
 
 
 def _run_ui():
-    """Start the Web UI server only — no demo pipeline."""
-    import subprocess
-    import time
-    import webbrowser
+    """Start the Web UI server only — no demo pipeline (in-process so EventBus is available)."""
+    import asyncio
+    import uvicorn
+
+    from api.event_bus import EventBus
 
     console.print("[bold cyan]crypto_agent_bot — Web UI[/]\n")
     console.print("[yellow]Starting Web UI server...[/]")
 
-    server = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "api.server:app", "--host", "127.0.0.1", "--port", "8765", "--log-level", "info"],
-        stdout=None,
-        stderr=None,
-    )
+    from api.server import app as fastapi_app
 
-    import httpx
-    for _ in range(20):
-        try:
-            r = httpx.get("http://127.0.0.1:8765/api/health", timeout=2)
-            if r.status_code == 200:
-                break
-        except Exception:
-            pass
-        time.sleep(0.5)
+    # Create a dummy EventBus so /ws/autonomous stays open (sends heartbeats)
+    event_bus = EventBus()
+    fastapi_app.state.event_bus = event_bus
 
-    url = "http://127.0.0.1:8765"
-    console.print(f"[green]UI running at {url}[/]")
-    webbrowser.open(url)
-    console.print("\n[green]Press Ctrl+C to stop the server.[/]")
+    config = uvicorn.Config(fastapi_app, host="127.0.0.1", port=8765, log_level="info")
+    server = uvicorn.Server(config)
+
     try:
-        server.wait()
+        asyncio.run(server.serve())
     except KeyboardInterrupt:
-        server.terminate()
-        server.wait()
+        console.print("\n[green]Server stopped.[/]")
 
 
 def _run_autonomous(ui: bool = False):

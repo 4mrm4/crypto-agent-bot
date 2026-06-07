@@ -36,3 +36,7 @@ ft_userdata/strategies/Strategy_*.py
 # OS
 Thumbs.db
 .DS_Store
+
+# Temp / test output
+_test_*.txt
+/tmp/

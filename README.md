@@ -2,16 +2,16 @@
 
 Modular crypto trading bot with 7 LangGraph ReAct agents, Freqtrade backtesting, ChromaDB strategy memory, and a real-time Web UI.
 
-**Latest updates (June 2026 — v12: LLM-Free Backtesting + Experiment-Backed Metrics + Coverage Gaps from Past Results):**
+**Latest updates (June 2026 — v13: WebSocket Streaming Fix + EventBus Reliability):**
 
-### v12 Fixes — LLM Reliability & Metric Extraction
-- **LLM-Free Backtesting** (`agents/backtester.py`) — BacktesterAgent `run()` override bypasses the LLM for `backtest` commands, calling `BacktestEngine` directly. The LLM is only used for non-backtest operations (hyperopt, WFV, compare). Eliminates the "LLM talks about backtesting instead of doing it" problem at the architecture level.
-- **Experiment-Backed Metric Extraction** (`orchestration/hermes.py`) — `_extract_metrics()` reads `workspace/experiments.jsonl` as primary source, falling back to backtester `_iteration_history`. No more `Sharpe=0.00` when past experiments exist for a strategy type.
-- **Coverage Gaps from Past Experiments** (`orchestration/autonomous_loop.py`) — `_compute_coverage_gaps()` cross-references experiments.jsonl via `REGIME_STRATEGY_MAP`. `strong_downtrend` now correctly reports `best=-0.11` instead of `best=0.00`. Fixed all 6 regimes (was missing `strong_downtrend`).
-- **Fixed Strategy File Cleanup Race** (`backtesting/engine.py`) — Moved cleanup of old strategy files to AFTER the Freqtrade subprocess completes, preventing `FileNotFoundError` in Freqtrade's backtest caching.
-- **Lazy Event Loop Resolution** (`api/event_bus.py`) — `emit()` retries `get_running_loop()` on each call instead of only at patch time. Fixes Web UI research tab not updating when `monkey_patch_hermes` is called before the event loop starts.
-- **Increased Max Research Iterations** — Changed from 3 to 10, with early exit on convergence.
-- **Full test suite**: 590 passed, 3 xpassed, 0 failures.
+### v13 Fixes — WebSocket Streaming & EventBus Reliability
+- **Fixed WebSocket `/ws/autonomous` connect-close cycle** (`main.py`) — `_run_ui()` changed from subprocess to in-process `uvicorn.Server` so `app.state.event_bus` is available to the WS handler. Previously the subprocess created a fresh `app` instance where the event bus was never set, causing immediate close on connect.
+- **Fixed EventBus coroutine crash** (`api/event_bus.py`) — `patched_run` wrapping `_run_research_goal` changed to `async def` with `await`, so the coroutine is properly awaited when called via `asyncio.run()` in the thread pool.
+- **Stale event loop cache removed** (`api/event_bus.py`) — `emit()` now calls `asyncio.get_running_loop()` on each invocation instead of caching a `nonlocal` reference. Prevents silently dropped events when the cached loop is destroyed by `asyncio.run()` completion.
+- **Autonomous loop WebSocket endpoint** (`api/server.py`) — New `/ws/autonomous` endpoint streams `heartbeat`, `iteration_start`, `iteration_result` events to the dashboard.
+- **UI WebSocket integration** (`ui/index.html`) — React effect connects to `/ws/autonomous` with auto-reconnect, routes events through `processEvent()` for live dashboard updates.
+- **Template placeholder guard** (`backtesting/engine.py`) — `_validate_strategy()` detects unsubstituted `$placeholder` tokens from `string.Template`, raising `ValueError` before they reach Freqtrade.
+- **Full test suite**: 630 passed, 3 xpassed, 0 failures.
 
 ### Core Infrastructure
 - **DeepSeek Chat API** — migrated from OpenRouter to direct DeepSeek API (`api.deepseek.com/v1`, model `deepseek-chat`)
@@ -526,11 +526,11 @@ python -m pytest tests/test_regression_live_run.py -v
 # Autonomous loop tests
 python -m pytest test_autonomous_loop.py -v
 
-# Full test suite (590+ tests)
+# Full test suite (630+ tests)
 python -m pytest
 ```
 
-> Suite includes: regression (32), autonomous loop (6), validation mode (12), phase 2, sentiment, patterns, regime, experiment tracker, walk-forward, data split, blind search, OOS validator, deployment pipeline, Kelly/conservative sizing, synthetic validator, performance monitor, transaction costs, Tavily search, SQLite/database — **590 passed, 3 xpassed, 0 failures** (v12).
+> Suite includes: regression (32), autonomous loop (6), validation mode (12), phase 2, sentiment, patterns, regime, experiment tracker, walk-forward, data split, blind search, OOS validator, deployment pipeline, Kelly/conservative sizing, synthetic validator, performance monitor, transaction costs, Tavily search, SQLite/database — **630 passed, 3 xpassed, 0 failures** (v13).
 
 ## How It Works
 
