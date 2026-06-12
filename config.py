@@ -73,6 +73,9 @@ class Settings:
     SLIPPAGE_PCT: float = float(os.getenv("SLIPPAGE_PCT", "0.0005"))
     SLIPPAGE_MODEL: str = os.getenv("SLIPPAGE_MODEL", "fixed")
 
+    # Self-hosted SearXNG metasearch (bypasses rate limits)
+    SEARXNG_URL: str = os.getenv("SEARXNG_URL", "")
+
     # Tavily search
     TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY", "")
     TAVILY_ENABLED: bool = os.getenv("TAVILY_ENABLED", "true").lower() == "true"

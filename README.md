@@ -2,7 +2,17 @@
 
 Modular crypto trading bot with 7 LangGraph ReAct agents, Freqtrade backtesting, ChromaDB strategy memory, and a real-time Web UI.
 
-**Latest updates (June 2026 — v13: WebSocket Streaming Fix + EventBus Reliability):**
+**Latest updates (June 2026 — v14: SearXNG Integration + ML Trade Quality Scorer):**
+
+### v14 Features — SearXNG Self-Hosted Search & ML Trade Quality
+- **SearXNG self-hosted metasearch** (`agents/researcher.py`, `config.py`) — Primary web search via local SearXNG instance (`SEARXNG_URL`), bypasses DuckDuckGo rate limits (HTTP 202 responses). Falls through to Tavily → DuckDuckGo. Config vars: `SEARXNG_URL` (default: `http://localhost:4000`), persistent override file at `searxng_settings.yml`.
+- **ML Trade Quality Scorer** (`execution/quality_scorer.py`) — New `TradeQualityScorer` class using `sklearn.ensemble.RandomForestClassifier` to predict trade quality (0-1) from backtest metrics. Cold-start returns 1.0 until 30+ samples collected. Auto-retrains every 25 predictions after a trade result is logged.
+- **Quality score → sizing multiplier** — Score >= 0.7: full Kelly (1.0x). Score 0.4–0.7: proportional reduction. Score < 0.4: block trade (0.0x).
+- **Quality fields on TradeSignal** (`execution/trade_signal.py`) — Added `quality_score: float = 1.0` and `quality_multiplier: float = 1.0` fields.
+- **RiskManager assess_trade_quality tool** (`agents/risk_manager.py`) — New tool in risk assessment pipeline: `update_drawdown → kelly → drawdown_sizing → correlation → circuit_breaker → risk_assessment → assess_trade_quality → pre_trade_approval`.
+- **SignalScanner metrics fix** (`execution/signal_scanner.py`) — No longer hardcodes placeholder sharpe=1.0/win_rate=0.5/max_dd=0.05. Pulls real backtest metrics from vector store.
+- **Database experiments query** (`data/database.py`) — Added `query_experiments_with_verdict()` for ML training data.
+- **Full test suite**: 636+ passed, 0 failures.
 
 ### v13 Fixes — WebSocket Streaming & EventBus Reliability
 - **Fixed WebSocket `/ws/autonomous` connect-close cycle** (`main.py`) — `_run_ui()` changed from subprocess to in-process `uvicorn.Server` so `app.state.event_bus` is available to the WS handler. Previously the subprocess created a fresh `app` instance where the event bus was never set, causing immediate close on connect.
@@ -11,7 +21,6 @@ Modular crypto trading bot with 7 LangGraph ReAct agents, Freqtrade backtesting,
 - **Autonomous loop WebSocket endpoint** (`api/server.py`) — New `/ws/autonomous` endpoint streams `heartbeat`, `iteration_start`, `iteration_result` events to the dashboard.
 - **UI WebSocket integration** (`ui/index.html`) — React effect connects to `/ws/autonomous` with auto-reconnect, routes events through `processEvent()` for live dashboard updates.
 - **Template placeholder guard** (`backtesting/engine.py`) — `_validate_strategy()` detects unsubstituted `$placeholder` tokens from `string.Template`, raising `ValueError` before they reach Freqtrade.
-- **Full test suite**: 630 passed, 3 xpassed, 0 failures.
 
 ### Core Infrastructure
 - **DeepSeek Chat API** — migrated from OpenRouter to direct DeepSeek API (`api.deepseek.com/v1`, model `deepseek-chat`)
@@ -300,6 +309,8 @@ graph TD
 | **ValidationMode** | `execution/validation_mode.py` | 90-day conservative execution with tight CB |
 | **PerformanceMonitor** | `monitoring/performance_monitor.py` | Live vs backtest degradation tracking |
 | **TradingDatabase** | `data/database.py` | SQLite-backed storage (5 tables, WAL mode) replacing JSONL as primary store |
+| **TradeQualityScorer** | `execution/quality_scorer.py` | ML sklearn RandomForest predictor of trade quality from backtest data |
+| **Quality Scorer Tests** | `test_quality_scorer.py` | 7 tests: cold start, training, feature encoding, mulitplier thresholds, persistence |
 
 ## Setup
 
@@ -492,6 +503,7 @@ Regenerate locally: `pip install graphifyy && /graphify .` (requires OpenClaude)
 | `SANTIMENT_ENABLED` | `false` | Enable Santiment data fetcher |
 | `SANTIMENT_CACHE_TTL` | `1800` | Santiment cache TTL in seconds (30 min) |
 | `SANTIMENT_SLUGS` | `bitcoin,ethereum,solana` | Assets to track via Santiment |
+| `SEARXNG_URL` | `http://localhost:4000` | Self-hosted SearXNG metasearch (bypasses DDG rate limits) |
 | `MESSARI_API_KEY` | — | DEPRECATED — Messari public API shut down |
 | `MESSARI_ENABLED` | `false` | Disabled by default (API dead) |
 
@@ -530,7 +542,7 @@ python -m pytest test_autonomous_loop.py -v
 python -m pytest
 ```
 
-> Suite includes: regression (32), autonomous loop (6), validation mode (12), phase 2, sentiment, patterns, regime, experiment tracker, walk-forward, data split, blind search, OOS validator, deployment pipeline, Kelly/conservative sizing, synthetic validator, performance monitor, transaction costs, Tavily search, SQLite/database — **630 passed, 3 xpassed, 0 failures** (v13).
+> Suite includes: regression (32), autonomous loop (6), validation mode (12), phase 2, sentiment, patterns, regime, experiment tracker, walk-forward, data split, blind search, OOS validator, deployment pipeline, Kelly/conservative sizing, synthetic validator, performance monitor, transaction costs, Tavily search, SQLite/database, quality scorer (7) — **636+ passed, 0 failures** (v14).
 
 ## How It Works
 

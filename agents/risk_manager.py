@@ -24,6 +24,7 @@ from langchain_core.tools import Tool
 from agents.base import BaseAgent
 from data.fetcher import MarketDataFetcher
 from data.regime import RegimeSnapshot
+from execution.quality_scorer import TradeQualityScorer
 
 from enum import Enum
 
@@ -42,11 +43,18 @@ Available tools:
 - circuit_breaker_check: Verify global trading is allowed
 - assess_strategy_risk: Get full risk report for a strategy
 - pre_trade_approval: Final go/no-go gate before any trade
+- update_drawdown: Update per-asset drawdown tracker with current position values (run first)
+- apply_drawdown_sizing: After Kelly, adjust position size downward if asset is in drawdown
 
-Always run ALL tools before approving a trade. One veto = no trade.
-Be conservative. Capital preservation is priority #1.
-Prefer bayesian_kelly_conservative over other sizing methods — it accounts for
-both backtest optimism and win-rate uncertainty from limited trade samples.
+WORKFLOW:
+1. update_drawdown (with current position values)
+2. bayesian_kelly_conservative (compute base position)
+3. apply_drawdown_sizing (shrink if in drawdown)
+4. assess_trade_quality (ML quality check on signal + backtest metrics)
+5. check_position_correlation, circuit_breaker_check, assess_strategy_risk
+6. pre_trade_approval (final gate with drawdown-adjusted position)
+
+One veto = no trade. Be conservative. Capital preservation is priority #1.
 
 IMPORTANT: Use ONLY plain ASCII text. No emoji, no Unicode symbols.
 """
@@ -457,11 +465,91 @@ def bayesian_kelly_position_size_conservative(
 
 
 
+# ── Per-Asset Drawdown Sizing ──
+
+DEFAULT_MAX_DRAWDOWN_THRESHOLD = 0.15  # Sizing → 0 at 15% drawdown
+
+
+class PerAssetDrawdownTracker:
+    """Tracks peak portfolio value per asset and computes drawdown-normalised sizing factors.
+
+    Maintains a running peak per pair. The sizing factor decreases linearly from
+    1.0 (0% drawdown) to 0.0 (at max_drawdown_threshold). This prevents piling
+    into a losing position and enforces automatic position reduction during drawdowns.
+    """
+
+    def __init__(self, max_drawdown_threshold: float = DEFAULT_MAX_DRAWDOWN_THRESHOLD):
+        self._peaks: Dict[str, float] = {}  # pair → peak value
+        self._last_values: Dict[str, float] = {}  # pair → last reported value
+        self._max_dd = max_drawdown_threshold
+
+    def update(self, pair: str, current_value: float):
+        """Record the current value of an asset and update its peak."""
+        self._last_values[pair] = current_value
+        prev_peak = self._peaks.get(pair, 0.0)
+        if current_value > prev_peak:
+            self._peaks[pair] = current_value
+
+    def current_drawdown(self, pair: str) -> float:
+        """Return current peak-to-trough drawdown as a fraction (0.0–1.0)."""
+        peak = self._peaks.get(pair)
+        current = self._last_values.get(pair)
+        if peak is None or current is None or peak <= 0:
+            return 0.0
+        return max(0.0, (peak - current) / peak)
+
+    def drawdown_sizing_factor(self, pair: str) -> float:
+        """Return sizing multiplier: 1.0 at 0% drawdown, 0.0 at >= max_dd.
+
+        Linear interpolation: factor = 1 - (dd / max_dd).
+        """
+        dd = self.current_drawdown(pair)
+        if dd <= 0.0:
+            return 1.0
+        if dd >= self._max_dd:
+            return 0.0
+        return max(0.0, 1.0 - (dd / self._max_dd))
+
+    def drawdown_normalised_size(self, base_position_usdt: float, pair: str) -> dict:
+        """Apply drawdown-shrinkage factor to a base position size.
+
+        Returns a dict with the original size, factor, and adjusted size so the
+        caller can log all three.
+        """
+        factor = self.drawdown_sizing_factor(pair)
+        adjusted = round(base_position_usdt * factor, 2)
+        return {
+            "pair": pair,
+            "base_position_usdt": round(base_position_usdt, 2),
+            "drawdown_sizing_factor": round(factor, 4),
+            "current_drawdown": round(self.current_drawdown(pair), 4),
+            "adjusted_position_usdt": adjusted,
+            "rationale": (
+                f"Drawdown={self.current_drawdown(pair):.1%}, "
+                f"factor={factor:.2f}, "
+                f"adjusted ${base_position_usdt:.0f} → ${adjusted:.0f}"
+            ),
+        }
+
+    def reset_peak(self, pair: str):
+        """Reset the tracked peak for a pair (e.g., after full position close)."""
+        current = self._last_values.get(pair)
+        if current is not None:
+            self._peaks[pair] = current
+
+    def reset_all(self):
+        """Clear all tracked peaks and values."""
+        self._peaks.clear()
+        self._last_values.clear()
+
+
 class RiskManagerAgent(BaseAgent):
     """Evaluates trading strategies for risk and produces quantitative go/no-go decisions."""
 
-    def __init__(self, fetcher: Optional[MarketDataFetcher] = None):
+    def __init__(self, fetcher: Optional[MarketDataFetcher] = None, drawdown_tracker: Optional[PerAssetDrawdownTracker] = None):
         self._fetcher = fetcher or MarketDataFetcher()
+        self._drawdown_tracker = drawdown_tracker or PerAssetDrawdownTracker()
+        self._quality_scorer = TradeQualityScorer()
         tools = self._build_tools()
         super().__init__(name="risk_manager", tools=tools, system_prompt=RISK_MANAGER_PROMPT)
 
@@ -986,6 +1074,116 @@ class RiskManagerAgent(BaseAgent):
             )
             return json.dumps({k: round(v, 4) if isinstance(v, float) else v for k, v in result.items()})
 
+        # ── Tool N+1: Update drawdown tracker ──
+
+        def update_drawdown(params_json: str = "{}") -> str:
+            """Update the per-asset drawdown tracker with current position values.
+
+            Call this BEFORE apply_drawdown_sizing to ensure the tracker has
+            current position values. Run at least once daily.
+
+            Args: JSON with:
+              - positions: list of dicts, each with:
+                  - pair: str (e.g. 'BTC/USDT')
+                  - current_value_usdt: float (current market value of position)
+
+            Updates internal peak tracker. Returns current drawdown for each pair.
+            """
+            try:
+                params = json.loads(params_json) if isinstance(params_json, str) else params_json
+            except json.JSONDecodeError:
+                return json.dumps({"error": "invalid JSON"})
+
+            positions = params.get("positions", [])
+            if not positions:
+                return json.dumps({"updated": False, "drawdowns": {}})
+
+            results = {}
+            for pos in positions:
+                pair = pos.get("pair", "UNKNOWN")
+                value = float(pos.get("current_value_usdt", 0))
+                self._drawdown_tracker.update(pair, value)
+                dd = self._drawdown_tracker.current_drawdown(pair)
+                factor = self._drawdown_tracker.drawdown_sizing_factor(pair)
+                results[pair] = {
+                    "current_value_usdt": round(value, 2),
+                    "drawdown": round(dd, 4),
+                    "sizing_factor": round(factor, 4),
+                }
+
+            return json.dumps({"updated": True, "drawdowns": results})
+
+        # ── Tool N+2: Apply drawdown-normalised sizing ──
+
+        def apply_drawdown_sizing(params_json: str = "{}") -> str:
+            """Apply drawdown-normalised sizing to a Kelly-calculated position.
+
+            Call AFTER kelly_position_size or bayesian_kelly. Reduces the position
+            size proportionally when the asset is in drawdown: the deeper the
+            drawdown, the smaller the position. At 15% drawdown, sizing → $0.
+
+            Args: JSON with:
+              - pair: str (e.g. 'BTC/USDT')
+              - base_position_usdt: float (position size from Kelly, before drawdown adjustment)
+
+            Returns JSON with base_position, drawdown_pct, factor, adjusted_position, rationale.
+            """
+            try:
+                params = json.loads(params_json) if isinstance(params_json, str) else params_json
+            except json.JSONDecodeError:
+                return json.dumps({"error": "invalid JSON"})
+
+            pair = params.get("pair", "UNKNOWN")
+            base_size = float(params.get("base_position_usdt", 0))
+
+            result = self._drawdown_tracker.drawdown_normalised_size(base_size, pair)
+            return json.dumps({
+                "pair": result["pair"],
+                "base_position_usdt": result["base_position_usdt"],
+                "drawdown_pct": result["current_drawdown"],
+                "drawdown_sizing_factor": result["drawdown_sizing_factor"],
+                "adjusted_position_usdt": result["adjusted_position_usdt"],
+                "rationale": result["rationale"],
+            })
+
+        # -- Tool N+3: ML trade quality check --
+
+        def assess_trade_quality(params_json: str = "{}") -> str:
+            """Score a trade signal's quality using the ML model.
+
+            Uses historical backtest data to predict whether this trade is likely
+            to be positive. Adjusts position sizing via quality_multiplier.
+            Cold-start safe: returns quality=1.0 when insufficient training data.
+
+            Args: JSON with:
+              - strategy_type: str (e.g. 'momentum', 'mean_reversion')
+              - regime: str (e.g. 'uptrend', 'ranging')
+              - sharpe: float (backtest Sharpe ratio)
+              - win_rate: float (backtest win rate 0.0-1.0)
+              - max_drawdown: float (backtest max drawdown e.g. 0.05)
+              - profit_factor: float (optional, default 1.0)
+              - total_trades: int (optional, default 0)
+              - oos_passed: int (optional, 0 or 1)
+
+            Returns JSON with quality_score, quality_multiplier, blocked, reason.
+            """
+            try:
+                params = json.loads(params_json) if isinstance(params_json, str) else params_json
+            except json.JSONDecodeError:
+                return json.dumps({"error": "invalid JSON"})
+
+            backtest_metrics = {
+                "sharpe": float(params.get("sharpe", 0)),
+                "win_rate": float(params.get("win_rate", 0)),
+                "max_drawdown": float(params.get("max_drawdown", 0)),
+                "profit_factor": float(params.get("profit_factor", 1.0)),
+                "total_trades": int(params.get("total_trades", 0)),
+                "oos_passed": int(params.get("oos_passed", 0)),
+            }
+
+            prediction = self._quality_scorer.predict_quality(params, backtest_metrics)
+            return json.dumps(prediction.to_dict())
+
         return [
             Tool(name="kelly_position_size", func=kelly_position_size,
                  description="Compute optimal position size using fractional Kelly Criterion. "
@@ -1019,4 +1217,17 @@ class RiskManagerAgent(BaseAgent):
             Tool(name="pre_trade_approval", func=pre_trade_approval,
                  description="FINAL GATE: run all checks before approving a trade. "
                              "Args: JSON with strategy_metrics, kelly_result, correlation_result, circuit_breaker_result, regime"),
+            Tool(name="update_drawdown", func=update_drawdown,
+                 description="Update per-asset drawdown tracker with current position values. "
+                             "Call before apply_drawdown_sizing. Run at least once daily. "
+                             "Args: JSON with positions list of {pair, current_value_usdt}"),
+            Tool(name="apply_drawdown_sizing", func=apply_drawdown_sizing,
+                 description="Apply drawdown-normalised sizing to a Kelly-calculated position. "
+                             "Reduces position size when asset is in drawdown. Call AFTER Kelly sizing. "
+                             "Args: JSON with pair, base_position_usdt"),
+            Tool(name="assess_trade_quality", func=assess_trade_quality,
+                 description="Score a trade signal's quality using ML model from historical backtest data. "
+                             "Cold-start safe: returns 1.0 when insufficient training data. "
+                             "Args: JSON with strategy_type, regime, sharpe, win_rate, max_drawdown, "
+                             "profit_factor, total_trades, oos_passed"),
         ]

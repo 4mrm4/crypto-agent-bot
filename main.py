@@ -37,6 +37,16 @@ def main():
              "human input. Use --ui to also start the web dashboard."
     )
     parser.add_argument(
+        "--scanner",
+        action="store_true",
+        help="Start signal scanner in active mode (web UI or autonomous mode)"
+    )
+    parser.add_argument(
+        "--scanner-standby",
+        action="store_true",
+        help="Start signal scanner in standby mode (default with --autonomous --ui)"
+    )
+    parser.add_argument(
         "command",
         nargs="*",
         help="Workspace command: new-goal | list-goals | review | run",
@@ -54,7 +64,7 @@ def main():
         )
 
     if args.autonomous:
-        _run_autonomous(ui=args.ui)
+        _run_autonomous(ui=args.ui, start_scanner=args.scanner, scanner_standby=args.scanner_standby)
         return
 
     if args.auto_research:
@@ -112,7 +122,7 @@ def _run_ui():
         console.print("\n[green]Server stopped.[/]")
 
 
-def _run_autonomous(ui: bool = False):
+def _run_autonomous(ui: bool = False, start_scanner: bool = False, scanner_standby: bool = False):
     """Start the autonomous research loop, optionally with the web UI."""
     import asyncio
 
@@ -172,6 +182,22 @@ def _run_autonomous(ui: bool = False):
         fastapi_app.state.event_bus = event_bus
         fastapi_app.state.vector_store = vector_store
         fastapi_app.state.experiment_tracker = experiment_tracker
+
+        # Create scanner for autonomous+ui mode
+        if start_scanner or ui:
+            from execution.signal_scanner import SignalScanner
+            scanner = SignalScanner(
+                pairs=[settings.SYMBOL],
+                regime_detector=regime_detector,
+                live_executor=None,  # created later during server startup
+                event_bus=event_bus,
+                vector_store=vector_store,
+            )
+            if scanner_standby or not start_scanner:
+                scanner._standby_mode = True
+            fastapi_app.state.signal_scanner = scanner
+            logger.info("SignalScanner attached to app.state (standby=%s)", scanner.is_standby)
+
         # Loop is started by the server's startup event handler
         config = uvicorn.Config(fastapi_app, host="127.0.0.1", port=8765, log_level="info")
         server = uvicorn.Server(config)

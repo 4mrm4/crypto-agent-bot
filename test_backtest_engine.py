@@ -5,6 +5,8 @@ import numpy as np
 import pytest
 
 from backtesting.engine import BacktestEngine
+from backtesting.signal_factory import SignalFactory
+from backtesting.strategy_templates import STRATEGY_REGISTRY
 
 
 @pytest.fixture
@@ -145,3 +147,147 @@ class TestDataframeOverride:
         )
         assert isinstance(result, dict)
         assert result["total_trades"] >= 0
+
+
+# ── Strategy template render tests ──
+
+class TestRenderStrategy:
+    """Verify that _render_strategy produces valid Python for all 11 strategy types,
+    with and without custom param overrides."""
+
+    def test_all_types_render_without_placeholder_leaks(self, engine):
+        """Every strategy type must render with zero unresolved $placeholders."""
+        for stype in SignalFactory.supported_types():
+            params = engine._default_strategy_params(stype)
+            params["strategy_name"] = f"TestStrategy_{stype}"
+            params["timestamp"] = "2024-01-01T00:00:00"
+            rendered = engine._render_strategy(params)
+            engine._validate_strategy(rendered)  # raises on unsubstituted $
+
+    def test_multi_timeframe_all_9_params_rendered(self, engine):
+        """multi_timeframe's 9 indicator params each appear in rendered output."""
+        params = engine._default_strategy_params("multi_timeframe")
+        params["strategy_name"] = "TestMTF"
+        params["timestamp"] = "2024-01-01T00:00:00"
+        rendered = engine._render_strategy(params)
+
+        # Check each param value appears in the indicator_params_block area
+        assert "default=10" in rendered and "fast_ma" in rendered  # fast_ma=10
+        assert "default=30" in rendered                          # slow_ma=30
+        assert "default=14" in rendered                          # adx_period=14, rsi_period=14
+        assert "default=20" in rendered                          # adx_threshold=20
+        assert "default=40" in rendered                          # rsi_oversold=40
+        assert "default=70" in rendered                          # rsi_overbought=70
+        assert "default=80" in rendered                          # higher_tf_fast=80
+        assert "default=200" in rendered                         # higher_tf_slow=200, sma200
+
+    def test_custom_params_override_defaults(self, engine):
+        """Custom params passed through strategy_params should appear in rendered output."""
+        custom = {"fast_ma": 5, "slow_ma": 15, "startup_candle_count": 50}
+        strategy_params = {
+            "indicator_code": STRATEGY_REGISTRY["sma_crossover"]["indicator_code"],
+            "entry_condition": STRATEGY_REGISTRY["sma_crossover"]["entry_condition"],
+            "exit_condition": STRATEGY_REGISTRY["sma_crossover"]["exit_condition"],
+            "indicator_params_block": STRATEGY_REGISTRY["sma_crossover"]["indicator_params_block"],
+            "stoploss": -0.05,
+            "trailing_stop": False,
+            "minimal_roi": '{"0": 0.01}',
+            "timeframe": "1h",
+            **custom,
+        }
+        strategy_params["strategy_name"] = "CustomTest"
+        strategy_params["timestamp"] = "2024-01-01T00:00:00"
+        rendered = engine._render_strategy(strategy_params)
+
+        assert "default=5" in rendered, "Custom fast_ma=5 not in output"
+        assert "default=15" in rendered, "Custom slow_ma=15 not in output"
+        assert "startup_candle_count = 50" in rendered, "Custom startup_candle_count not in output"
+        assert "stoploss = -0.05" in rendered
+        assert "trailing_stop = False" in rendered
+
+    def test_trailing_stop_true_renders_correctly(self, engine):
+        """Boolean True for trailing_stop renders as Python True."""
+        params = engine._default_strategy_params("sma_crossover")
+        params["strategy_name"] = "TrailingTest"
+        params["timestamp"] = "2024-01-01T00:00:00"
+        params["trailing_stop"] = True
+        rendered = engine._render_strategy(params)
+        assert "trailing_stop = True" in rendered
+
+    def test_timeframe_passthrough(self, engine):
+        """Custom timeframe appears in rendered output."""
+        params = engine._default_strategy_params("sma_crossover")
+        params["strategy_name"] = "TimeTest"
+        params["timestamp"] = "2024-01-01T00:00:00"
+        params["timeframe"] = "5m"
+        rendered = engine._render_strategy(params)
+        assert 'timeframe = "5m"' in rendered
+
+    def test_strategy_type_without_params_block(self, engine):
+        """Types with empty indicator_params_block (momentum, breakout, etc.) render cleanly."""
+        for stype in ["momentum", "breakout", "mean_reversion",
+                       "volatility_squeeze", "sentiment_driven"]:
+            params = engine._default_strategy_params(stype)
+            params["strategy_name"] = f"Test_{stype}"
+            params["timestamp"] = "2024-01-01T00:00:00"
+            rendered = engine._render_strategy(params)
+            engine._validate_strategy(rendered)  # must not raise
+
+    def test_render_strategy_with_strategy_type_key(self, engine):
+        """strategy_type key in params dict must not interfere with rendering."""
+        params = engine._default_strategy_params("sma_crossover")
+        params["strategy_name"] = "KeyTest"
+        params["timestamp"] = "2024-01-01T00:00:00"
+        params["strategy_type"] = "sma_crossover"  # injected by backtester agent
+        rendered = engine._render_strategy(params)
+        engine._validate_strategy(rendered)  # must not raise
+
+    def test_trailing_stop_true_sets_all_params(self, engine):
+        """Enabling trailing_stop=true should render all 4 trailing stop params correctly."""
+        params = engine._default_strategy_params("sma_crossover")
+        params["strategy_name"] = "TrailFullTest"
+        params["timestamp"] = "2024-01-01T00:00:00"
+        params["trailing_stop"] = True
+        params["trailing_stop_positive"] = 0.008
+        params["trailing_stop_positive_offset"] = 0.025
+        params["trailing_only_offset_is_reached"] = True
+        rendered = engine._render_strategy(params)
+
+        assert "trailing_stop = True" in rendered
+        assert "trailing_stop_positive = 0.008" in rendered
+        assert "trailing_stop_positive_offset = 0.025" in rendered
+        assert "trailing_only_offset_is_reached = True" in rendered
+        engine._validate_strategy(rendered)  # no unresolved $placeholders
+
+    def test_trailing_stop_default_false_renders(self, engine):
+        """Default trailing_stop=false should include all 4 params as False/0."""
+        params = engine._default_strategy_params("sma_crossover")
+        params["strategy_name"] = "TrailDefaultTest"
+        params["timestamp"] = "2024-01-01T00:00:00"
+        rendered = engine._render_strategy(params)
+
+        assert "trailing_stop = False" in rendered
+        assert "trailing_stop_positive = 0.01" in rendered
+        assert "trailing_stop_positive_offset = 0.02" in rendered
+        assert "trailing_only_offset_is_reached = False" in rendered
+        engine._validate_strategy(rendered)
+
+    def test_trailing_stop_params_override_in_strategy_params(self, engine):
+        """trailing_stop passed via strategy_params should override engine defaults."""
+        params = engine._default_strategy_params("sma_crossover")
+        params["strategy_name"] = "TrailOverrideTest"
+        params["timestamp"] = "2024-01-01T00:00:00"
+        # Simulate what happens when backtester agent passes custom trailing params
+        engine._engine = engine  # fake so we can call run_backtest-like path
+        strategy_params = {"trailing_stop": True, "trailing_stop_positive": 0.005,
+                           "trailing_stop_positive_offset": 0.015,
+                           "trailing_only_offset_is_reached": True}
+        # Simulate the update flow in run_backtest
+        params.update(strategy_params)
+        rendered = engine._render_strategy(params)
+
+        assert "trailing_stop = True" in rendered
+        assert "trailing_stop_positive = 0.005" in rendered
+        assert "trailing_stop_positive_offset = 0.015" in rendered
+        assert "trailing_only_offset_is_reached = True" in rendered
+        engine._validate_strategy(rendered)

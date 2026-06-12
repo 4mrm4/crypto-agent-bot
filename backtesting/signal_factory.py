@@ -24,9 +24,14 @@ logger = logging.getLogger(__name__)
 
 # ── Helpers ──
 
-def _s(arr: np.ndarray) -> pd.Series:
-    """Wrap a numpy array (TA-Lib output) in a pandas Series."""
-    return pd.Series(arr)
+def _s(arr: np.ndarray, index: pd.Index = None) -> pd.Series:
+    """Wrap a numpy array (TA-Lib output) in a pandas Series with the given index.
+
+    Passing *df.index* ensures the returned Series shares its index with the
+    OHLCV DataFrame, preventing ``Can only compare identically-labeled Series``
+    errors when the result is compared against a DataFrame column.
+    """
+    return pd.Series(arr, index=index)
 
 
 def _build_signal(entry: pd.Series, exit: pd.Series) -> pd.Series:
@@ -51,30 +56,33 @@ def _build_signal(entry: pd.Series, exit: pd.Series) -> pd.Series:
 # Each mirrors the corresponding template in engine.py
 
 def _signal_sma_crossover(df: pd.DataFrame, params: dict) -> pd.Series:
-    fast_ma = _s(ta.SMA(df["close"].values, timeperiod=params.get("fast_ma", 10)))
-    slow_ma = _s(ta.SMA(df["close"].values, timeperiod=params.get("slow_ma", 30)))
+    idx = df.index
+    fast_ma = _s(ta.SMA(df["close"].values, timeperiod=params.get("fast_ma", 10)), idx)
+    slow_ma = _s(ta.SMA(df["close"].values, timeperiod=params.get("slow_ma", 30)), idx)
     entry = (fast_ma.shift(1) <= slow_ma.shift(1)) & (fast_ma > slow_ma)
     exit = (fast_ma.shift(1) >= slow_ma.shift(1)) & (fast_ma < slow_ma)
     return _build_signal(entry, exit)
 
 
 def _signal_macd_crossover(df: pd.DataFrame, params: dict) -> pd.Series:
+    idx = df.index
     macd_data = ta.MACD(
         df["close"].values,
         fastperiod=params.get("macd_fast", 12),
         slowperiod=params.get("macd_slow", 26),
         signalperiod=params.get("macd_signal", 9),
     )
-    macd = _s(macd_data[0])
-    signal = _s(macd_data[1])
-    hist = _s(macd_data[2])
+    macd = _s(macd_data[0], idx)
+    signal = _s(macd_data[1], idx)
+    hist = _s(macd_data[2], idx)
     entry = (hist.shift(1) <= 0) & (hist > 0)
     exit = (hist.shift(1) >= 0) & (hist < 0)
     return _build_signal(entry, exit)
 
 
 def _signal_rsi_oversold(df: pd.DataFrame, params: dict) -> pd.Series:
-    rsi = _s(ta.RSI(df["close"].values, timeperiod=params.get("rsi_period", 14)))
+    idx = df.index
+    rsi = _s(ta.RSI(df["close"].values, timeperiod=params.get("rsi_period", 14)), idx)
     buy_thresh = params.get("rsi_buy_threshold", 30)
     sell_thresh = params.get("rsi_sell_threshold", 70)
     entry = (rsi < buy_thresh) & (rsi.shift(1) >= buy_thresh)
@@ -83,22 +91,24 @@ def _signal_rsi_oversold(df: pd.DataFrame, params: dict) -> pd.Series:
 
 
 def _signal_bollinger_bands(df: pd.DataFrame, params: dict) -> pd.Series:
+    idx = df.index
     period = params.get("bb_period", 20)
     upper, middle, lower = ta.BBANDS(
         df["close"].values.astype(float),
         timeperiod=period, nbdevup=2.0, nbdevdn=2.0,
     )
-    bb_upper = _s(upper)
-    bb_lower = _s(lower)
+    bb_upper = _s(upper, idx)
+    bb_lower = _s(lower, idx)
     entry = (df["close"] < bb_lower) & (df["close"].shift(1) >= bb_lower.shift(1))
     exit = (df["close"] > bb_upper) & (df["close"].shift(1) <= bb_upper.shift(1))
     return _build_signal(entry, exit)
 
 
 def _signal_combined_sma_rsi(df: pd.DataFrame, params: dict) -> pd.Series:
-    fast_ma = _s(ta.SMA(df["close"].values, timeperiod=params.get("fast_ma", 10)))
-    slow_ma = _s(ta.SMA(df["close"].values, timeperiod=params.get("slow_ma", 30)))
-    rsi = _s(ta.RSI(df["close"].values, timeperiod=14))
+    idx = df.index
+    fast_ma = _s(ta.SMA(df["close"].values, timeperiod=params.get("fast_ma", 10)), idx)
+    slow_ma = _s(ta.SMA(df["close"].values, timeperiod=params.get("slow_ma", 30)), idx)
+    rsi = _s(ta.RSI(df["close"].values, timeperiod=14), idx)
     entry = (
         (fast_ma.shift(1) <= slow_ma.shift(1)) &
         (fast_ma > slow_ma) &
@@ -109,9 +119,10 @@ def _signal_combined_sma_rsi(df: pd.DataFrame, params: dict) -> pd.Series:
 
 
 def _signal_momentum(df: pd.DataFrame, params: dict) -> pd.Series:
-    roc = _s(ta.ROC(df["close"].values, timeperiod=10))
-    volume_ma = _s(ta.SMA(df["volume"].values, timeperiod=20))
-    rsi = _s(ta.RSI(df["close"].values, timeperiod=14))
+    idx = df.index
+    roc = _s(ta.ROC(df["close"].values, timeperiod=10), idx)
+    volume_ma = _s(ta.SMA(df["volume"].values, timeperiod=20), idx)
+    rsi = _s(ta.RSI(df["close"].values, timeperiod=14), idx)
     entry = (
         (roc > 2.0) &
         (df["volume"] > volume_ma * 1.5) &
@@ -122,9 +133,10 @@ def _signal_momentum(df: pd.DataFrame, params: dict) -> pd.Series:
 
 
 def _signal_breakout(df: pd.DataFrame, params: dict) -> pd.Series:
-    highest_high = _s(df["high"].rolling(20).max().shift(1))
-    volume_ma = _s(ta.SMA(df["volume"].values, timeperiod=20))
-    atr = _s(ta.ATR(df["high"].values, df["low"].values, df["close"].values, timeperiod=14))
+    idx = df.index
+    highest_high = _s(df["high"].rolling(20).max().shift(1), idx)
+    volume_ma = _s(ta.SMA(df["volume"].values, timeperiod=20), idx)
+    atr = _s(ta.ATR(df["high"].values, df["low"].values, df["close"].values, timeperiod=14), idx)
     entry = (
         (df["close"] > highest_high) &
         (df["volume"] > volume_ma * 1.3)
@@ -134,13 +146,14 @@ def _signal_breakout(df: pd.DataFrame, params: dict) -> pd.Series:
 
 
 def _signal_mean_reversion(df: pd.DataFrame, params: dict) -> pd.Series:
+    idx = df.index
     upper, middle, lower = ta.BBANDS(
         df["close"].values, timeperiod=20, nbdevup=2.0, nbdevdn=2.0,
     )
-    bb_upper = _s(upper)
-    bb_middle = _s(middle)
-    bb_lower = _s(lower)
-    rsi = _s(ta.RSI(df["close"].values, timeperiod=14))
+    bb_upper = _s(upper, idx)
+    bb_middle = _s(middle, idx)
+    bb_lower = _s(lower, idx)
+    rsi = _s(ta.RSI(df["close"].values, timeperiod=14), idx)
     distance = (df["close"] - bb_middle) / bb_middle
     entry = (
         (df["close"] < bb_lower) &
@@ -152,18 +165,19 @@ def _signal_mean_reversion(df: pd.DataFrame, params: dict) -> pd.Series:
 
 
 def _signal_volatility_squeeze(df: pd.DataFrame, params: dict) -> pd.Series:
+    idx = df.index
     upper, middle, lower = ta.BBANDS(
         df["close"].values, timeperiod=20, nbdevup=2.0, nbdevdn=2.0,
     )
-    bb_upper = _s(upper)
-    bb_middle = _s(middle)
-    bb_lower = _s(lower)
+    bb_upper = _s(upper, idx)
+    bb_middle = _s(middle, idx)
+    bb_lower = _s(lower, idx)
     bb_width = (bb_upper - bb_lower) / bb_middle
-    bb_width_min = _s(bb_width.rolling(120).min())
+    bb_width_min = _s(bb_width.rolling(120).min(), idx)
 
     macd_line, signal_line, _ = ta.MACD(df["close"].values.astype(float))
-    macd = _s(macd_line)
-    macdsignal = _s(signal_line)
+    macd = _s(macd_line, idx)
+    macdsignal = _s(signal_line, idx)
 
     entry = (
         (bb_width <= bb_width_min * 1.05) &
@@ -177,21 +191,23 @@ def _signal_volatility_squeeze(df: pd.DataFrame, params: dict) -> pd.Series:
 
 
 def _signal_sentiment_driven(df: pd.DataFrame, params: dict) -> pd.Series:
-    rsi = _s(ta.RSI(df["close"].values, timeperiod=14))
-    sma50 = _s(ta.SMA(df["close"].values, timeperiod=50))
+    idx = df.index
+    rsi = _s(ta.RSI(df["close"].values, timeperiod=14), idx)
+    sma50 = _s(ta.SMA(df["close"].values, timeperiod=50), idx)
     entry = (rsi < 40) & (df["close"] > sma50)
     exit = (rsi > 65) | (df["close"] < sma50)
     return _build_signal(entry, exit)
 
 
 def _signal_multi_timeframe(df: pd.DataFrame, params: dict) -> pd.Series:
-    fast_ma = _s(ta.SMA(df["close"].values, timeperiod=params.get("fast_ma", 10)))
-    slow_ma = _s(ta.SMA(df["close"].values, timeperiod=params.get("slow_ma", 30)))
-    rsi = _s(ta.RSI(df["close"].values, timeperiod=params.get("rsi_period", 14)))
-    sma80 = _s(ta.SMA(df["close"].values, timeperiod=params.get("higher_tf_fast", 80)))
-    sma200 = _s(ta.SMA(df["close"].values, timeperiod=params.get("higher_tf_slow", 200)))
+    idx = df.index
+    fast_ma = _s(ta.SMA(df["close"].values, timeperiod=params.get("fast_ma", 10)), idx)
+    slow_ma = _s(ta.SMA(df["close"].values, timeperiod=params.get("slow_ma", 30)), idx)
+    rsi = _s(ta.RSI(df["close"].values, timeperiod=params.get("rsi_period", 14)), idx)
+    sma80 = _s(ta.SMA(df["close"].values, timeperiod=params.get("higher_tf_fast", 80)), idx)
+    sma200 = _s(ta.SMA(df["close"].values, timeperiod=params.get("higher_tf_slow", 200)), idx)
     adx = _s(ta.ADX(df["high"].values, df["low"].values, df["close"].values,
-                    timeperiod=params.get("adx_period", 14)))
+                    timeperiod=params.get("adx_period", 14)), idx)
     adx_threshold = params.get("adx_threshold", 20)
     rsi_oversold = params.get("rsi_oversold", 40)
     rsi_overbought = params.get("rsi_overbought", 70)

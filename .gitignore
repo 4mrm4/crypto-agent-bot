@@ -40,3 +40,10 @@ Thumbs.db
 # Temp / test output
 _test_*.txt
 /tmp/
+*Tempcheck*
+*Tempws_out*
+searxng_test.json
+
+# Runtime workspace artifacts
+workspace/audit_log.jsonl
+workspace/quality_scorer.pkl

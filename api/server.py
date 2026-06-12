@@ -495,6 +495,64 @@ async def current_regime():
     return {"regime": "unknown", "confidence": 0.0}
 
 
+# ── Signal scanner control ──
+
+
+class ScannerControlRequest(BaseModel):
+    """Request body for scanner control."""
+    mode: Optional[str] = None  # "active" | "standby"
+    scan_interval: Optional[int] = None
+
+
+@app.get("/api/scanner/status")
+async def scanner_status():
+    """Return current scanner mode and stats."""
+    scanner = getattr(app.state, "signal_scanner", None)
+    if not scanner:
+        return {"status": "not_initialized"}
+    return {
+        "status": "ok",
+        "mode": "standby" if scanner.is_standby else "active",
+        "active_interval": scanner.active_interval,
+        "standby_interval": scanner.standby_interval,
+        "cycles_without_trade": scanner._cycles_without_trade,
+        "current_regime": scanner._regime_tracker.current_regime,
+        "regime_confidence": scanner._regime_tracker.current_confidence,
+        "signals_fired": len(scanner._signal_history),
+        "in_cooldown": scanner._regime_tracker.is_in_cooldown(),
+        "transition_count_24h": scanner._regime_tracker.transition_count(24),
+    }
+
+
+@app.post("/api/scanner/control")
+async def scanner_control(body: ScannerControlRequest):
+    """Control scanner mode and intervals."""
+    scanner = getattr(app.state, "signal_scanner", None)
+    if not scanner:
+        return JSONResponse(status_code=404, content={"error": "Scanner not initialized"})
+
+    prev_mode = "standby" if scanner.is_standby else "active"
+
+    if body.mode == "active" and scanner.is_standby:
+        scanner.wake()
+        logger.info("Scanner woken via API")
+    elif body.mode == "standby" and not scanner.is_standby:
+        scanner._standby_mode = True
+        logger.info("Scanner set to standby via API")
+
+    if body.scan_interval is not None and body.scan_interval > 0:
+        scanner._scan_interval = body.scan_interval
+        logger.info("Scanner scan interval set to %ds via API", body.scan_interval)
+
+    current_mode = "standby" if scanner.is_standby else "active"
+    return {
+        "previous_mode": prev_mode,
+        "current_mode": current_mode,
+        "active_interval": scanner.active_interval,
+        "standby_interval": scanner.standby_interval,
+    }
+
+
 # ── WebSocket ──
 
 
@@ -790,7 +848,23 @@ async def startup():
         if scanner:
             asyncio.create_task(scanner.scan_loop())
             _startup_tasks["signal_scanner"] = {"status": "running", "error": None}
-            logger.info("SignalScanner started")
+            logger.info("SignalScanner started (from app.state)")
+        elif getattr(app.state, "autonomous_loop", None):
+            # Auto-create scanner when autonomous loop is running
+            from execution.signal_scanner import SignalScanner
+            from data.regime import MarketRegimeDetector
+            from config import settings
+            scanner = SignalScanner(
+                pairs=[settings.SYMBOL],
+                regime_detector=MarketRegimeDetector(),
+                live_executor=getattr(app.state, "live_executor", None),
+                event_bus=getattr(app.state, "event_bus", None),
+                state_broker=getattr(app.state, "state_broker", None),
+            )
+            app.state.signal_scanner = scanner
+            asyncio.create_task(scanner.scan_loop())
+            _startup_tasks["signal_scanner"] = {"status": "running", "error": None}
+            logger.info("SignalScanner auto-created and started (autonomous mode)")
         else:
             _startup_tasks["signal_scanner"] = {"status": "not_started", "error": "No scanner configured"}
     except Exception as exc:

@@ -25,6 +25,9 @@ class $strategy_name(IStrategy):
     minimal_roi = $minimal_roi
     stoploss = $stoploss
     trailing_stop = $trailing_stop
+    trailing_stop_positive = $trailing_stop_positive
+    trailing_stop_positive_offset = $trailing_stop_positive_offset
+    trailing_only_offset_is_reached = $trailing_only_offset_is_reached
     startup_candle_count = $startup_candle_count
     process_only_new_candles = True
     use_exit_signal = True
@@ -176,31 +179,31 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
         "entry_condition": MACD_CROSSOVER_ENTRY,
         "exit_condition": MACD_CROSSOVER_EXIT,
         "indicator_params_block": """
-    macd_fast = IntParameter(8, 20, default=12, space="buy")
-    macd_slow = IntParameter(20, 40, default=26, space="buy")
-    macd_signal = IntParameter(6, 14, default=9, space="buy")
+    macd_fast = IntParameter(8, 20, default=$macd_fast, space="buy")
+    macd_slow = IntParameter(20, 40, default=$macd_slow, space="buy")
+    macd_signal = IntParameter(6, 14, default=$macd_signal, space="buy")
 """,
-        "default_params": {"startup_candle_count": 33},
+        "default_params": {"macd_fast": 12, "macd_slow": 26, "macd_signal": 9, "startup_candle_count": 33},
     },
     "rsi_oversold": {
         "indicator_code": RSI_INDICATOR,
         "entry_condition": RSI_OVERSOLD_ENTRY,
         "exit_condition": RSI_OVERSOLD_EXIT,
         "indicator_params_block": """
-    rsi_period = IntParameter(10, 21, default=14, space="buy")
-    rsi_buy_threshold = IntParameter(25, 35, default=30, space="buy")
-    rsi_sell_threshold = IntParameter(65, 80, default=70, space="sell")
+    rsi_period = IntParameter(10, 21, default=$rsi_period, space="buy")
+    rsi_buy_threshold = IntParameter(25, 35, default=$rsi_buy_threshold, space="buy")
+    rsi_sell_threshold = IntParameter(65, 80, default=$rsi_sell_threshold, space="sell")
 """,
-        "default_params": {"startup_candle_count": 20},
+        "default_params": {"rsi_period": 14, "rsi_buy_threshold": 30, "rsi_sell_threshold": 70, "startup_candle_count": 20},
     },
     "bollinger_bands": {
         "indicator_code": BB_INDICATOR,
         "entry_condition": BB_ENTRY,
         "exit_condition": BB_EXIT,
         "indicator_params_block": """
-    bb_period = IntParameter(15, 30, default=20, space="buy")
+    bb_period = IntParameter(15, 30, default=$bb_period, space="buy")
 """,
-        "default_params": {"startup_candle_count": 26},
+        "default_params": {"bb_period": 20, "startup_candle_count": 26},
     },
     "combined_sma_rsi": {
         "indicator_code": SMA_RSI_INDICATOR,

@@ -644,6 +644,45 @@ class TradingDatabase:
             ).fetchone()
             return result[0]
 
+    def query_experiments_with_verdict(
+        self,
+        verdicts: Optional[List[str]] = None,
+        limit: int = 5000,
+    ) -> List[Dict[str, Any]]:
+        """Query experiments filtered by verdict(s), with parsed metrics.
+
+        Used by TradeQualityScorer to load training data.
+
+        Args:
+            verdicts: List of verdicts to filter by (e.g. ["deployed", "discarded"]).
+                      If None, returns all experiments.
+            limit: Max rows to return (default 5000).
+
+        Returns:
+            List of experiment dicts with parsed 'metrics' field.
+        """
+        with self.transaction() as conn:
+            if verdicts:
+                placeholders = ",".join("?" for _ in verdicts)
+                rows = conn.execute(
+                    f"SELECT * FROM experiments WHERE verdict IN ({placeholders}) ORDER BY created_at DESC LIMIT ?",
+                    (*verdicts, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM experiments ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            results = []
+            for r in rows:
+                d = dict(r)
+                try:
+                    d["metrics"] = json.loads(d.get("metrics", "{}"))
+                except (json.JSONDecodeError, TypeError):
+                    d["metrics"] = {}
+                results.append(d)
+            return results
+
     def clear_all(self) -> None:
         """Clear all data (for testing)."""
         with self.transaction() as conn:

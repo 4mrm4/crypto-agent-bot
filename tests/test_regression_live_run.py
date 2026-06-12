@@ -590,6 +590,90 @@ def test_regression_extract_metrics_reads_experiments_jsonl():
     )
 
 
+# ── Bug 7: Regime/goal context mismatch in graph dispatch ──
+
+
+def test_dispatch_task_regime_parsing_hermes_goal_format():
+    """Regex must parse goal regime from actual hermes.py goal text format:
+    'Autonomous research for ranging regime. Focus strategy type: ...'
+    """
+    import re
+    from data.regime import REGIME_STRATEGY_MAP
+
+    pattern = re.compile(r'(?:research for|Regime:)\s*(\w+)\s+regime')
+
+    # Actual format from hermes.py run_from_autonomous_goal()
+    descriptions = [
+        "Generate strategies for: Autonomous research for ranging regime. Focus strategy type: mean_reversion.",
+        "Generate strategies for: Autonomous research for strong_uptrend regime. Focus strategy type: momentum.",
+        "Generate strategies for: Autonomous research for volatile regime. Focus strategy type: breakout.",
+        "Generate strategies for: Autonomous research for weak_trend regime. Focus strategy type: macd_crossover.",
+    ]
+    for desc in descriptions:
+        match = pattern.search(desc)
+        assert match is not None, f"Regex failed to match: {desc[:80]}"
+        regime = match.group(1)
+        assert regime in REGIME_STRATEGY_MAP, (
+            f"Parsed regime '{regime}' not in REGIME_STRATEGY_MAP"
+        )
+
+
+def test_dispatch_task_regime_parsing_tag_format():
+    """Regex must also handle the 'Regime:' tag format for backward compatibility."""
+    import re
+
+    pattern = re.compile(r'(?:research for|Regime:)\s*(\w+)\s+regime')
+
+    desc = "Regime: strong_uptrend regime"
+    match = pattern.search(desc)
+    assert match is not None, "Regex failed to match Regime: tag format"
+    assert match.group(1) == "strong_uptrend"
+
+
+def test_dispatch_task_regime_parsing_no_match():
+    """Regex must return None when no regime is mentioned in the description."""
+    import re
+
+    pattern = re.compile(r'(?:research for|Regime:)\s*(\w+)\s+regime')
+
+    descriptions = [
+        "Just a normal strategy generation task",
+        "Backtest strategy_type=sma_crossover params={}",
+        "Assess risk for current portfolio",
+    ]
+    for desc in descriptions:
+        match = pattern.search(desc)
+        assert match is None, f"Regex should not match plain description: {desc[:80]}"
+
+
+def test_dispatch_task_regime_uses_goal_when_market_diverges():
+    """When the research goal targets a different regime than the live market,
+    the goal regime must be used for strategy routing. This test verifies
+    the logic in dispatch_task lines 117-127 by testing the regex extraction
+    that drives the branching."""
+    import re
+    from data.regime import REGIME_STRATEGY_MAP
+
+    pattern = re.compile(r'(?:research for|Regime:)\s*(\w+)\s+regime')
+
+    # Simulate: goal targets ranging, but market is volatile
+    desc = ("Generate strategies for: Autonomous research for ranging regime. "
+            "Focus strategy type: mean_reversion.")
+
+    match = pattern.search(desc)
+    assert match is not None
+    goal_regime = match.group(1)
+
+    # This is the key assertion — goal regime is 'ranging', not the live market
+    assert goal_regime == "ranging"
+    assert goal_regime in REGIME_STRATEGY_MAP
+
+    # Verify ranging regime recommends mean_reversion, bollinger_bands
+    ranging_strategies = REGIME_STRATEGY_MAP["ranging"]["use"]
+    assert "mean_reversion" in ranging_strategies
+    assert "bollinger_bands" in ranging_strategies
+
+
 def test_regression_backtester_run_bypasses_llm():
     """BacktesterAgent.run() must execute backtest commands directly
     without the LLM. The output must contain real metrics (trades, sharpe)

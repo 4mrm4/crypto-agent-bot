@@ -1,0 +1,10 @@
+search:
+  formats:
+    - html
+    - json
+    - csv
+    - rss
+
+server:
+  limiter: false
+  public_instance: false

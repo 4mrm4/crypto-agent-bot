@@ -53,10 +53,24 @@ query($slug: String!, $metric: String!, $from: DateTime!, $to: DateTime!) {
 """
 
 TRENDING_QUERY = """
-{
-  getTrendingAssets(size: 10) {
+query($from: DateTime!, $to: DateTime!) {
+  allProjects(
+    selector: {
+      orderBy: {
+        metric: "social_volume_total"
+        direction: DESC
+        from: $from
+        to: $to
+        aggregation: LAST
+      }
+      pagination: {
+        page: 1
+        pageSize: 10
+      }
+    }
+  ) {
     slug
-    score
+    name
   }
 }
 """
@@ -201,14 +215,26 @@ class SantimentFetcher:
             return None
 
     async def get_trending_assets(self) -> List[str]:
-        """Fetch assets with surging social volume."""
-        data = await self._query(TRENDING_QUERY)
+        """Fetch assets with surging social volume via allProjects ordered by social_volume_total DESC."""
+        from datetime import datetime, timedelta
+        now = datetime.utcnow()
+        data = await self._query(TRENDING_QUERY, {
+            "from": (now - timedelta(days=7)).isoformat() + "Z",
+            "to": now.isoformat() + "Z",
+        })
         if not data:
+            logger.info("Santiment trending unavailable — skipping trending-assets goal trigger")
             return []
         try:
-            assets = data["data"]["getTrendingAssets"]
-            return [a["slug"] for a in assets]
-        except (KeyError, IndexError):
+            assets = data["data"]["allProjects"]
+            if not assets:
+                logger.info("Santiment trending returned empty list — no assets with social volume data")
+                return []
+            slugs = [a["slug"] for a in assets]
+            logger.info("Santiment trending assets (social volume): %s", slugs[:5])
+            return slugs
+        except (KeyError, IndexError, TypeError) as exc:
+            logger.warning("Santiment trending parse failed: %s — gracefully skipping", exc)
             return []
 
     async def get_batch_signals(

@@ -137,6 +137,12 @@ class MarketRegimeDetector:
 
     def classify_regime_snapshot(self, df: pd.DataFrame) -> "RegimeSnapshot":
         """Return a full RegimeSnapshot with metrics and strategy recommendations."""
+        if df is None or df.empty:
+            logger.warning("Empty DataFrame passed to classify_regime_snapshot — returning unknown")
+            return RegimeSnapshot(
+                regime="unknown", confidence=0.0, adx=0.0, atr_pct=0.0, sma200_distance=0.0,
+            )
+
         close = df["close"].astype(float)
         high = df["high"].astype(float)
         low = df["low"].astype(float)
@@ -147,22 +153,39 @@ class MarketRegimeDetector:
         atr = talib.ATR(high.values, low.values, close.values, timeperiod=14)
         sma200 = talib.SMA(close.values, timeperiod=200)
 
-        last_adx = float(adx[-1]) if adx[-1] == adx[-1] else 0
-        last_plus = float(plus_di[-1]) if plus_di[-1] == plus_di[-1] else 0
-        last_minus = float(minus_di[-1]) if minus_di[-1] == minus_di[-1] else 0
-        last_atr = float(atr[-1]) if atr[-1] == atr[-1] else 0
+        # Safe extraction with NaN handling
+        last_adx = float(adx[-1]) if not pd.isna(adx[-1]) else 0.0
+        last_plus = float(plus_di[-1]) if not pd.isna(plus_di[-1]) else 0.0
+        last_minus = float(minus_di[-1]) if not pd.isna(minus_di[-1]) else 0.0
+        last_atr = float(atr[-1]) if not pd.isna(atr[-1]) else 0.0
         last_price = float(close.iloc[-1])
-        last_sma200 = float(sma200[-1]) if sma200[-1] == sma200[-1] else last_price
+        last_sma200 = float(sma200[-1]) if not pd.isna(sma200[-1]) else last_price
         atr_pct = (last_atr / last_price) if last_price > 0 else 0.0
         sma200_distance = ((last_price - last_sma200) / last_sma200) if last_sma200 > 0 else 0.0
+
+        # Debug logging: show raw TA-Lib values BEFORE any normalization
+        logger.debug(
+            "Regime raw values: adx=%.4f plus_di=%.4f minus_di=%.4f atr=%.4f "
+            "price=%.4f sma200=%.4f atr_pct=%.4f sma200_dist=%.4f",
+            last_adx, last_plus, last_minus, last_atr, last_price, last_sma200,
+            atr_pct, sma200_distance,
+        )
 
         regime = self.classify_regime(df)
 
         recommended = REGIME_STRATEGY_MAP.get(regime, {}).get("use", [])
         discouraged = REGIME_STRATEGY_MAP.get(regime, {}).get("avoid", [])
 
-        # Confidence based on ADX clarity
-        if regime in ("strong_uptrend", "strong_downtrend") and last_adx > 30:
+        # Confidence based on ADX clarity with NaN/data-quality guard
+        if last_adx == 0.0:
+            # All TA-Lib values are zero — data issue, not a real regime
+            confidence = 0.05
+            logger.warning(
+                "Regime ADX is 0.0 — all TA-Lib values defaulted to zero. "
+                "Possible data quality issue (empty DataFrame, wrong column names, "
+                "or all-NaN input). regime=%s", regime,
+            )
+        elif regime in ("strong_uptrend", "strong_downtrend") and last_adx > 30:
             confidence = 0.9
         elif regime in ("strong_uptrend", "strong_downtrend"):
             confidence = 0.7
@@ -173,9 +196,12 @@ class MarketRegimeDetector:
         else:
             confidence = 0.5
 
+        # Scale confidence to ensure readable percentages
+        confidence = max(0.01, min(1.0, confidence))
+
         logger.debug(
-            "Regime confidence: regime=%s adx=%.1f confidence=%.2f",
-            regime, last_adx, confidence,
+            "Regime confidence: regime=%s adx=%.1f confidence=%.2f (%.0f%%)",
+            regime, last_adx, confidence, confidence * 100,
         )
         if confidence < settings.REGIME_CONF_THRESHOLD:
             logger.warning(

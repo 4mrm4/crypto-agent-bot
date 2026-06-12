@@ -92,7 +92,11 @@ def dispatch_task(state: OrchestratorState) -> Dict[str, Any]:
     agent_name = _pick_agent(task.description, board._agent_capabilities)
 
     # ── Regime-aware routing ──
-    # Inject current regime context into task description for regime-sensitive agents
+    # Inject current regime context into task description for regime-sensitive agents.
+    # When the task description includes a "Regime:" tag (from autonomous research goals),
+    # the goal's intended regime is used for strategy routing, with the live regime shown
+    # as supplementary context. This prevents contradictory signals when the market regime
+    # shifts between goal generation and task dispatch.
     if agent_name in ("strategist", "analyst", "risk_manager"):
         try:
             from data.fetcher import MarketDataFetcher
@@ -103,33 +107,63 @@ def dispatch_task(state: OrchestratorState) -> Dict[str, Any]:
             df = fetcher.fetch_ohlcv(settings.SYMBOL, settings.TIMEFRAME, limit=250)
             if df is not None and len(df) > 200:
                 detector = MarketRegimeDetector()
-                snapshot = detector.classify_regime_snapshot(df)
+                live_snapshot = detector.classify_regime_snapshot(df)
+
+                # Check if the task description has a goal regime (from autonomous loop).
+                # The goal text format is: "Autonomous research for <regime> regime..."
+                goal_regime_match = re.search(r'(?:research for|Regime:)\s*(\w+)\s+regime', task.description)
+                goal_regime = goal_regime_match.group(1) if goal_regime_match else None
+
+                # Use goal regime for strategy routing when available; otherwise use live regime
+                if goal_regime and goal_regime in REGIME_STRATEGY_MAP:
+                    active_regime = goal_regime
+                    regime_map = REGIME_STRATEGY_MAP[goal_regime]
+                    recommended = regime_map.get("use", [])
+                    discouraged = regime_map.get("avoid", [])
+                    logger.info(
+                        "Using regime '%s' (from research goal) for strategy routing; "
+                        "live regime is '%s'",
+                        goal_regime, live_snapshot.regime,
+                    )
+                else:
+                    active_regime = live_snapshot.regime
+                    recommended = live_snapshot.recommended_strategies
+                    discouraged = live_snapshot.discouraged_strategies
+
+                # Show both regimes for awareness — goal regime and live regime
                 regime_note = (
-                    f"\n\n[CURRENT REGIME: {snapshot.regime} (confidence={snapshot.confidence:.0%})]"
-                    f"\nADX={snapshot.adx:.1f}, ATR%={snapshot.atr_pct:.2%}, "
-                    f"SMA200 distance={snapshot.sma200_distance:.2%}"
-                    f"\nRecommended strategies: {', '.join(snapshot.recommended_strategies)}"
-                    f"\nDiscouraged strategies: {', '.join(snapshot.discouraged_strategies)}"
+                    f"\n\n[RESEARCH TARGET REGIME: {active_regime}]"
+                    f"\n[LIVE MARKET REGIME: {live_snapshot.regime} (confidence={live_snapshot.confidence:.0%})]"
+                    f"\nADX={live_snapshot.adx:.1f}, ATR%={live_snapshot.atr_pct:.2%}, "
+                    f"SMA200 distance={live_snapshot.sma200_distance:.2%}"
+                    f"\nRecommended strategies for target: {', '.join(recommended)}"
+                    f"\nDiscouraged strategies for target: {', '.join(discouraged)}"
                 )
+                if goal_regime and goal_regime != live_snapshot.regime:
+                    regime_note += (
+                        f"\nNote: Research goal targets '{goal_regime}' regime but market "
+                        f"has shifted to '{live_snapshot.regime}'. The strategies below are "
+                        f"appropriate for the target regime."
+                    )
                 task.description += regime_note
                 logger.info(
-                    "Injected regime context (%s, conf=%.0f%%) into %s task",
-                    snapshot.regime, snapshot.confidence, agent_name,
+                    "Injected regime context (target=%s, live=%s, conf=%.0f%%) into %s task",
+                    active_regime, live_snapshot.regime, live_snapshot.confidence, agent_name,
                 )
 
-                # Apply penalty for discouraged strategies — only check strategy_type=X param
+                # Apply penalty for discouraged strategies — use active regime's map
                 strategy_type_match = re.search(r'strategy_type=(\w+)', task.description)
                 if strategy_type_match:
                     requested_type = strategy_type_match.group(1)
-                    for discouraged in snapshot.discouraged_strategies:
-                        if discouraged.lower() == requested_type.lower():
+                    for disc in discouraged:
+                        if disc.lower() == requested_type.lower():
                             logger.warning(
                                 "Task uses discouraged strategy '%s' for regime '%s'",
-                                discouraged, snapshot.regime,
+                                disc, active_regime,
                             )
                             task.description += (
-                                f"\n[WARNING: '{discouraged}' is discouraged in {snapshot.regime} regime. "
-                                f"Consider switching to: {', '.join(snapshot.recommended_strategies)}]"
+                                f"\n[WARNING: '{disc}' is discouraged in '{active_regime}' regime. "
+                                f"Consider switching to: {', '.join(recommended)}]"
                             )
         except Exception as exc:
             logger.debug("Regime injection skipped: %s", exc)

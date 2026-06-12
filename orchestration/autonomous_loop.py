@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # Safety limits from autonomous-agents skill: every step compounds error,
 # so we keep the loop simple and guardrailed.
 MAX_CONSECUTIVE_FAILURES = 5   # halt loop if this many research cycles fail in a row
+MAX_REGIME_ATTEMPTS = 3        # per-regime research attempts before forced rotation
 MIN_INTERVAL_SECONDS = 300      # 5 minutes — never loop faster than this
 
 
@@ -42,6 +43,9 @@ class AutonomousLoopState:
     last_error: Optional[str] = None
     last_regime: str = "unknown"
     coverage_gaps: Dict[str, float] = field(default_factory=dict)  # regime -> best_sharpe
+    # Per-regime research attempt tracking (anti-infinite-loop)
+    regime_attempts: Dict[str, int] = field(default_factory=dict)  # regime -> count
+    regime_strategies_tried: Dict[str, List[str]] = field(default_factory=dict)  # regime -> [strategy_type]
     # Iteration results for UI charting
     iteration_results: List[Dict[str, Any]] = field(default_factory=list)
     current_sharpe: float = 0.0
@@ -209,6 +213,7 @@ class AutonomousResearchLoop:
             "coverage_gaps": self.state.coverage_gaps,
             "current_sharpe": self.state.current_sharpe,
             "current_best_sharpe": self.state.current_best_sharpe,
+            "regime_attempts": dict(self.state.regime_attempts),
         }
 
     # ── Internal: Goal generation ──
@@ -219,33 +224,83 @@ class AutonomousResearchLoop:
 
         Priority order:
         1. Current regime has no strategy with Sharpe > 0.8 → research for that regime
+           (but rotate away after MAX_REGIME_ATTEMPTS failed attempts to avoid infinite loop)
         2. Strategy decay detected → re-research the decaying strategy's regime
         3. Regime not researched in >7 days → refresh
         4. Otherwise → explore novel hypothesis
         """
-        # 1. Check coverage gaps for current regime
         from data.regime import REGIME_STRATEGY_MAP
         coverage = await self._compute_coverage_gaps()
         current_regime = self.state.last_regime
 
-        # 1a. If current regime has no good strategy → highest priority
+        # ── 1a. Coverage gap for current regime ──
         best_sharpe = coverage.get(current_regime, 0.0)
         if best_sharpe < 0.8:
-            # Find a recommended strategy type for this regime
+            attempts = self.state.regime_attempts.get(current_regime, 0)
+            tried_strats = self.state.regime_strategies_tried.get(current_regime, [])
             recommended = REGIME_STRATEGY_MAP.get(current_regime, {}).get("use", [])
-            hint = recommended[0] if recommended else "sma_crossover"
+
+            if attempts >= MAX_REGIME_ATTEMPTS or not recommended:
+                # Regime has been over-researched or has no usable strategies —
+                # rotate to the worst-covered different regime
+                logger.info(
+                    "%s researched %d times without improvement — rotating regimes",
+                    current_regime, attempts,
+                )
+                # Pick the regime with the lowest coverage (excluding current_regime)
+                sorted_by_coverage = sorted(
+                    [(r, s) for r, s in coverage.items() if r != current_regime],
+                    key=lambda x: x[1],
+                )
+                for alt_regime, alt_sharpe in sorted_by_coverage:
+                    alt_recs = REGIME_STRATEGY_MAP.get(alt_regime, {}).get("use", [])
+                    if alt_recs:
+                        hint = alt_recs[0]
+                        return ResearchGoal(
+                            regime=alt_regime,
+                            strategy_type_hint=hint,
+                            motivation=(
+                                f"Regime rotation: {current_regime} exhausted "
+                                f"({attempts} attempts). Trying {alt_regime} "
+                                f"(coverage={alt_sharpe:.2f}) with {hint}."
+                            ),
+                            priority_score=0.7,
+                            triggered_by="regime_rotation",
+                        )
+
+                # Fallback: all regimes are covered or unresolvable — explore
+                return ResearchGoal(
+                    regime=current_regime,
+                    strategy_type_hint="combined_sma_rsi",
+                    motivation=(
+                        f"Exploration (post-rotation): all regimes researched. "
+                        f"Testing combined variant for {current_regime}."
+                    ),
+                    priority_score=0.3,
+                    triggered_by="exploration",
+                )
+
+            # Pick a strategy type not yet tried for this regime
+            untried = [s for s in recommended if s not in tried_strats]
+            hint = untried[0] if untried else recommended[0]
+
+            # Increment attempt counter
+            self.state.regime_attempts[current_regime] = attempts + 1
+            self.state.regime_strategies_tried.setdefault(current_regime, []).append(hint)
+
             return ResearchGoal(
                 regime=current_regime,
                 strategy_type_hint=hint,
                 motivation=(
                     f"Coverage gap: {current_regime} has no strategy with "
-                    f"Sharpe > 0.8 (best={best_sharpe:.2f}). Researching {hint}."
+                    f"Sharpe > 0.8 (best={best_sharpe:.2f}). "
+                    f"Attempt {attempts + 1}/{MAX_REGIME_ATTEMPTS} — researching {hint}."
                 ),
                 priority_score=1.0,
                 triggered_by="coverage_gap",
             )
 
-        # 1b. Check Santiment trending assets and boost priority if trending
+        # ── 1b. Santiment trending assets ──
         try:
             trending = await self._check_trending_assets()
             if trending:
@@ -267,7 +322,7 @@ class AutonomousResearchLoop:
         except Exception as exc:
             logger.debug("Trending assets check skipped: %s", exc)
 
-        # 2. Check for decaying strategies
+        # ── 2. Check for decaying strategies ──
         decay_report = await self._detect_strategy_decay()
         if decay_report:
             worst = decay_report[0]
@@ -282,7 +337,7 @@ class AutonomousResearchLoop:
                 triggered_by="decay",
             )
 
-        # 3. Check for stale regimes (not researched in >7 days)
+        # ── 3. Check for stale regimes (not researched in >7 days) ──
         for regime in coverage:
             if coverage[regime] < 0.5:  # no data for this regime
                 recommended = REGIME_STRATEGY_MAP.get(regime, {}).get("use", [])
@@ -298,7 +353,7 @@ class AutonomousResearchLoop:
                     triggered_by="scheduled",
                 )
 
-        # 4. Explore — combine two top strategies
+        # ── 4. Explore — combine two top strategies ──
         return ResearchGoal(
             regime=current_regime,
             strategy_type_hint="combined_sma_rsi",  # safe default exploration
@@ -450,6 +505,12 @@ class AutonomousResearchLoop:
                     gaps[regime] = regime_best if regime_best is not None else 0.0
         except Exception as exc:
             logger.debug("Failed to read experiments.jsonl for coverage gaps: %s", exc)
+
+        # ── Reset attempt tracking for well-covered regimes ──
+        for regime, sharpe in list(gaps.items()):
+            if sharpe >= 0.8:
+                self.state.regime_attempts.pop(regime, None)
+                self.state.regime_strategies_tried.pop(regime, None)
 
         return gaps
 

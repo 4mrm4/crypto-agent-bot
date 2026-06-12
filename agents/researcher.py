@@ -49,7 +49,7 @@ class ResearcherAgent(BaseAgent):
             """Search the web for trading strategy ideas, papers, or articles.
             Pass JSON: {"query": "momentum strategy crypto Bollinger Bands", "max_results": 5}
             Returns a markdown list of results with titles, snippets, and URLs.
-            Uses Tavily search when available, falls back to DuckDuckGo."""
+            Uses SearXNG (when configured) -> Tavily -> DuckDuckGo in priority order."""
             import json
             try:
                 params = json.loads(query_json)
@@ -60,7 +60,66 @@ class ResearcherAgent(BaseAgent):
             if not query:
                 return "Error: empty query"
 
-            # ── Try Tavily first ──
+            # ── Helper: strategy relevance scoring ──
+            def _score_strategy_relevance(results_list: list, title_key: str = "title", snippet_key: str = "content") -> list:
+                strategy_keywords = [
+                    "strategy", "indicator", "entry", "exit", "crossover",
+                    "RSI", "MACD", "SMA", "EMA", "breakout", "backtest",
+                    "win rate", "sharpe", "drawdown"
+                ]
+                scored = []
+                for r in results_list:
+                    text = (r.get(snippet_key, "") + " " + r.get(title_key, "")).lower()
+                    score = sum(1 for kw in strategy_keywords if kw.lower() in text)
+                    if score >= 2:
+                        scored.append(r)
+                scored.sort(key=lambda x: sum(
+                    1 for kw in strategy_keywords if kw.lower() in (x.get(snippet_key, "") + " " + x.get(title_key, "")).lower()
+                ), reverse=True)
+                return scored[:5]
+
+            def _format_results(lines: list, relevant: list, title_key: str = "title", snippet_key: str = "content") -> str:
+                if relevant:
+                    lines.append(f"\nFound {len(relevant)} strategy-relevant results:")
+                    for r in relevant:
+                        lines.append(f"\n[Relevant] {r.get(title_key, '')}")
+                        lines.append(f"  {r.get(snippet_key, '')[:200]}")
+                    lines.append(
+                        "\nNext step: Use generate_custom_strategy_spec to convert "
+                        "the most relevant result into a testable strategy spec."
+                    )
+                return "\n".join(lines)
+
+            # ── Try SearXNG first (self-hosted, no rate limits) ──
+            searxng_url = getattr(settings, "SEARXNG_URL", "")
+            if searxng_url:
+                try:
+                    import httpx
+                    resp = httpx.get(
+                        f"{searxng_url}/search",
+                        params={"q": query, "format": "json", "engines": "google,bing,duckduckgo"},
+                        headers={"X-Forwarded-For": "127.0.0.1"},
+                        timeout=10.0,
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        results = data.get("results", [])
+                        if results:
+                            lines = [f"SearXNG search results for '{query}':"]
+                            for r in results[:max_results]:
+                                title = r.get("title", "")
+                                content = r.get("content", "")[:200]
+                                url = r.get("url", "")
+                                lines.append(f"\n**{title}**")
+                                lines.append(f"  {content}")
+                                if url:
+                                    lines.append(f"  ([link]({url}))")
+                            relevant = _score_strategy_relevance(results[:max_results], title_key="title", snippet_key="content")
+                            return _format_results(lines, relevant)
+                except Exception as exc:
+                    logger.debug("SearXNG search failed: %s — falling through", exc)
+
+            # ── Try Tavily second ──
             if settings.TAVILY_ENABLED and settings.TAVILY_API_KEY:
                 try:
                     from tavily import TavilyClient
@@ -71,68 +130,42 @@ class ResearcherAgent(BaseAgent):
                         search_depth="advanced",
                     )
                     results = resp.get("results", [])
-                    if not results:
-                        return "No results found from Tavily search."
-
-                    lines = [f"Tavily search results for '{query}':"]
-                    for r in results[:max_results]:
-                        title = r.get("title", "")
-                        content = r.get("content", "")[:200]
-                        url = r.get("url", "")
-                        lines.append(f"\n**{title}**")
-                        lines.append(f"  {content}")
-                        if url:
-                            lines.append(f"  ([link]({url}))")
-
-                    # Strategy relevance scoring
-                    strategy_keywords = [
-                        "strategy", "indicator", "entry", "exit", "crossover",
-                        "RSI", "MACD", "SMA", "EMA", "breakout", "backtest",
-                        "win rate", "sharpe", "drawdown"
-                    ]
-                    relevant = []
-                    for r in results[:max_results]:
-                        text = (r.get("content", "") + " " + r.get("title", "")).lower()
-                        score = sum(1 for kw in strategy_keywords if kw.lower() in text)
-                        if score >= 2:
-                            relevant.append({
-                                "title": r.get("title", ""),
-                                "snippet": r.get("content", ""),
-                                "relevance_score": score,
-                            })
-                    relevant.sort(key=lambda x: x["relevance_score"], reverse=True)
-                    if relevant:
-                        lines.append(f"\nFound {len(relevant)} strategy-relevant results:")
-                        for r in relevant[:5]:
-                            lines.append(f"\n[Score={r['relevance_score']}] {r['title']}")
-                            lines.append(f"  {r['snippet'][:200]}")
-                        lines.append(
-                            "\nNext step: Use generate_custom_strategy_spec to convert "
-                            "the most relevant result into a testable strategy spec."
-                        )
-
-                    # Cache results in ChromaDB (best-effort)
-                    try:
-                        from memory.vector_store import VectorStore
-                        cache_store = VectorStore(collection_name="search_cache")
+                    if results:
+                        lines = [f"Tavily search results for '{query}':"]
                         for r in results[:max_results]:
-                            text = f"Search result: {r.get('title', '')} - {r.get('content', '')[:300]}"
-                            cache_store.store_insight(
-                                text=text,
-                                metadata={
-                                    "type": "search_cache",
-                                    "query": query,
-                                    "url": r.get("url", ""),
-                                },
-                            )
-                    except Exception:
-                        pass  # Cache is optional
+                            title = r.get("title", "")
+                            content = r.get("content", "")[:200]
+                            url = r.get("url", "")
+                            lines.append(f"\n**{title}**")
+                            lines.append(f"  {content}")
+                            if url:
+                                lines.append(f"  ([link]({url}))")
 
-                    return "\n".join(lines)
+                        relevant = _score_strategy_relevance(results[:max_results], title_key="title", snippet_key="content")
+                        formatted = _format_results(lines, relevant)
+
+                        # Cache results in ChromaDB (best-effort)
+                        try:
+                            from memory.vector_store import VectorStore
+                            cache_store = VectorStore(collection_name="search_cache")
+                            for r in results[:max_results]:
+                                text = f"Search result: {r.get('title', '')} - {r.get('content', '')[:300]}"
+                                cache_store.store_insight(
+                                    text=text,
+                                    metadata={
+                                        "type": "search_cache",
+                                        "query": query,
+                                        "url": r.get("url", ""),
+                                    },
+                                )
+                        except Exception:
+                            pass  # Cache is optional
+
+                        return formatted
                 except ImportError:
-                    pass  # Tavily not installed, fall through to DuckDuckGo
+                    pass  # Tavily not installed, fall through
                 except Exception as exc:
-                    return f"Tavily search error: {exc}"
+                    logger.warning("Tavily search error: %s", exc)
 
             # ── Fallback: DuckDuckGo ──
             try:
@@ -145,14 +178,11 @@ class ResearcherAgent(BaseAgent):
                 )
                 if resp.status_code == 202:
                     logger.warning(
-                        "DuckDuckGo returned 202 for query: %s — retrying with simpler query", query
+                        "DuckDuckGo returned 202 for query: %s — rate limited, skipping DDG", query
                     )
-                    simple_query = query.replace('"', '').replace("'", '').replace(' AND ', ' ').replace(' OR ', ' ')
-                    resp = httpx.get(
-                        url,
-                        params={"q": simple_query, "format": "json", "no_html": 1, "skip_disambig": 1},
-                        timeout=15.0,
-                    )
+                    # Don't retry — it makes rate limiting worse
+                    return _no_search_results(query, reason="DuckDuckGo rate limited (HTTP 202)")
+
                 resp.raise_for_status()
                 data = resp.json()
 
@@ -168,16 +198,7 @@ class ResearcherAgent(BaseAgent):
                         url = topic.get("FirstURL", "")
                         results.append(f"- {text} ([link]({url}))")
 
-                if not results:
-                    return "No results found for that query."
-
-                # Strategy relevance scoring
-                try:
-                    strategy_keywords = [
-                        "strategy", "indicator", "entry", "exit", "crossover",
-                        "RSI", "MACD", "SMA", "EMA", "breakout", "backtest",
-                        "win rate", "sharpe", "drawdown"
-                    ]
+                if results:
                     all_raw = []
                     for topic in data.get("RelatedTopics", [])[:max_results]:
                         if "Text" in topic:
@@ -185,38 +206,33 @@ class ResearcherAgent(BaseAgent):
                                 "title": topic.get("Text", "")[:100],
                                 "snippet": topic.get("Text", ""),
                             })
-
-                    relevant = []
-                    for r in all_raw:
-                        text = (r.get("snippet", "") + " " + r.get("title", "")).lower()
-                        score = sum(1 for kw in strategy_keywords if kw.lower() in text)
-                        if score >= 2:
-                            relevant.append({
-                                "title": r.get("title", ""),
-                                "snippet": r.get("snippet", ""),
-                                "relevance_score": score,
-                            })
-
-                    relevant.sort(key=lambda x: x["relevance_score"], reverse=True)
+                    relevant = _score_strategy_relevance(all_raw, title_key="title", snippet_key="snippet")
                     if relevant:
-                        lines = [f"Found {len(relevant)} strategy-relevant results:"]
-                        for r in relevant[:5]:
-                            lines.append(f"\n[Score={r['relevance_score']}] {r['title']}")
-                            lines.append(f"  {r['snippet'][:200]}")
-                        lines.append(
-                            "\nNext step: Use generate_custom_strategy_spec to convert "
-                            "the most relevant result into a testable strategy spec."
-                        )
-                        return "\n".join(lines)
-                except Exception:
-                    pass
+                        lines = [f"Found {len(relevant)} strategy-relevant results from DDG:"]
+                        return _format_results(lines, relevant, title_key="title", snippet_key="snippet")
+                    return f"Search results for '{query}':\n" + "\n".join(results)
 
-                return f"Search results for '{query}':\n" + "\n".join(results)
+                return _no_search_results(query, reason="No results from DuckDuckGo")
 
             except ImportError:
-                return "Search unavailable: install httpx (`pip install httpx`)"
+                return _no_search_results(query, reason="httpx not installed")
             except Exception as exc:
-                return f"Search error: {exc}"
+                return _no_search_results(query, reason=str(exc))
+
+        def _no_search_results(query: str, reason: str = "") -> str:
+            """Return a structured 'no results' response that meets the minimum length guard."""
+            msg = (
+                f"## Search Results: No results for '{query}'\n\n"
+                f"No search results could be retrieved for this query. "
+            )
+            if reason:
+                msg += f"Reason: {reason}. "
+            msg += (
+                "The research cycle will proceed with existing memory context only. "
+                "This does not prevent strategy generation — the strategist agent can "
+                "still design strategies based on known indicators and past experiments."
+            )
+            return msg
 
         def read_paper(url_json: str = "{}") -> str:
             """Fetch and summarise a URL (paper, article, blog post) into structured strategy info.

@@ -477,6 +477,9 @@ class BacktestEngine:
             "indicator_params_block": registry_entry["indicator_params_block"],
             "stoploss": -0.05,
             "trailing_stop": False,
+            "trailing_stop_positive": 0.01,
+            "trailing_stop_positive_offset": 0.02,
+            "trailing_only_offset_is_reached": False,
             "minimal_roi": '{"0": 0.01}',
             "timeframe": settings.TIMEFRAME,
         }

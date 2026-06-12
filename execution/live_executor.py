@@ -16,6 +16,7 @@ from config import settings
 from data.fetcher import MarketDataFetcher
 from execution.audit_log import AuditLog, AuditEntry
 from execution.paper_trader import PaperTrader
+from execution.quality_scorer import TradeQualityScorer, BLOCK_THRESHOLD
 from execution.trade_signal import TradeSignal
 from execution.validation_mode import ValidationMode
 from state.state_broker import StateBroker
@@ -62,6 +63,7 @@ class LiveExecutor:
         risk_manager: Optional[RiskManagerAgent] = None,
         event_bus=None,
         state_broker: Optional[StateBroker] = None,
+        quality_scorer: Optional[TradeQualityScorer] = None,
     ):
         self.exchange_id = exchange_id
         self.paper_mode = paper_mode
@@ -81,6 +83,7 @@ class LiveExecutor:
         self._audit_log = AuditLog()
         self._paper_trader = PaperTrader(fetcher=self._fetcher) if paper_mode else None
         self._exchange: Optional[ccxt.Exchange] = None
+        self._quality_scorer = quality_scorer or TradeQualityScorer()
 
         # Validation mode for first 90 days live
         self._validation_mode = ValidationMode(
@@ -144,12 +147,41 @@ class LiveExecutor:
                 self._audit_log.record(self._make_audit_entry(signal, result))
                 return result
 
+        # 1c. ML quality filter
+        prediction = self._quality_scorer.predict_quality(signal)
+        signal.quality_score = prediction.quality_score
+        signal.quality_multiplier = prediction.quality_multiplier
+        if prediction.blocked:
+            logger.info(
+                "ML quality filter blocked %s/%s: score=%.3f, multiplier=%.2f",
+                signal.pair, signal.strategy_type,
+                prediction.quality_score, prediction.quality_multiplier,
+            )
+            result = ExecutionResult(
+                signal_id=signal.signal_id,
+                success=False,
+                error=f"ML quality filter: score={prediction.quality_score:.3f} < {BLOCK_THRESHOLD}",
+                status="rejected",
+            )
+            self._audit_log.record(self._make_audit_entry(signal, result))
+            return result
+
         # 2. Get current price
         try:
             current_price = self._fetcher.fetch_current_price(signal.pair)
             signal.price = current_price if current_price else signal.price
         except Exception as exc:
             logger.warning("Could not fetch current price: %s", exc)
+
+        # 2b. Apply quality multiplier to position size
+        if signal.quality_multiplier < 1.0 and signal.position_size_usdt > 0:
+            original = signal.position_size_usdt
+            signal.position_size_usdt = round(original * signal.quality_multiplier, 2)
+            logger.info(
+                "ML quality multiplier applied: $%.2f → $%.2f (x%.2f) for %s/%s",
+                original, signal.position_size_usdt,
+                signal.quality_multiplier, signal.pair, signal.strategy_type,
+            )
 
         # 3. Execute in paper or live mode
         try:
@@ -205,6 +237,10 @@ class LiveExecutor:
                     "strategy": signal.strategy_name,
                     "regime": signal.regime,
                 })
+
+            # 8. ML scorer: record trade and trigger retrain if needed
+            if fill_result.success:
+                self._quality_scorer.record_trade_executed()
 
             return fill_result
 

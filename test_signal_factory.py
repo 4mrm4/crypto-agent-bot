@@ -320,6 +320,102 @@ class TestTalibWrapping:
         assert pd.isna(wrapped.shift(1).iloc[0])  # shift works after wrapping
 
 
+# ── DatetimeIndex regression tests ──
+# These verify the "Can only compare identically-labeled Series objects" fix.
+
+class TestDatetimeIndexCompat:
+    """Regression: all strategy types must work with DatetimeIndex DataFrames."""
+
+    def make_dt_ohlcv(self, n=300) -> pd.DataFrame:
+        """Generate OHLCV with DatetimeIndex to trigger index mismatch bugs."""
+        np.random.seed(42)
+        close = 50000 + np.cumsum(np.random.randn(n) * 50)
+        idx = pd.date_range("2024-01-01", periods=n, freq="h")
+        return pd.DataFrame({
+            "open": close + np.random.randn(n) * 5,
+            "high": close + np.abs(np.random.randn(n) * 15),
+            "low": close - np.abs(np.random.randn(n) * 15),
+            "close": close,
+            "volume": np.random.randint(100, 1000, n).astype(float),
+        }, index=idx)
+
+    def make_dt_trending(self, n=300) -> pd.DataFrame:
+        close = 50000 + np.arange(n) * 10 + np.random.randn(n) * 50
+        idx = pd.date_range("2024-01-01", periods=n, freq="h")
+        return pd.DataFrame({
+            "open": close + np.random.randn(n) * 5,
+            "high": close + np.abs(np.random.randn(n) * 10),
+            "low": close - np.abs(np.random.randn(n) * 10),
+            "close": close,
+            "volume": np.random.randint(200, 1000, n).astype(float),
+        }, index=idx)
+
+    def make_dt_ranging(self, n=300) -> pd.DataFrame:
+        np.random.seed(99)
+        close = 50000 + np.sin(np.arange(n) * 0.1) * 1000 + np.random.randn(n) * 50
+        idx = pd.date_range("2024-01-01", periods=n, freq="h")
+        return pd.DataFrame({
+            "open": close + np.random.randn(n) * 5,
+            "high": close + np.abs(np.random.randn(n) * 10),
+            "low": close - np.abs(np.random.randn(n) * 10),
+            "close": close,
+            "volume": np.random.randint(200, 1000, n).astype(float),
+        }, index=idx)
+
+    def test_all_types_with_datetime_index(self):
+        """Every strategy type produces a signal with DatetimeIndex without label mismatch errors."""
+        for stype in SignalFactory.supported_types():
+            if stype in ("rsi_oversold", "bollinger_bands", "mean_reversion"):
+                df = self.make_dt_ranging(500)
+            else:
+                df = self.make_dt_trending(500)
+            sig = SignalFactory.generate(df, stype)
+            assert isinstance(sig, pd.Series)
+            assert len(sig) == len(df)
+            assert isinstance(sig.index, pd.DatetimeIndex)
+
+    def test_datetime_index_bollinger_bands_comparison(self):
+        """Bollinger Bands compares df['close'] vs bb_lower with DatetimeIndex — exact crash scenario."""
+        df = self.make_dt_ohlcv(300)
+        sig = SignalFactory.generate(df, "bollinger_bands")
+        assert isinstance(sig, pd.Series)
+        assert sig.index.equals(df.index)
+
+    def test_datetime_index_momentum_volume_comparison(self):
+        """Momentum compares df['volume'] vs volume_ma with DatetimeIndex — exact crash scenario."""
+        df = self.make_dt_trending(300)
+        sig = SignalFactory.generate(df, "momentum")
+        assert isinstance(sig, pd.Series)
+        assert sig.index.equals(df.index)
+
+    def test_datetime_index_breakout_comparison(self):
+        """Breakout compares df['close'] vs highest_high with DatetimeIndex — exact crash scenario."""
+        df = self.make_dt_ohlcv(300)
+        sig = SignalFactory.generate(df, "breakout")
+        assert isinstance(sig, pd.Series)
+        assert sig.index.equals(df.index)
+
+    def test_datetime_index_mean_reversion_comparison(self):
+        """Mean reversion compares df['close'] vs bb_lower with DatetimeIndex — exact crash scenario."""
+        df = self.make_dt_ranging(300)
+        sig = SignalFactory.generate(df, "mean_reversion")
+        assert isinstance(sig, pd.Series)
+        assert sig.index.equals(df.index)
+
+    def test_s_propagates_index(self):
+        """_s(arr, idx) produces Series with the given index."""
+        idx = pd.date_range("2024-01-01", periods=5, freq="h")
+        arr = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        result = _s(arr, idx)
+        assert result.index.equals(idx)
+
+    def test_s_without_index_falls_back_to_range(self):
+        """_s(arr) without index uses default RangeIndex (backward compat)."""
+        arr = np.array([1.0, 2.0, 3.0])
+        result = _s(arr)
+        assert isinstance(result.index, pd.RangeIndex)
+
+
 # ── Pre-filter integration tests ──
 
 class TestRunPrefilter:

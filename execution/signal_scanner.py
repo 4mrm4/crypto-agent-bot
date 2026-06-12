@@ -8,6 +8,13 @@ Regime-Conditioned Gating (v10):
 - Validated-regime matching: each strategy lists which regimes it was validated in
 - Transition cooldown: regime shifts freeze signals for a configurable window
 - Confidence gating: low regime confidence raises the signal confidence floor
+
+Standby Mode (v11):
+- When market is quiet (no regime transitions, no signals fired), the scanner
+  enters standby: extends scan interval and skips strategy evaluation to save
+  CPU/exchange API calls.
+- Automatically wakes on regime transition, manual wake(), or after N idle cycles.
+- Returns to standby after ACTIVE_CYCLES_WITHOUT_TRADE cycles with no signal execution.
 """
 
 import asyncio
@@ -27,7 +34,9 @@ from state.state_broker import StateBroker
 
 logger = logging.getLogger(__name__)
 
-SCAN_INTERVAL_SECONDS = 60  # Check every minute
+SCAN_INTERVAL_SECONDS = 60   # Active mode: check every minute
+STANDBY_INTERVAL_SECONDS = 300  # Standby mode: check every 5 minutes
+ACTIVE_CYCLES_WITHOUT_TRADE = 10  # Return to standby after N silent active cycles
 
 # ── Regime transition cooldown ──
 TRANSITION_COOLDOWN_MINUTES = 30  # No signals for N minutes after regime shift
@@ -135,6 +144,7 @@ class SignalScanner:
         vector_store=None,
         event_bus=None,
         scan_interval: int = SCAN_INTERVAL_SECONDS,
+        standby_interval: int = STANDBY_INTERVAL_SECONDS,
         state_broker: Optional[StateBroker] = None,
     ):
         self._pairs = pairs or ["BTC/USDT", "ETH/USDT"]
@@ -146,9 +156,13 @@ class SignalScanner:
         self._event_bus = event_bus
         self._state_broker = state_broker
         self._scan_interval = scan_interval
+        self._standby_interval = standby_interval
         self._signal_history: List[SignalResult] = []
         self._regime_cache: Dict[str, str] = {}
         self._regime_tracker = RegimeTransitionTracker()
+        # Standby mode state
+        self._standby_mode: bool = True  # Start in standby (energy-saving)
+        self._cycles_without_trade: int = 0
 
     def _update_approved_strategy_validated_regimes(self):
         """Ensure every approved strategy has a validated_regimes field."""
@@ -158,47 +172,84 @@ class SignalScanner:
                 s["validated_regimes"] = [regime] if regime != "unknown" else []
 
     async def scan_loop(self):
-        """Main loop. Runs every scan_interval seconds."""
-        logger.info("SignalScanner started (interval=%ds, pairs=%s)", self._scan_interval, self._pairs)
+        """Main loop. Runs at standby interval by default; switches to active
+        interval on regime transitions or after wake(). In standby, only
+        regime detection runs (no strategy evaluation) to save CPU/API calls."""
+        logger.info(
+            "SignalScanner started (active_interval=%ds, standby_interval=%ds, pairs=%s)",
+            self._scan_interval, self._standby_interval, self._pairs,
+        )
+        await self._emit("scanner_mode", {"mode": "standby", "reason": "initial"})
 
         while True:
+            interval = self._standby_interval if self._standby_mode else self._scan_interval
+            logger.debug("Scanner cycle: mode=%s, interval=%ds", "standby" if self._standby_mode else "active", interval)
+
             try:
+                regime_changed = False
                 for pair in self._pairs:
-                    signals = await self._scan_pair(pair)
-                    for signal_result in signals:
-                        # Record for history
-                        self._signal_history.append(signal_result)
-                        if len(self._signal_history) > 1000:
-                            self._signal_history = self._signal_history[-1000:]
+                    if self._standby_mode:
+                        # Standby: only detect regime, no strategy evaluation
+                        previous = self._regime_cache.get(pair)
+                        current = await self._detect_pair_regime(pair)
+                        if previous and current != previous and current != "unknown":
+                            regime_changed = True
+                            logger.info(
+                                "Regime shift detected in standby: %s → %s — waking scanner",
+                                previous, current,
+                            )
+                    else:
+                        # Active: full scan with strategy evaluation
+                        signals = await self._scan_pair(pair)
+                        executed_any = False
+                        for signal_result in signals:
+                            self._signal_history.append(signal_result)
+                            if len(self._signal_history) > 1000:
+                                self._signal_history = self._signal_history[-1000:]
 
-                        # Emit signal for UI
-                        await self._emit("trade_signal_evaluated", {
-                            "pair": signal_result.pair,
-                            "signal": signal_result.signal,
-                            "confidence": signal_result.confidence,
-                            "strategy_type": signal_result.strategy_type,
-                            "regime": signal_result.regime,
-                        })
-
-                        # Publish signal to StateBroker
-                        if self._state_broker:
-                            await self._state_broker.set_signal(signal_result.pair, {
+                            await self._emit("trade_signal_evaluated", {
+                                "pair": signal_result.pair,
                                 "signal": signal_result.signal,
                                 "confidence": signal_result.confidence,
                                 "strategy_type": signal_result.strategy_type,
                                 "regime": signal_result.regime,
-                                "timestamp": datetime.utcnow().isoformat(),
                             })
 
-                        # Execute if buy/sell with regime-adjusted confidence floor
-                        signal_floor = self._regime_tracker.effective_signal_floor(0.6)
-                        if signal_result.signal in ("buy", "sell") and signal_result.confidence >= signal_floor:
-                            await self._execute_signal(signal_result)
+                            if self._state_broker:
+                                await self._state_broker.set_signal(signal_result.pair, {
+                                    "signal": signal_result.signal,
+                                    "confidence": signal_result.confidence,
+                                    "strategy_type": signal_result.strategy_type,
+                                    "regime": signal_result.regime,
+                                    "timestamp": datetime.utcnow().isoformat(),
+                                })
+
+                            signal_floor = self._regime_tracker.effective_signal_floor(0.6)
+                            if signal_result.signal in ("buy", "sell") and signal_result.confidence >= signal_floor:
+                                await self._execute_signal(signal_result)
+                                executed_any = True
+
+                        # Track idle cycles to auto-return to standby
+                        if executed_any:
+                            self._cycles_without_trade = 0
+                        else:
+                            self._cycles_without_trade += 1
+
+                # ── Standby ↔ active transitions ──
+                if self._standby_mode and regime_changed:
+                    self._standby_mode = False
+                    self._cycles_without_trade = 0
+                    await self._emit("scanner_mode", {"mode": "active", "reason": "regime_transition"})
+                elif not self._standby_mode and self._cycles_without_trade >= ACTIVE_CYCLES_WITHOUT_TRADE:
+                    self._standby_mode = True
+                    self._cycles_without_trade = 0
+                    logger.info("Scanner returning to standby after %d silent cycles", ACTIVE_CYCLES_WITHOUT_TRADE)
+                    await self._emit("scanner_mode", {"mode": "standby", "reason": "idle_timeout"})
 
             except Exception as exc:
                 logger.exception("Scan cycle error: %s", exc)
 
-            await asyncio.sleep(self._scan_interval)
+            await asyncio.sleep(interval)
 
     async def _scan_pair(self, pair: str) -> List[SignalResult]:
         """Evaluate all approved strategies on a single pair."""
@@ -351,7 +402,7 @@ class SignalScanner:
                         "Regime transition: %s → %s (confidence=%.2f)",
                         transition.from_regime, transition.to_regime, transition.confidence,
                     )
-                    asyncio.ensure_future(self._emit("regime_transition", {
+                    asyncio.create_task(self._emit("regime_transition", {
                         "from_regime": transition.from_regime,
                         "to_regime": transition.to_regime,
                         "confidence": transition.confidence,
@@ -404,6 +455,18 @@ class SignalScanner:
             return
 
         import uuid
+
+        # Look up real strategy metrics from approved strategies
+        sharpe = 1.0
+        win_rate = 0.5
+        max_drawdown = 0.05
+        for s in self._approved_strategies:
+            if s.get("strategy_type") == signal_result.strategy_type:
+                sharpe = float(s.get("sharpe", s.get("metrics", {}).get("sharpe", 1.0)))
+                win_rate = float(s.get("win_rate", s.get("metrics", {}).get("win_rate", 0.5)))
+                max_drawdown = float(s.get("max_drawdown", s.get("metrics", {}).get("max_drawdown", 0.05)))
+                break
+
         trade_signal = TradeSignal(
             pair=signal_result.pair,
             side=signal_result.signal,
@@ -411,9 +474,9 @@ class SignalScanner:
             strategy_type=signal_result.strategy_type,
             regime=signal_result.regime,
             confidence=signal_result.confidence,
-            sharpe=1.0,  # placeholder — real value from strategy metadata
-            win_rate=0.5,
-            max_drawdown=0.05,
+            sharpe=sharpe,
+            win_rate=win_rate,
+            max_drawdown=max_drawdown,
             suggested_stoploss=settings.STOP_LOSS_DEFAULT,
             suggested_take_profit=settings.TAKE_PROFIT_DEFAULT,
             source_agent="signal_scanner",
@@ -436,3 +499,25 @@ class SignalScanner:
         self._approved_strategies = strategies
         self._update_approved_strategy_validated_regimes()
         logger.info("SignalScanner: %d approved strategies loaded", len(strategies))
+
+    # ── Standby mode control ──
+
+    def wake(self):
+        """Force the scanner into active mode for the next cycle."""
+        if self._standby_mode:
+            self._standby_mode = False
+            self._cycles_without_trade = 0
+            logger.info("SignalScanner woken — switching to active mode")
+
+    @property
+    def is_standby(self) -> bool:
+        """Whether the scanner is currently in power-saving standby mode."""
+        return self._standby_mode
+
+    @property
+    def active_interval(self) -> int:
+        return self._scan_interval
+
+    @property
+    def standby_interval(self) -> int:
+        return self._standby_interval

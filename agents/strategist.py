@@ -71,6 +71,11 @@ Replace STRATEGY_TYPE and params with the actual strategy you generated.
 Example:
 next: backtest strategy_type=sma_crossover params={"fast_ma": 10, "slow_ma": 30}
 
+Optional trailing stop params (add to params dict to enable):
+  "trailing_stop": true, "trailing_stop_positive": 0.01, "trailing_stop_positive_offset": 0.02
+  "trailing_only_offset_is_reached": false
+With these, the stoploss tightens to 1% once price reaches 2% profit.
+
 The 'next: ' prefix is how the system creates follow-up tasks.
 If you do not output this line, the strategy will never be backtested.
 """

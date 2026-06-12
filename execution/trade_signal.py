@@ -23,6 +23,9 @@ class TradeSignal:
     price: float = 0.0                   # Current market price at signal time
     position_size_usdt: float = 0.0      # From Kelly sizing
     kelly_fraction: float = 0.0          # Fraction of Kelly used
+    quality_score: float = 1.0           # ML model prediction, 0.0-1.0, default 1.0 (unfiltered)
+    quality_multiplier: float = 1.0      # Applied to position size after Kelly sizing
+    backtest_metrics: Optional[dict] = None  # Raw backtest metrics for ML scorer
     signal_id: str = ""                  # Auto-generated
     created_at: datetime = field(default_factory=datetime.utcnow)
     executed_at: Optional[datetime] = None

@@ -166,11 +166,14 @@ class BacktesterAgent(BaseAgent):
 
         def set_backtest_config(config_json: str = "{}") -> str:
             """Set global backtest configuration that applies to all subsequent runs.
-            Pass JSON with any of: timerange, pairs, timeframe, stoploss, trailing_stop.
+            Pass JSON with any of: timerange, pairs, timeframe, stoploss, trailing_stop,
+            trailing_stop_positive, trailing_stop_positive_offset, trailing_only_offset_is_reached.
 
             Examples:
               {"timerange": "20250101-20251231", "timeframe": "15m", "pairs": ["BTC/USDT", "ETH/USDT"]}
               {"timerange": "20230101-20251231", "timeframe": "1h"}
+              Trailing stop: {"trailing_stop": true, "trailing_stop_positive": 0.01,
+                              "trailing_stop_positive_offset": 0.02}
             """
             import json
             try:

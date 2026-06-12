@@ -18,3 +18,4 @@ httpx>=0.27.0
 websockets>=12.0
 talib-binary>=0.4.0
 langchain-core>=0.2.0
+scikit-learn>=1.3.0
