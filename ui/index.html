@@ -367,18 +367,25 @@ function App() {
   });
   const [errors, setErrors] = useState({});
 
-  // ── WebSocket for Research ──
+  // ── WebSocket for Research (fallback to /ws/autonomous when no manual run) ──
   useEffect(() => {
-    if (!runId) return;
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${proto}//${window.location.host}/ws/run/${runId}`);
-    ws.onopen = () => setConnected(true);
-    ws.onmessage = (m) => {
-      try { processEvent(JSON.parse(m.data)); } catch (e) { /* ignore parse errors */ }
-    };
-    ws.onclose = () => { setConnected(false); setTimeout(() => setWsReconnect(n => n + 1), 2000); };
-    ws.onerror = () => setConnected(false);
-    return () => ws.close();
+    let ws;
+    let closed = false;
+    function connect() {
+      const url = runId
+        ? `${proto}//${window.location.host}/ws/run/${runId}`
+        : `${proto}//${window.location.host}/ws/autonomous`;
+      ws = new WebSocket(url);
+      ws.onopen = () => setConnected(true);
+      ws.onmessage = (m) => {
+        try { processEvent(JSON.parse(m.data)); } catch (e) { /* ignore parse errors */ }
+      };
+      ws.onclose = () => { if (!closed) setConnected(false); setTimeout(() => setWsReconnect(n => n + 1), 2000); };
+      ws.onerror = () => setConnected(false);
+    }
+    connect();
+    return () => { closed = true; if (ws) ws.close(); };
   }, [runId, wsReconnect]);
 
   // ── WebSocket for Autonomous Loop (Dashboard live updates) ──

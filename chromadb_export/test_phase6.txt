@@ -1,0 +1,60 @@
+=== test_phase6 (2 docs) ===
+
+--- Doc 1 ---
+ID: 1380482239772056
+Metadata: {
+  "agent": "analyst",
+  "goal_id": "7707e96f",
+  "type": "analysis"
+}
+Content:
+Now I have enough data. Let me do the SMA calculations and full analysis.
+
+---
+
+## BTC/USDT -- SMA 10/30 Crossover Analysis (30-Day Window)
+
+### 1. Current Price & Data Snapshot
+
+| Metric | Value |
+|--------|-------|
+| **Current Spot Price** | **$75,269.74** |
+| 30-Day High | $82,479.32 (May 10) |
+| 30-Day Low | $74,663.45 (May 27) |
+| Range (High-to-Low) | $7,815.87 (-9.5% peak-to-trough) |
+| Sentiment | NEUTRAL (0.0/1.0) |
+
+### 2. SMA Calculations
+
+**SMA 10 (most recent 10 closes):**
+May 18-27
+
+--- Doc 2 ---
+ID: 2692044580315468
+Metadata: {
+  "goal_id": "5e0c045e",
+  "type": "analysis",
+  "agent": "analyst"
+}
+Content:
+Now I have all the data I need. Let me compute the SMA values and produce the full analysis.
+
+---
+
+## BTC/USDT - SMA 10/30 Crossover Analysis (Last 30 Days)
+
+### Data Sources
+- **Current Price (May 27, 2026 close):** $75,241.97
+- **Latest Daily High:** $76,174.15
+- **Latest Daily Low:** $74,663.45
+- **Market Sentiment:** NEUTRAL (score 0.0/1.0)
+
+---
+
+### SMA Calculations
+
+| Period End | SMA 10 | SMA 20 (proxy for SMA 30 trend) |
+|---|---|---|
+| May 17 | $80,045.43 | -- |
+| May 18 | $79,726.30 | 
+

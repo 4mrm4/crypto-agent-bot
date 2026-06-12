@@ -1,0 +1,12 @@
+=== test_cache_1043825f (1 docs) ===
+
+--- Doc 1 ---
+ID: 966632fdb0ec9bd0
+Metadata: {
+  "query": "momentum RSI strategy",
+  "type": "search_cache",
+  "timestamp": "2024-01-01"
+}
+Content:
+Search result: momentum strategy RSI divergence
+

@@ -1,0 +1,12 @@
+=== test_cache2_140b3b51 (1 docs) ===
+
+--- Doc 1 ---
+ID: -761476725960187
+Metadata: {
+  "query": "momentum strategy",
+  "timestamp": "2024-01-01",
+  "type": "search_cache"
+}
+Content:
+Search result: momentum strategy with RSI and MACD crossover
+

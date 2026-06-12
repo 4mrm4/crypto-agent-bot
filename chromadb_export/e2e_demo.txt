@@ -1,0 +1,167 @@
+=== e2e_demo (11 docs) ===
+
+--- Doc 1 ---
+ID: -416760313253377
+Metadata: {
+  "type": "goal_result",
+  "goal_id": "auto"
+}
+Content:
+Goal: Test SMA crossover BTC/USDT positive Sharpe
+Board: [Board] TODO:1 IP:0 REVIEW:0 DONE:2
+Strategies: 0
+
+--- Doc 2 ---
+ID: -672999898704530
+Metadata: {
+  "type": "summary"
+}
+Content:
+Goal: Test SMA crossover BTC/USDT positive Sharpe
+Result: Board summary: [Board] TODO:1 IP:0 REVIEW:0 DONE:2
+
+--- Doc 3 ---
+ID: -137455444306285
+Metadata: {
+  "type": "context_summary",
+  "goal": "Test SMA crossover BTC/USDT positive Sharpe"
+}
+Content:
+Context summary for 'Test SMA crossover BTC/USDT positive Sharpe': Previous attempts show a board with TODO:1, IP:0, REVIEW:0, DONE:2, but 0 strategies were actually tested (Strategies: 0). This suggests the goal was set but no concrete strategy parameters (SMA fast/slow periods, data frequency, trading costs) were defined and executed. The previous work appears incomplete - the board had items marked done but no strategy results were linked. Future agents should: (1) define specific SMA periods (e.g., fast=10, slow=30, or fast=20, slow=50), (2) specify data frequency (daily/hourly), (3) include transaction costs/slippage, (4) test multiple parameter combinations, and (5) compute and report the Sharpe ratio clearly.
+
+--- Doc 4 ---
+ID: -827669972013046
+Metadata: {
+  "goal_id": "auto",
+  "type": "goal_result"
+}
+Content:
+Goal: Test SMA crossover BTC/USDT positive Sharpe
+Board: [Board] TODO:2 IP:0 REVIEW:0 DONE:2
+Strategies: 0
+
+--- Doc 5 ---
+ID: -678702747561032
+Metadata: {
+  "type": "summary"
+}
+Content:
+Goal: Test SMA crossover BTC/USDT positive Sharpe
+Result: Board summary: [Board] TODO:2 IP:0 REVIEW:0 DONE:2
+
+--- Doc 6 ---
+ID: 6180158278345629
+Metadata: {
+  "goal_id": "0e521d0d"
+}
+Content:
+## Memory Context Summary: Test SMA crossover BTC/USDT positive Sharpe
+
+**What was found in past memory:**
+- The goal "Test SMA crossover BTC/USDT positive Sharpe" has been attempted before (board shows TODO:1, IP:0, REVIEW:0, DONE:2).
+- However, **0 strategies were actually tested** (Strategies: 0 from goal auto). The board had items marked as "Done" but no concrete SMA parameter combinations, no backtest results, and no Sharpe ratio values were stored.
+
+**Key lessons for future agents:**
+
+1. *
+
+--- Doc 7 ---
+ID: 6476512173084349
+Metadata: {
+  "goal_id": "e3375ea0"
+}
+Content:
+## Findings Summary
+
+I tested **4 SMA crossover strategies** on the backtesting system, but the results reveal a fundamental issue:
+
+### What Was Tested
+
+| Strategy | Fast/Slow | Stoploss | Timerange | Pair |
+|---|---|---|---|---|
+| sma_f9_s21 | 9 / 21 | 2% | 2023 | BTC/USDT |
+| sma_f10_s50 | 10 / 50 | 5% | 2023 | BTC/USDT |
+| sma_f5_s13 | 5 / 13 | 3% | 2023-06/2024-06 | BTC/USDT |
+| sma_f20_s100 | 20 / 100 | 10% | 2020-2024 | **ETH/USDT** |
+
+### Identical Results Across ALL Strategies
+
+Every si
+
+--- Doc 8 ---
+ID: -514256463606518
+Metadata: {
+  "goal_id": "cfff38ce"
+}
+Content:
+---
+
+## Research Report: SMA Crossover Backtest on BTC/USDT
+
+### Summary
+
+I systematically tested **5 different SMA crossover strategies** across **various time ranges and trading pairs**. Unfortunately, all results were identical, indicating the backtester operates with **fixed/synthetic data** rather than live market data.
+
+### Strategies Tested
+
+| Strategy | Fast MA | Slow MA | Stoploss | Time Range | Trades | Profit Ratio | Win Rate | Sharpe |
+|---|---|---|---|---|---|---|---|---|
+| `sma_f10
+
+--- Doc 9 ---
+ID: -904286848524585
+Metadata: {
+  "source": "MemoryCurator",
+  "type": "context_summary",
+  "goal": "Test SMA crossover BTC/USDT positive Sharpe"
+}
+Content:
+## Memory Context Summary: Test SMA crossover BTC/USDT positive Sharpe
+
+**What was found in past memory:**
+- The goal "Test SMA crossover BTC/USDT positive Sharpe" has been attempted multiple times via the board system, but Strategies was always 0 -- no strategies were formally registered.
+- A research report (goal: cfff38ce) tested 5 SMA crossover strategies across various time ranges/pairs on BTC/USDT. The report begins with "Unfortunately..." indicating failure to achieve positive Sharpe.
+- A findings summary (goal: e3375ea0) tested 4 SMA crossover strategies and discovered a "fundamental issue". Parameters varied included Fast/Slow SMA lengths, Stoploss, and Timerange.
+
+**What was NOT found:**
+- No successful SMA crossover configuration producing positive Sharpe on BTC/USDT was recorded.
+- Exact SMA parameters tested are not fully preserved in memory (truncated).
+
+**Recommendations for future agents:**
+- Simple SMA crossover strategies on BTC/USDT have been tried multiple times and failed. Do NOT repeat basic SMA crossover backtests.
+- Investigate the "fundamental issue" mentioned (e3375ea0) before proceeding.
+- Consider adding filters (e.g., trend strength, volatility regime) or testing on different trading pairs if pursuing SMA-based strategies.
+- Look into alternative strategy types (momentum, mean reversion, ML-based) that have not been attempted yet.
+
+--- Doc 10 ---
+ID: 4363255763545448
+Metadata: {
+  "goal_id": "12051bc6"
+}
+Content:
+## Past Research Context for: "Test SMA crossover BTC/USDT positive Sharpe"
+
+### Board-level Attempts (Auto-generated)
+The goal was queued in the board system multiple times (TODO states ranging 1-2, DONE:2). However, **Strategies was always 0** -- meaning no formal strategies were ever submitted through the board workflow for this goal.
+
+### Deeper Research Found in Memory
+
+**1. Research Report (5 strategies tested)**
+- An agent systematically tested **5 different SMA crossover strategies** acr
+
+--- Doc 11 ---
+ID: 7998627763675247
+Metadata: {
+  "goal_id": "29631983"
+}
+Content:
+## Memory Context Summary: Test SMA crossover BTC/USDT positive Sharpe
+
+### Past Research Findings
+
+I found records of **two distinct research attempts** and **multiple board-cycling incidents** related to this goal.
+
+### What Was Actually Tested
+
+1. **Attempt 1 (goal cfff38ce)**: "Research Report: SMA Crossover Backtest on BTC/USDT" -- Systematically tested **5 different SMA crossover strategies** across various time ranges and trading pairs. Result indicated the outcome was not positive ("Unfo
+

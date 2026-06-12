@@ -738,10 +738,10 @@ def _patch_orchestrator(orchestrator: "HermesOrchestrator", bus: EventBus, run_i
     if hasattr(orchestrator, "_run_research_goal"):
         orig_run = orchestrator._run_research_goal
 
-        def patched_run(goal, max_cycles=5, hypothesis="", iteration=1):
+        async def patched_run(goal, max_cycles=5, hypothesis="", iteration=1):
             logger.info("[RUN %s] ── Iteration %s starting ──", run_id, iteration)
             emit("iteration_start", {"iteration": iteration, "goal": goal[:200]})
-            result = orig_run(goal, max_cycles=max_cycles, hypothesis=hypothesis, iteration=iteration)
+            result = await orig_run(goal, max_cycles=max_cycles, hypothesis=hypothesis, iteration=iteration)
             # Emit events for each board task
             done_tasks = orchestrator.board.get_tasks_by_status("DONE") if hasattr(orchestrator, "board") else []
             for task in done_tasks:

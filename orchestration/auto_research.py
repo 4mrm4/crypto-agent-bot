@@ -74,7 +74,7 @@ def run_auto_research(topic: str, max_rounds: int = 5, event_bus=None, loop=None
         try:
             from api.event_bus import monkey_patch_hermes
             orchestrator = HermesOrchestrator(agents=agents)
-            monkey_patch_hermes(orchestrator, event_bus, loop=loop)
+            monkey_patch_hermes(orchestrator, event_bus)
         except Exception as exc:
             logger.warning("Could not wire EventBus to auto_research: %s", exc)
             orchestrator = HermesOrchestrator(agents=agents)

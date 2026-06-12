@@ -549,20 +549,13 @@ class HermesOrchestrator:
                 if r["metrics"].get("total_trades", 0)
             ]
             if recent:
-                best = max(
-                    recent,
-                    key=lambda r: (
-                        r["metrics"].get("sharpe_ratio", -999)
-                        if isinstance(r["metrics"].get("sharpe_ratio"), (int, float))
-                        else -999
-                    ),
-                )
+                last = recent[-1]  # most recent, not best across all time
                 return {
-                    "sharpe_ratio": best["metrics"].get("sharpe_ratio", 0),
-                    "win_rate": best["metrics"].get("win_rate", 0),
-                    "max_drawdown": best["metrics"].get("max_drawdown", 0),
-                    "profit_ratio": best["metrics"].get("profit_ratio", best["metrics"].get("total_profit", 0)),
-                    "total_trades": best["metrics"].get("total_trades", 0),
+                    "sharpe_ratio": last["metrics"].get("sharpe_ratio", 0),
+                    "win_rate": last["metrics"].get("win_rate", 0),
+                    "max_drawdown": last["metrics"].get("max_drawdown", 0),
+                    "profit_ratio": last["metrics"].get("profit_ratio", last["metrics"].get("total_profit", 0)),
+                    "total_trades": last["metrics"].get("total_trades", 0),
                 }
 
         # ── Level 3: fall back to experiments.jsonl (stale entries, last resort) ──

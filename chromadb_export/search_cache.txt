@@ -1,0 +1,422 @@
+=== search_cache (42 docs) ===
+
+--- Doc 1 ---
+ID: 1940218035687220
+Metadata: {
+  "query": "momentum strategy crypto",
+  "url": "https://example.com/1",
+  "type": "search_cache"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 2 ---
+ID: 3957096202875160
+Metadata: {
+  "url": "https://example.com/2",
+  "type": "search_cache",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 3 ---
+ID: 4749571685248501
+Metadata: {
+  "url": "https://example.com/1",
+  "type": "search_cache",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 4 ---
+ID: 2064740619722671
+Metadata: {
+  "type": "search_cache",
+  "query": "momentum strategy crypto",
+  "url": "https://example.com/2"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 5 ---
+ID: 1986673887840409
+Metadata: {
+  "query": "momentum strategy crypto",
+  "url": "https://example.com/1",
+  "type": "search_cache"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 6 ---
+ID: -846392615111644
+Metadata: {
+  "url": "https://example.com/2",
+  "type": "search_cache",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 7 ---
+ID: -522118806032478
+Metadata: {
+  "query": "momentum strategy crypto",
+  "type": "search_cache",
+  "url": "https://example.com/1"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 8 ---
+ID: 4227607476524848
+Metadata: {
+  "url": "https://example.com/2",
+  "type": "search_cache",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 9 ---
+ID: 5275259498275143
+Metadata: {
+  "type": "search_cache",
+  "query": "momentum strategy crypto",
+  "url": "https://example.com/1"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 10 ---
+ID: 6476753014072864
+Metadata: {
+  "url": "https://example.com/2",
+  "query": "momentum strategy crypto",
+  "type": "search_cache"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 11 ---
+ID: -900359774417668
+Metadata: {
+  "query": "momentum strategy crypto",
+  "url": "https://example.com/1",
+  "type": "search_cache"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 12 ---
+ID: -765140758292504
+Metadata: {
+  "query": "momentum strategy crypto",
+  "type": "search_cache",
+  "url": "https://example.com/2"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 13 ---
+ID: -117476115371431
+Metadata: {
+  "url": "https://example.com/1",
+  "type": "search_cache",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 14 ---
+ID: -907908983435183
+Metadata: {
+  "type": "search_cache",
+  "url": "https://example.com/2",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 15 ---
+ID: 2181291368062882
+Metadata: {
+  "query": "momentum strategy crypto",
+  "url": "https://example.com/1",
+  "type": "search_cache"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 16 ---
+ID: 7818913175354738
+Metadata: {
+  "query": "momentum strategy crypto",
+  "url": "https://example.com/2",
+  "type": "search_cache"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 17 ---
+ID: -952047935962303
+Metadata: {
+  "url": "https://example.com/1",
+  "type": "search_cache",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 18 ---
+ID: 2274725903418565
+Metadata: {
+  "query": "momentum strategy crypto",
+  "type": "search_cache",
+  "url": "https://example.com/2"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 19 ---
+ID: -204644001442147
+Metadata: {
+  "type": "search_cache",
+  "query": "momentum strategy crypto",
+  "url": "https://example.com/1"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 20 ---
+ID: -461401360236111
+Metadata: {
+  "url": "https://example.com/2",
+  "query": "momentum strategy crypto",
+  "type": "search_cache"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 21 ---
+ID: 2339570153891374
+Metadata: {
+  "query": "momentum strategy crypto",
+  "type": "search_cache",
+  "url": "https://example.com/1"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 22 ---
+ID: 7646944865212687
+Metadata: {
+  "query": "momentum strategy crypto",
+  "url": "https://example.com/2",
+  "type": "search_cache"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 23 ---
+ID: -235684855173719
+Metadata: {
+  "url": "https://example.com/1",
+  "type": "search_cache",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 24 ---
+ID: -460577862995781
+Metadata: {
+  "type": "search_cache",
+  "url": "https://example.com/2",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 25 ---
+ID: 7743375296350556
+Metadata: {
+  "query": "momentum strategy crypto",
+  "type": "search_cache",
+  "url": "https://example.com/1"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 26 ---
+ID: 4005359382094112
+Metadata: {
+  "url": "https://example.com/2",
+  "type": "search_cache",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 27 ---
+ID: -388998492504204
+Metadata: {
+  "query": "momentum strategy crypto",
+  "type": "search_cache",
+  "url": "https://example.com/1"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 28 ---
+ID: -842590577392301
+Metadata: {
+  "query": "momentum strategy crypto",
+  "type": "search_cache",
+  "url": "https://example.com/2"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 29 ---
+ID: 1409590376831819
+Metadata: {
+  "url": "https://example.com/1",
+  "type": "search_cache",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 30 ---
+ID: -777485258462229
+Metadata: {
+  "url": "https://example.com/2",
+  "query": "momentum strategy crypto",
+  "type": "search_cache"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 31 ---
+ID: -134610104293682
+Metadata: {
+  "type": "search_cache",
+  "url": "https://example.com/1",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 32 ---
+ID: 1043216923750831
+Metadata: {
+  "query": "momentum strategy crypto",
+  "url": "https://example.com/2",
+  "type": "search_cache"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 33 ---
+ID: 6862717021046099
+Metadata: {
+  "url": "https://example.com/1",
+  "type": "search_cache",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 34 ---
+ID: -794024147119963
+Metadata: {
+  "type": "search_cache",
+  "url": "https://example.com/2",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 35 ---
+ID: 9844252355541812
+Metadata: {
+  "type": "search_cache",
+  "query": "momentum strategy crypto",
+  "url": "https://example.com/1"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 36 ---
+ID: 3410871130706735
+Metadata: {
+  "url": "https://example.com/2",
+  "type": "search_cache",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 37 ---
+ID: 3642923296507694
+Metadata: {
+  "query": "momentum strategy crypto",
+  "url": "https://example.com/1",
+  "type": "search_cache"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 38 ---
+ID: -307034954802338
+Metadata: {
+  "query": "momentum strategy crypto",
+  "type": "search_cache",
+  "url": "https://example.com/2"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 39 ---
+ID: 2507600503260529
+Metadata: {
+  "url": "https://example.com/1",
+  "query": "momentum strategy crypto",
+  "type": "search_cache"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 40 ---
+ID: 3138036960535448
+Metadata: {
+  "query": "momentum strategy crypto",
+  "type": "search_cache",
+  "url": "https://example.com/2"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
+--- Doc 41 ---
+ID: 37b53ca96c8733f1
+Metadata: {
+  "url": "https://example.com/1",
+  "type": "search_cache",
+  "query": "momentum strategy crypto"
+}
+Content:
+Search result: Momentum Strategy - A momentum strategy using RSI and MACD
+
+--- Doc 42 ---
+ID: 00cf01b8a56fb9d7
+Metadata: {
+  "url": "https://example.com/2",
+  "query": "momentum strategy crypto",
+  "type": "search_cache"
+}
+Content:
+Search result: Mean Reversion - Mean reversion strategy for ranging
+
