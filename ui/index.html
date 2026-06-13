@@ -358,6 +358,7 @@ function App() {
   const [startupStatus, setStartupStatus] = useState(null);
   const [riskPortfolio, setRiskPortfolio] = useState(null);
   const [dataHealth, setDataHealth] = useState(null);
+  const [terminalLog, setTerminalLog] = useState([]);
 
   // Loading states
   const [loading, setLoading] = useState({
@@ -396,6 +397,7 @@ function App() {
     let closed = false;
     function connect() {
       ws = new WebSocket(`${proto}//${window.location.host}/ws/autonomous`);
+      ws.onopen = () => setConnected(true);
       ws.onmessage = (m) => {
         try { processEvent(JSON.parse(m.data)); } catch (e) { /* ignore parse errors */ }
       };
@@ -496,6 +498,9 @@ function App() {
         break;
       case "circuit_breaker_cleared":
         setCircuitBreaker({ halted: false });
+        break;
+      case "log":
+        setTerminalLog((prev) => [...prev.slice(-499), { ...payload, timestamp: ts, id: uid() }]);
         break;
     }
   }
@@ -712,6 +717,7 @@ function App() {
             autoPausing={autoPausing}
             haltCircuitBreaker={haltCircuitBreaker}
             clearCircuitBreaker={clearCircuitBreaker}
+            terminalLog={terminalLog}
           />
         )}
         {tab === "strategies" && <StrategyLibraryView strategies={strategyTabData} />}
@@ -1533,6 +1539,205 @@ const LogPanel = React.forwardRef(function LogPanel({ events }, ref) {
   );
 });
 
+const TerminalLogPanel = React.forwardRef(function TerminalLogPanel({ events }, ref) {
+  const [collapsed, setCollapsed] = React.useState(true);
+  const scrollRef = React.useRef(null);
+  React.useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [events]);
+  return (
+    <div style={{
+      background: T.card,
+      borderRadius: "0 8px 0 8px",
+      border: `1px solid ${T.border}`,
+      maxHeight: collapsed ? 30 : 200,
+      display: "flex",
+      flexDirection: "column",
+      overflow: "hidden",
+      transition: "max-height 0.3s ease",
+    }}>
+      <div
+        onClick={() => setCollapsed(!collapsed)}
+        style={{
+          padding: "4px 14px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          cursor: "pointer", flexShrink: 0,
+        }}
+      >
+        <h2 style={{
+          fontFamily: "'Syne',sans-serif", fontSize: 8, fontWeight: 600,
+          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
+        }}>
+          Terminal Log
+        </h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
+            {events.length}
+          </span>
+          <button style={{
+            background: "transparent", border: `1px solid ${T.border}`,
+            color: T.muted, borderRadius: "0 3px 0 3px",
+            padding: "1px 6px", cursor: "pointer", fontSize: 8,
+            lineHeight: 1.4,
+          }}>
+            {collapsed ? "\u25BC" : "\u25B2"}
+          </button>
+        </div>
+      </div>
+      {!collapsed && (
+        <div ref={scrollRef} style={{
+          flex: 1, overflowY: "auto",
+          padding: "2px 14px 4px",
+          fontSize: 9.5, fontFamily: "'DM Mono',monospace",
+          lineHeight: 1.6, color: T.secondary,
+        }}>
+          {events.length === 0 ? (
+            <span style={{ color: T.muted }}>Waiting for log output...</span>
+          ) : (
+            events.map((evt) => (
+              <div key={evt.id} style={{ display: "flex", gap: 8 }}>
+                <span style={{ color: T.muted, flexShrink: 0, fontSize: 8 }}>{evt.timestamp}</span>
+                <span style={{
+                  color: evt.level === "error" ? T.coral
+                       : evt.level === "warning" ? T.gold
+                       : evt.level === "debug" ? T.muted
+                       : T.teal,
+                  flexShrink: 0, fontSize: 8,
+                }}>
+                  [{evt.level ? evt.level.toUpperCase() : "INFO"}]
+                </span>
+                <span style={{
+                  color: T.text,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  fontSize: 8.5,
+                }}>
+                  {evt.message || JSON.stringify(evt).slice(0, 300)}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+
+const SharpeHistoryChart = React.forwardRef(function SharpeHistoryChart({ results }) {
+  if (!results || results.length < 2) {
+    return (
+      <div style={{
+        background: T.card,
+        borderRadius: "0 8px 0 8px",
+        border: `1px solid ${T.border}`,
+        padding: 14,
+        position: "relative",
+      }}>
+        <div style={{
+          position: "absolute", top: 0, left: 0, right: 0, height: 2,
+          background: `linear-gradient(90deg,${T.amber},transparent)`,
+        }} />
+        <h2 style={{
+          fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
+          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
+          marginBottom: 8,
+        }}>
+          Sharpe History
+        </h2>
+        <div style={{ fontSize: 10, color: T.muted, textAlign: "center", padding: 16 }}>
+          {results?.length === 1 ? "Not enough data points yet" : "No iterations yet"}
+        </div>
+      </div>
+    );
+  }
+
+  const sorted = [...results].sort((a, b) => (a.iteration || 0) - (b.iteration || 0));
+  let runningBest = -Infinity;
+  const points = sorted.map((r) => {
+    const sharpe = r.sharpe_ratio ?? 0;
+    const isRecord = sharpe > runningBest + 0.000001;
+    if (isRecord) runningBest = sharpe;
+    return { iter: r.iteration ?? 0, sharpe, isRecord };
+  });
+
+  const bestGlobal = Math.max(...points.map((p) => p.sharpe));
+  const w = 700, h = 130, pl = 40, pr = 14, pt = 10, pb = 22;
+  const cw = w - pl - pr, ch = h - pt - pb;
+  const xV = points.map((p) => p.iter), yV = points.map((p) => p.sharpe);
+  const xMin = Math.min(...xV), xMax = Math.max(...xV);
+  const yMin = Math.min(...yV, 0), yMax = Math.max(...yV, 0.01);
+  const xR = xMax - xMin || 1, yR = yMax - yMin || 0.01;
+  const toX = (v) => pl + ((v - xMin) / xR) * cw;
+  const toY = (v) => pt + ch - ((v - yMin) / yR) * ch;
+  const dots = points.map((p) => ({ ...p, x: toX(p.iter), y: toY(p.sharpe) }));
+  const recDots = dots.filter((p) => p.isRecord);
+  const recLine = recDots.map((p) => `${p.x},${p.y}`).join(" ");
+  const best = dots.find((p) => p.sharpe >= bestGlobal - 0.0001);
+  const isBestLast = best === dots[dots.length - 1];
+
+  return (
+    <div style={{
+      background: T.card,
+      borderRadius: "0 8px 0 8px",
+      border: `1px solid ${T.border}`,
+      padding: 14, position: "relative",
+    }}>
+      <div style={{
+        position: "absolute", top: 0, left: 0, right: 0, height: 2,
+        background: `linear-gradient(90deg,${T.amber},transparent)`,
+      }} />
+      <h2 style={{
+        fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
+        color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
+        marginBottom: 8,
+      }}>
+        Sharpe History
+      </h2>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", display: "block" }}>
+        <defs>
+          <linearGradient id="sg-rec" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={T.amber} stopOpacity="0.12" />
+            <stop offset="100%" stopColor={T.amber} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {[0.25, 0.5, 0.75].map((f, i) => (
+          <line key={i} x1={pl} y1={pt + ch * f} x2={pl + cw} y2={pt + ch * f}
+            stroke={T.border} strokeWidth="1" strokeDasharray="3 3" />
+        ))}
+        {yMin < 0 && yMax > 0 && (
+          <line x1={pl} y1={toY(0)} x2={pl + cw} y2={toY(0)}
+            stroke={T.muted} strokeWidth="1" strokeDasharray="2 4" opacity={0.3} />
+        )}
+        {recDots.length > 1 && (
+          <polygon points={`${recLine} ${pl + cw},${pt + ch} ${pl},${pt + ch}`} fill="url(#sg-rec)" />
+        )}
+        {recDots.length > 1 && (
+          <polyline points={recLine} fill="none" stroke={T.amber} strokeWidth="2"
+            strokeLinejoin="round" strokeLinecap="round" />
+        )}
+        {dots.map((p, i) => !p.isRecord && (
+          <circle key={i} cx={p.x} cy={p.y} r="2.5" fill={T.muted} stroke="none" opacity={0.25} />
+        ))}
+        {recDots.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="3" fill={T.amber} stroke={T.card} strokeWidth="1.5" />
+        ))}
+        {best && (
+          <>
+            <circle cx={best.x} cy={best.y} r="7" fill="none"
+              stroke={isBestLast ? T.sage : T.amber} strokeWidth="2" opacity={0.5} />
+            <circle cx={best.x} cy={best.y} r="4" fill={isBestLast ? T.sage : T.amber}
+              stroke={T.card} strokeWidth="1.5" />
+          </>
+        )}
+        <text x={pl - 4} y={pt + 4} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{yMax.toFixed(2)}</text>
+        <text x={pl - 4} y={pt + ch + 4} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{yMin.toFixed(2)}</text>
+        <text x={pl} y={h - 2} fill={T.muted} fontSize="8" fontFamily="DM Mono">{xMin}</text>
+        <text x={w - pr} y={h - 2} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{xMax}</text>
+      </svg>
+    </div>
+  );
+});
+
 const btnStyle = (color, disabled) => ({
   background: disabled ? 'var(--bg-elevated)' : color,
   color: disabled ? 'var(--text-muted)' : '#fff',
@@ -1555,6 +1760,7 @@ function DashboardView({
   startAutonomous, stopAutonomous, pauseAutonomous, resumeAutonomous,
   autoStarting, autoStopping, autoPausing,
   haltCircuitBreaker, clearCircuitBreaker,
+  terminalLog,
 }) {
   const isRunning = autonomousState?.is_running;
   const isPaused = autonomousState?.is_paused;
@@ -1967,6 +2173,11 @@ function DashboardView({
         ))}
       </div>
 
+      {/* ── Sharpe History Chart ── */}
+      <div style={{ gridColumn: "1 / -1" }}>
+        <SharpeHistoryChart results={iterationData?.results} />
+      </div>
+
       {/* ── Row 2: Portfolio, Startup, Data Health ── */}
       <div className="dash-row-3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
         {/* Portfolio Risk */}
@@ -2055,6 +2266,9 @@ function DashboardView({
           )}
         </div>
       </div>
+
+      {/* ── Row 4: Terminal Log ── */}
+      <TerminalLogPanel events={terminalLog} />
     </div>
   );
 }

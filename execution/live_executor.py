@@ -11,7 +11,8 @@ from typing import Any, Dict, List, Optional
 
 import ccxt
 
-from agents.risk_manager import RiskManagerAgent, CircuitBreakerState
+from agents.risk_manager import RiskManagerAgent
+from state.circuit_breaker import CircuitBreakerState
 from config import settings
 from data.fetcher import MarketDataFetcher
 from execution.audit_log import AuditLog, AuditEntry
@@ -64,6 +65,7 @@ class LiveExecutor:
         event_bus=None,
         state_broker: Optional[StateBroker] = None,
         quality_scorer: Optional[TradeQualityScorer] = None,
+        circuit_breaker: Optional[CircuitBreakerState] = None,
     ):
         self.exchange_id = exchange_id
         self.paper_mode = paper_mode
@@ -78,6 +80,7 @@ class LiveExecutor:
             self.paper_mode = True
         self._fetcher = fetcher or MarketDataFetcher(exchange_id)
         self._risk_manager = risk_manager or RiskManagerAgent(fetcher=self._fetcher)
+        self._circuit_breaker = circuit_breaker or CircuitBreakerState()
         self._event_bus = event_bus
         self._state_broker = state_broker
         self._audit_log = AuditLog()
@@ -125,11 +128,11 @@ class LiveExecutor:
         6. Audit log
         """
         # 1. Circuit breaker (regular + validation mode tight thresholds)
-        if CircuitBreakerState.is_halted():
+        if self._circuit_breaker.is_halted():
             result = ExecutionResult(
                 signal_id=signal.signal_id,
                 success=False,
-                error=f"Circuit breaker active: {CircuitBreakerState.status()['reason']}",
+                error=f"Circuit breaker active: {self._circuit_breaker.status()['reason']}",
             )
             self._audit_log.record(self._make_audit_entry(signal, result))
             return result
@@ -335,7 +338,7 @@ class LiveExecutor:
 
         for i in range(n_slices):
             try:
-                if CircuitBreakerState.is_halted():
+                if self._circuit_breaker.is_halted():
                     break
                 order = self.exchange.create_market_order(
                     symbol=signal.pair,
@@ -430,7 +433,7 @@ class LiveExecutor:
             entry_price=result.fill_price,
             status=result.status,
             risk_verdict="approved",
-            circuit_breaker_state=CircuitBreakerState.status(),
+            circuit_breaker_state=self._circuit_breaker.status(),
             correlation_result={},
             kelly_result={},
             error=result.error if not result.success else None,

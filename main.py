@@ -5,10 +5,33 @@ Built with LangChain, Freqtrade, CCXT, ChromaDB and Rich.
 """
 
 import argparse
+import asyncio
+import httpx
 import logging
+import signal
+import subprocess
 import sys
+import time
+import webbrowser
 
+import uvicorn
 from rich.console import Console
+from rich.table import Table
+
+from api.event_bus import EventBus, with_token_tracking
+from api.server import app as fastapi_app
+from backtesting.setup_data import ensure_data_available
+from config import settings
+from data.regime import MarketRegimeDetector
+from execution.signal_scanner import SignalScanner
+from memory.vector_store import VectorStore
+from orchestration.auto_research import run_auto_research
+from orchestration.autonomous_loop import AutonomousResearchLoop
+from orchestration.experiment_tracker import ExperimentTracker
+from orchestration.factory import make_orchestrator
+from orchestration.graph import request_shutdown
+from orchestration.hermes import HermesOrchestrator
+from workspace.vibe import VibeWorkspace
 
 logging.basicConfig(
     level=logging.INFO,
@@ -54,7 +77,6 @@ def main():
     args = parser.parse_args()
 
     # Auto-download historical data on startup
-    from backtesting.setup_data import ensure_data_available
     logger.info("Checking historical data availability...")
     data_ok = ensure_data_available()
     if not data_ok:
@@ -68,7 +90,6 @@ def main():
         return
 
     if args.auto_research:
-        from orchestration.auto_research import run_auto_research
         run_auto_research(args.auto_research)
         return
 
@@ -93,25 +114,25 @@ def main():
 
 
 def _make_orchestrator():
-    from orchestration.factory import make_orchestrator
     return make_orchestrator()
 
 
 def _run_ui():
     """Start the Web UI server only — no demo pipeline (in-process so EventBus is available)."""
-    import asyncio
-    import uvicorn
-
-    from api.event_bus import EventBus
-
     console.print("[bold cyan]crypto_agent_bot — Web UI[/]\n")
     console.print("[yellow]Starting Web UI server...[/]")
-
-    from api.server import app as fastapi_app
 
     # Create a dummy EventBus so /ws/autonomous stays open (sends heartbeats)
     event_bus = EventBus()
     fastapi_app.state.event_bus = event_bus
+
+    # Pipe root logger into EventBus for terminal-log panel
+    from api.event_bus import LoggingEventBusHandler
+    _log_handler = LoggingEventBusHandler(event_bus)
+    _log_handler.setFormatter(logging.Formatter(
+        "%(asctime)s | %(name)-20s | %(levelname)-5s | %(message)s"
+    ))
+    logging.getLogger().addHandler(_log_handler)
 
     config = uvicorn.Config(fastapi_app, host="127.0.0.1", port=8765, log_level="info")
     server = uvicorn.Server(config)
@@ -124,47 +145,29 @@ def _run_ui():
 
 def _run_autonomous(ui: bool = False, start_scanner: bool = False, scanner_standby: bool = False):
     """Start the autonomous research loop, optionally with the web UI."""
-    import asyncio
-
-    from agents.analyst import AnalystAgent
-    from agents.strategist import StrategistAgent
-    from agents.backtester import BacktesterAgent
-    from agents.iteration_tracker import IterationTrackerAgent
-    from agents.risk_manager import RiskManagerAgent
-    from agents.curator import CuratorAgent
-    from agents.researcher import ResearcherAgent
-    from memory.vector_store import VectorStore
-    from orchestration.autonomous_loop import AutonomousResearchLoop
-    from orchestration.experiment_tracker import ExperimentTracker
-    from orchestration.hermes import HermesOrchestrator
-    from data.regime import MarketRegimeDetector
-    from config import settings
-
     console.print("\n" + "=" * 60)
     console.print("[bold cyan]CRYPTO AGENT BOT — AUTONOMOUS MODE[/bold cyan]")
     console.print("[white]Self-directing research. Never waits for human input.[/white]")
     console.print(f"[white]Interval: {settings.AUTONOMOUS_INTERVAL_MINUTES} minutes[/white]")
     console.print("=" * 60 + "\n")
 
-    agents = {
-        "analyst": AnalystAgent(),
-        "strategist": StrategistAgent(),
-        "backtester": BacktesterAgent(),
-        "iteration_tracker": IterationTrackerAgent(),
-        "risk_manager": RiskManagerAgent(),
-        "curator": CuratorAgent(),
-        "researcher": ResearcherAgent(),
-    }
-    orchestrator = HermesOrchestrator(agents=agents)
+    orchestrator = make_orchestrator()
     vector_store = VectorStore()
     experiment_tracker = ExperimentTracker()
     regime_detector = MarketRegimeDetector()
 
     event_bus = None
     if ui:
-        from api.event_bus import EventBus, monkey_patch_hermes
         event_bus = EventBus()
-        monkey_patch_hermes(orchestrator, event_bus)
+        orchestrator.event_callback = with_token_tracking(event_bus.make_callback())
+
+        # Pipe root logger into EventBus for terminal-log panel
+        from api.event_bus import LoggingEventBusHandler
+        _log_handler = LoggingEventBusHandler(event_bus)
+        _log_handler.setFormatter(logging.Formatter(
+            "%(asctime)s | %(name)-20s | %(levelname)-5s | %(message)s"
+        ))
+        logging.getLogger().addHandler(_log_handler)
 
     loop = AutonomousResearchLoop(
         orchestrator=orchestrator,
@@ -176,8 +179,6 @@ def _run_autonomous(ui: bool = False, start_scanner: bool = False, scanner_stand
     )
 
     async def _run_with_ui():
-        import uvicorn
-        from api.server import app as fastapi_app
         fastapi_app.state.autonomous_loop = loop
         fastapi_app.state.event_bus = event_bus
         fastapi_app.state.vector_store = vector_store
@@ -185,7 +186,6 @@ def _run_autonomous(ui: bool = False, start_scanner: bool = False, scanner_stand
 
         # Create scanner for autonomous+ui mode
         if start_scanner or ui:
-            from execution.signal_scanner import SignalScanner
             scanner = SignalScanner(
                 pairs=[settings.SYMBOL],
                 regime_detector=regime_detector,
@@ -220,10 +220,6 @@ def _run_autonomous(ui: bool = False, start_scanner: bool = False, scanner_stand
 
 def _run_demo():
     """Start the FastAPI server + UI, then run a demo research goal."""
-    import subprocess
-    import time
-    import webbrowser
-
     console.print("[bold cyan]crypto_agent_bot — Demo Mode[/]\n")
     console.print("[yellow]Starting Web UI server...[/]")
 
@@ -235,7 +231,6 @@ def _run_demo():
     )
 
     # Wait for server
-    import httpx
     for _ in range(20):
         try:
             r = httpx.get("http://127.0.0.1:8765/api/health", timeout=2)
@@ -275,16 +270,11 @@ def _run_demo():
 
 def _run_cli_command(cmd_list):
     """Parse and execute a workspace CLI command."""
-    import signal
-    from orchestration.graph import request_shutdown
-
     def _handle_sigint(sig, frame):
         logger.info("Received SIGINT — requesting clean graph shutdown...")
         request_shutdown()
 
     signal.signal(signal.SIGINT, _handle_sigint)
-    from orchestration.hermes import HermesOrchestrator
-    from workspace.vibe import VibeWorkspace
 
     orchestrator = _make_orchestrator()
     workspace = VibeWorkspace(orchestrator=orchestrator)
@@ -304,7 +294,6 @@ def _run_cli_command(cmd_list):
         if not goals:
             console.print("[yellow]No goals yet.[/]")
             return
-        from rich.table import Table
         table = Table(title="Research Goals")
         table.add_column("ID", style="cyan")
         table.add_column("Description")

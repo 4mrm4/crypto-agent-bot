@@ -195,28 +195,28 @@ async def test_binance_primary_succeeds_no_fallback():
 
 from unittest.mock import AsyncMock, MagicMock, patch
 from monitoring.anomaly_detector import AnomalyDetector
-from agents.risk_manager import CircuitBreakerState
+from state.circuit_breaker import CircuitBreakerState
 
 
 @pytest.mark.asyncio
 async def test_price_source_check_passes_when_binance_connected():
     """When Binance WebSocket is connected, no alert needed."""
-    CircuitBreakerState.clear()
-    detector = AnomalyDetector()
+    cb = CircuitBreakerState()
+    detector = AnomalyDetector(circuit_breaker=cb)
     mock_stream = MagicMock()
     mock_stream.is_connected = True
     detector._market_data_stream = mock_stream
 
     await detector._check_price_source()
 
-    assert not CircuitBreakerState.is_halted()
+    assert not cb.is_halted()
 
 
 @pytest.mark.asyncio
 async def test_price_source_check_trips_when_all_down():
     """When Binance AND CoinCap are down, circuit breaker trips."""
-    CircuitBreakerState.clear()
-    detector = AnomalyDetector()
+    cb = CircuitBreakerState()
+    detector = AnomalyDetector(circuit_breaker=cb)
     mock_stream = MagicMock()
     mock_stream.is_connected = False
     detector._market_data_stream = mock_stream
@@ -225,5 +225,4 @@ async def test_price_source_check_trips_when_all_down():
                new_callable=AsyncMock, return_value=None):
         await detector._check_price_source()
 
-    assert CircuitBreakerState.is_halted()
-    CircuitBreakerState.clear()
+    assert cb.is_halted()

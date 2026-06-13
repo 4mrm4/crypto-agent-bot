@@ -13,12 +13,21 @@ import re
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from orchestration.board import TaskBoard
 from orchestration.graph import build_orchestration_graph
-from orchestration.research import ResearchIteration, check_convergence
+from orchestration.evaluation import check_convergence
+from orchestration.research import ResearchGoal, ResearchIteration
+from agents.base import BaseAgent
+from backtesting.data_split import DATA_SPLIT
+from data.fetcher import MarketDataFetcher
+from data.onchain import OnChainFetcher
+from data.patterns import PatternDetector
+from data.sentiment import SentimentFetcher
+from langchain_core.tools import Tool
 from config import settings
+from state.circuit_breaker import CircuitBreakerState
 from state.state_broker import StateBroker
 
 logger = logging.getLogger(__name__)
@@ -27,7 +36,14 @@ logger = logging.getLogger(__name__)
 class HermesOrchestrator:
     """Multi-agent orchestrator using a Kanban board and a LangGraph loop."""
 
-    def __init__(self, agents: Dict[str, Any], state_broker: Optional[StateBroker] = None) -> None:
+    def __init__(
+        self,
+        agents: Dict[str, Any],
+        state_broker: Optional[StateBroker] = None,
+        circuit_breaker: Optional[CircuitBreakerState] = None,
+        event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+    ) -> None:
+        self._event_callback = event_callback
         self._agent_capabilities: Dict[str, List[str]] = {
             "analyst": ["analysis", "market_research", "sentiment", "analyse", "market"],
             "strategist": ["strategy", "generate", "concept", "design"],
@@ -45,6 +61,23 @@ class HermesOrchestrator:
         self.board = TaskBoard(agents, self._agent_capabilities)
         self._graph = build_orchestration_graph()
         self._state_broker = state_broker
+        self._circuit_breaker = circuit_breaker or CircuitBreakerState()
+
+    # ------------------------------------------------------------------
+    # Event emission
+    # ------------------------------------------------------------------
+
+    def on_event(self, event_type: str, data: Dict[str, Any]) -> None:
+        """Dispatch an event to the registered callback, if any."""
+        if self._event_callback is not None:
+            try:
+                self._event_callback(event_type, data)
+            except Exception:
+                logger.warning("Event callback failed for %s (ignored)", event_type, exc_info=True)
+
+    def _emit(self, event_type: str, **data: Any) -> None:
+        """Convenience wrapper: emit an event with keyword args as payload."""
+        self.on_event(event_type, data)
 
     # ------------------------------------------------------------------
     # Public API — outer research loop
@@ -149,11 +182,11 @@ class HermesOrchestrator:
     ) -> Dict[str, Any]:
         """Execute a single research lifecycle using the LangGraph state graph."""
         logger.info("=== Research goal: %s ===", goal)
+        self._emit("iteration_start", iteration=iteration, goal=goal[:200])
         goal_id = uuid.uuid4().hex[:8]
 
         # Enable research mode on circuit breaker — skip hard halt on hallucinated PnL
-        from agents.risk_manager import CircuitBreakerState
-        CircuitBreakerState._research_mode = True
+        self._circuit_breaker.research_mode = True
 
         # Reset board for this run
         self.board = TaskBoard(self.agents, self._agent_capabilities)
@@ -161,7 +194,6 @@ class HermesOrchestrator:
         # Inject memory context if a curator agent is registered
         curator = self.agents.get("curator")
         if curator and hasattr(curator, "inject_context"):
-            from backtesting.data_split import DATA_SPLIT
             context = curator.inject_context(
                 goal, k=3,
                 current_research_window=DATA_SPLIT.research_timerange(),
@@ -178,7 +210,6 @@ class HermesOrchestrator:
         sentiment_data = None
         if getattr(settings, "ENABLE_SENTIMENT", True):
             try:
-                from data.sentiment import SentimentFetcher
                 sf = SentimentFetcher()
                 symbol = settings.SYMBOL.replace("/USDT", "")
                 slug = symbol.lower()
@@ -213,9 +244,8 @@ class HermesOrchestrator:
         pattern_report = {}
         if getattr(settings, "ENABLE_PATTERNS", True):
             try:
-                from data.fetcher import MarketDataFetcher
-                from data.patterns import PatternDetector
                 fetcher = MarketDataFetcher()
+                pd_detector = PatternDetector()
                 df = fetcher.fetch_ohlcv(settings.SYMBOL, "1h", limit=50)
                 if df is not None and len(df) > 20:
                     pd_detector = PatternDetector()
@@ -228,7 +258,6 @@ class HermesOrchestrator:
         onchain_report = {}
         if getattr(settings, "ENABLE_ONCHAIN", False):
             try:
-                from data.onchain import OnChainFetcher
                 ocf = OnChainFetcher()
                 onchain_report = ocf.get_onchain_report(settings.SYMBOL)
                 if onchain_report.get("summary"):
@@ -283,7 +312,6 @@ class HermesOrchestrator:
         # Strategist task includes research specs if available
         strategist_task_desc = f"Generate strategies for: {enriched_goal}"
         if research_specs:
-            import json
             specs_text = json.dumps(research_specs, indent=2)[:800]
             strategist_task_desc += f"\n\nUse these research specs as starting hypotheses:\n{specs_text}"
         if sentiment_data:
@@ -336,7 +364,7 @@ class HermesOrchestrator:
                 initial_state["error"] = "Research cycle timed out"
                 final_state = initial_state
         finally:
-            CircuitBreakerState._research_mode = False
+            self._circuit_breaker.research_mode = False
 
         output = final_state.get("final_output", self._build_summary(enriched_goal))
 
@@ -385,6 +413,27 @@ class HermesOrchestrator:
                 output["pattern_report"] = pattern_report
 
         logger.info("=== Inner research complete ===")
+
+        # Emit events for completed board tasks and results
+        for task in self.board.get_tasks_by_status("DONE"):
+            if task.result:
+                self._emit("task_done",
+                    task_id=task.id,
+                    agent=task.assigned_to,
+                    description=task.description[:200],
+                    result=str(task.result)[:500],
+                )
+        metrics = self._extract_metrics(output)
+        self._emit("iteration_result",
+            iteration=iteration,
+            task_count=len(self.board.get_tasks_by_status("DONE")),
+            metrics=metrics,
+        )
+        if isinstance(output, dict):
+            sentiment = output.get("sentiment")
+            if sentiment:
+                self._emit("sentiment", **sentiment)
+
         return output
 
     # ------------------------------------------------------------------
@@ -406,19 +455,18 @@ class HermesOrchestrator:
         if not past_iterations:
             # First iteration — extract a hypothesis from the goal
             hypothesis = self._llm_hypothesis(goal)
+            self._emit("hypothesis", hypothesis=hypothesis, iteration=iter_num, max_iterations=max_iterations)
             return hypothesis
 
         # Later iterations — mutate based on previous critique
         last = past_iterations[-1]
         critique = last.critique or "No critique available."
         hypothesis = self._mutate_hypothesis(goal, last.hypothesis, critique, iter_num, max_iterations)
+        self._emit("hypothesis", hypothesis=hypothesis, iteration=iter_num, max_iterations=max_iterations)
         return hypothesis
 
     def _llm_hypothesis(self, goal: str) -> str:
         """Use the curator LLM to generate a structured hypothesis from the goal."""
-        from agents.base import BaseAgent
-        from langchain_core.tools import Tool
-
         temp_agent = BaseAgent(
             name="hypothesis_generator",
             tools=[],
@@ -457,8 +505,6 @@ class HermesOrchestrator:
         max_iterations: int,
     ) -> str:
         """Use the curator LLM to mutate the hypothesis based on critique."""
-        from agents.base import BaseAgent
-
         temp_agent = BaseAgent(
             name="hypothesis_mutator",
             tools=[],
@@ -513,6 +559,7 @@ class HermesOrchestrator:
             result = analyst.run(prompt)
             critique = result.get("output", "")
             safe = "".join(c if ord(c) < 128 else "?" for c in critique)
+            self._emit("critique", critique=safe, hypothesis=hypothesis)
             return safe[:800]
         except Exception as exc:
             logger.warning("Critique failed: %s", exc)
@@ -600,7 +647,6 @@ class HermesOrchestrator:
         done_tasks = self.board.get_tasks_by_status("DONE")
         for task in done_tasks:
             if task.result and "[" in str(task.result):
-                import re
                 m = re.search(r'\[([a-f0-9]{6,16})\]', str(task.result))
                 if m:
                     return m.group(1)
@@ -641,7 +687,6 @@ class HermesOrchestrator:
         Automatically constructs the hypothesis from regime + strategy_type_hint.
         Logs the motivation and triggered_by to experiment tracker.
         """
-        from orchestration.research import ResearchGoal
 
         # Build the research text from structured goal
         goal_text = (

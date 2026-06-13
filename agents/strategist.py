@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 from langchain_core.tools import Tool
 
 from agents.base import BaseAgent
+from orchestration.evaluation import evaluate_strategy_quality
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +43,10 @@ Use this cycle:
   get_strategy_concepts -> generate_strategy -> suggest_next_params -> repeat
 
 Target metrics:
-- Sharpe ratio > 1.0
-- Win rate > 50%
-- Max drawdown < 5%
+- Sharpe ratio > 0.8
+- Win rate > 40%
+- Max drawdown < 15%
+- At least 5 trades
 - Positive profit ratio
 
 STRATEGY CONCEPT LIBRARY:
@@ -80,12 +82,6 @@ The 'next: ' prefix is how the system creates follow-up tasks.
 If you do not output this line, the strategy will never be backtested.
 """
 
-# Minimum acceptable metrics — any result below these is flagged.
-_MIN_SHARPE = 1.0
-_MIN_WIN_RATE = 0.40
-_MAX_DRAWDOWN = 0.05
-
-
 class IterationRecord:
     """Tracks one backtest attempt in the optimization loop."""
 
@@ -96,28 +92,8 @@ class IterationRecord:
         self.reason: str = ""
 
     def evaluate(self) -> "IterationRecord":
-        """Assign keep/discard verdict based on metric thresholds."""
-        issues = []
-        sharpe = self.metrics.get("sharpe_ratio", 0)
-        win_rate = self.metrics.get("win_rate", 0)
-        drawdown = abs(self.metrics.get("max_drawdown", 0))
-        profit = self.metrics.get("profit_ratio", self.metrics.get("total_profit", 0))
-
-        if sharpe < _MIN_SHARPE:
-            issues.append(f"Sharpe {sharpe:.2f} < {_MIN_SHARPE}")
-        if win_rate < _MIN_WIN_RATE:
-            issues.append(f"Win rate {win_rate:.0%} < {_MIN_WIN_RATE}")
-        if drawdown > _MAX_DRAWDOWN:
-            issues.append(f"Drawdown {drawdown:.2%} > {_MAX_DRAWDOWN}")
-        if profit <= 0:
-            issues.append(f"Non-positive profit ({profit})")
-
-        if issues:
-            self.verdict = "discarded"
-            self.reason = "; ".join(issues)
-        else:
-            self.verdict = "kept"
-            self.reason = "All targets met"
+        """Assign keep/discard verdict via shared evaluation module."""
+        self.verdict, self.reason = evaluate_strategy_quality(self.metrics)
         return self
 
     def to_dict(self) -> Dict[str, Any]:

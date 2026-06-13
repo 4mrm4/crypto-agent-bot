@@ -277,7 +277,6 @@ class DeploymentPipeline:
         logger.info("Gate 6/9: CPCV robustness check...")
         try:
             from backtesting.cpcv_validator import CPCVValidator
-            from backtesting.data_split import DATA_SPLIT
             cpcv = CPCVValidator()
             # Fetch research data for CPCV — use the same data range
             research_timerange = DATA_SPLIT.research_timerange()

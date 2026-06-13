@@ -260,9 +260,8 @@ def test_circuit_breaker_zero_drawdown_does_not_halt():
 
 def test_regression_circuit_breaker_clamps_percentage():
     """Circuit breaker must soft-clamp raw percentage values (e.g. 500 -> 5.0) instead of crashing."""
-    from agents.risk_manager import RiskManagerAgent, CircuitBreakerState
+    from agents.risk_manager import RiskManagerAgent
 
-    CircuitBreakerState.clear()
     agent = RiskManagerAgent()
     cb_tool = agent.get_tool("circuit_breaker_check")
     # daily_limit=500 should be clamped to 5.0 (500/100), NOT crash with AssertionError
@@ -275,14 +274,12 @@ def test_regression_circuit_breaker_clamps_percentage():
     assert parsed.get("trading_allowed") is True, (
         f"Should clamp 500 to 5.0 (500%) and allow 6%% loss within it, got: {parsed}"
     )
-    CircuitBreakerState.clear()
 
 
 def test_regression_circuit_breaker_clamps_zero_limit_to_default():
     """Circuit breaker must use default 0.03 when daily_limit <= 0."""
-    from agents.risk_manager import RiskManagerAgent, CircuitBreakerState
+    from agents.risk_manager import RiskManagerAgent
 
-    CircuitBreakerState.clear()
     agent = RiskManagerAgent()
     cb_tool = agent.get_tool("circuit_breaker_check")
     # daily_limit=0 should fall back to default 0.03. 5% loss > 3% limit -> halt.
@@ -292,14 +289,12 @@ def test_regression_circuit_breaker_clamps_zero_limit_to_default():
     assert parsed.get("trading_allowed") is False, (
         f"Should use default 0.03 and halt on 5%% loss, got: {parsed}"
     )
-    CircuitBreakerState.clear()
 
 
 def test_circuit_breaker_halt_on_actual_drawdown():
     """Circuit breaker must halt when real drawdown exceeds limit."""
-    from agents.risk_manager import RiskManagerAgent, CircuitBreakerState
+    from agents.risk_manager import RiskManagerAgent
 
-    CircuitBreakerState.clear()  # ensure clean slate
     agent = RiskManagerAgent()
     cb_tool = agent.get_tool("circuit_breaker_check")
     result = cb_tool.func('{"daily_pnl_pct": -0.05, "daily_limit": 0.03}')
@@ -308,8 +303,6 @@ def test_circuit_breaker_halt_on_actual_drawdown():
     assert parsed.get("trading_allowed") is False, (
         f"Should halt on 5% loss with 3% limit, got: {parsed}"
     )
-    # Clean up: clear the circuit breaker state
-    CircuitBreakerState.clear()
 
 
 # ── Bug 2: Pre-filter / startup log line ──

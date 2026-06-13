@@ -7,7 +7,6 @@ import pandas as pd
 import numpy as np
 
 from execution.paper_trader import PaperTrader, Trade, sma_crossover_signal
-from execution.price_feed import PriceFeed
 
 
 def make_df(n=100):
@@ -168,25 +167,20 @@ class TestLivePriceFallback:
         assert mock_fetcher.fetch_ohlcv.called
 
 
-# ── PriceFeed Protocol injection tests ──
+# ── Fetcher injection tests ──
 
 
-class TestPriceFeedProtocol:
-    def test_accepts_price_feed_protocol(self):
-        """PaperTrader can be instantiated with an injected PriceFeed mock."""
-        mock_feed = MagicMock(spec=PriceFeed)
+class TestFetcherInjection:
+    def test_accepts_mock_fetcher(self):
+        """PaperTrader accepts an injected mock fetcher via constructor."""
+        mock_feed = MagicMock()
         pt = PaperTrader(fetcher=mock_feed)
         assert pt._fetcher is mock_feed
 
-    def test_uses_injected_price_feed(self):
-        """PaperTrader calls fetch_ohlcv on the injected PriceFeed, not a live API."""
-        mock_feed = MagicMock(spec=PriceFeed)
+    def test_uses_injected_fetcher(self):
+        """PaperTrader calls fetch_ohlcv on the injected fetcher."""
+        mock_feed = MagicMock()
         mock_feed.fetch_ohlcv.return_value = make_df(20)
         pt = PaperTrader(fetcher=mock_feed)
         pt.run(lambda df: "hold", max_candles=20)
         mock_feed.fetch_ohlcv.assert_called_once()
-
-    def test_market_data_fetcher_conforms_to_protocol(self):
-        """MarketDataFetcher structurally satisfies PriceFeed (has fetch_ohlcv)."""
-        from data.fetcher import MarketDataFetcher
-        assert hasattr(MarketDataFetcher, "fetch_ohlcv")

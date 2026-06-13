@@ -2,7 +2,8 @@
 
 import json
 
-from agents.risk_manager import RiskManagerAgent, CircuitBreakerState, PerAssetDrawdownTracker
+from agents.risk_manager import RiskManagerAgent, PerAssetDrawdownTracker
+from state.circuit_breaker import CircuitBreakerState
 
 
 def test_kelly_basic():
@@ -34,39 +35,37 @@ def test_kelly_quarter_fraction_default():
 
 
 def test_circuit_breaker_not_halted_by_default():
-    state = CircuitBreakerState.status()
+    cb = CircuitBreakerState()
+    state = cb.status()
     assert state["halted"] is False
 
 
 def test_circuit_breaker_halt_works():
-    CircuitBreakerState.clear()
-    CircuitBreakerState.halt("Test halt", duration_minutes=10)
-    state = CircuitBreakerState.status()
+    cb = CircuitBreakerState()
+    cb.halt("Test halt", duration_minutes=10)
+    state = cb.status()
     assert state["halted"] is True
     assert state["reason"] == "Test halt"
-    CircuitBreakerState.clear()
 
 
 def test_circuit_breaker_auto_resume():
-    CircuitBreakerState.clear()
-    CircuitBreakerState.halt("Short halt", duration_minutes=0)
+    cb = CircuitBreakerState()
+    cb.halt("Short halt", duration_minutes=0)
     # Duration = 0 means resume_after is now, so is_halted should be False
     # (or very close — we accept either with a tiny tolerance)
     import time
     time.sleep(0.01)
-    halted = CircuitBreakerState.is_halted()
+    halted = cb.is_halted()
     assert halted is False
 
 
 def test_pre_trade_approval_rejects_when_circuit_breaker_halted():
     agent = RiskManagerAgent()
-    CircuitBreakerState.halt("Test", duration_minutes=60)
     result = json.loads(agent.get_tool("pre_trade_approval").func(json.dumps({
         "circuit_breaker_result": {"trading_allowed": False, "reason": "Test halt"},
         "strategy_metrics": {"sharpe_ratio": 1.5},
     })))
     assert result["approved"] is False
-    CircuitBreakerState.clear()
     assert result["confidence"] == 0.0
 
 
@@ -360,6 +359,5 @@ def _call_kelly(win_rate, avg_win, avg_loss, portfolio, max_frac=0.25):
 
 def _call_circuit_breaker(params: dict) -> dict:
     """Call the circuit_breaker_check tool with given params and return parsed result."""
-    CircuitBreakerState.clear()
     result = RiskManagerAgent().get_tool("circuit_breaker_check").func(json.dumps(params))
     return json.loads(result)

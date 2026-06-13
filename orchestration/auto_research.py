@@ -6,6 +6,13 @@ Inspired by Karpathy's autoresearch pattern.
 import logging
 from typing import List, Dict, Any
 
+from api.event_bus import with_token_tracking
+from config import settings
+from data.fetcher import MarketDataFetcher
+from data.regime import MarketRegimeDetector
+from data.sentiment import SentimentFetcher
+from orchestration.factory import make_orchestrator
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,16 +25,6 @@ def run_auto_research(topic: str, max_rounds: int = 5, event_bus=None, loop=None
     4. Backtest and iterate
     5. Converge on best performer
     """
-    from agents.researcher import ResearcherAgent
-    from agents.strategist import StrategistAgent
-    from agents.analyst import AnalystAgent
-    from agents.curator import CuratorAgent
-    from data.regime import MarketRegimeDetector
-    from data.sentiment import SentimentFetcher
-    from data.fetcher import MarketDataFetcher
-    from orchestration.hermes import HermesOrchestrator
-    from config import settings
-
     logger.info("=== AUTO RESEARCH MODE: %s ===", topic)
     logger.info("This will run up to %d research rounds autonomously.", max_rounds)
 
@@ -61,25 +58,16 @@ def run_auto_research(topic: str, max_rounds: int = 5, event_bus=None, loop=None
         f"Find and test the best strategy for these conditions."
     )
 
-    # 4. Build agents
-    agents = {
-        "analyst": AnalystAgent(),
-        "strategist": StrategistAgent(),
-        "curator": CuratorAgent(),
-        "researcher": ResearcherAgent(),
-    }
+    # 4. Build orchestrator via factory
+    orchestrator = make_orchestrator()
 
-    # 5. Build orchestrator and optionally wire EventBus for WebSocket streaming
+    # 5. Optionally wire EventBus for WebSocket streaming
     if event_bus is not None:
         try:
-            from api.event_bus import monkey_patch_hermes
-            orchestrator = HermesOrchestrator(agents=agents)
-            monkey_patch_hermes(orchestrator, event_bus)
+            cb = event_bus.make_callback()
+            orchestrator.event_callback = with_token_tracking(cb)
         except Exception as exc:
             logger.warning("Could not wire EventBus to auto_research: %s", exc)
-            orchestrator = HermesOrchestrator(agents=agents)
-    else:
-        orchestrator = HermesOrchestrator(agents=agents)
     result = orchestrator.run_research_loop(
         goal=goal,
         max_iterations=max_rounds,

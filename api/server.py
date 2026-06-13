@@ -12,10 +12,26 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-from api.event_bus import EventBus
+from agents.token_tracker import TokenTracker
+from api.event_bus import EventBus, with_token_tracking
+from backtesting.engine import BacktestEngine
+from backtesting.oos_validator import OOSValidator
+from config import settings
 from data.api_health import APIHealthTracker
+from data.fetcher import MarketDataFetcher
+from data.regime import MarketRegimeDetector
+from data.stream import MarketDataStream
+from execution.signal_scanner import SignalScanner
 from memory.vector_store import VectorStore
+from monitoring.anomaly_detector import AnomalyDetector
+from monitoring.performance_monitor import PerformanceMonitor
+from orchestration.auto_research import run_auto_research
+from orchestration.autonomous_loop import AutonomousResearchLoop
+from orchestration.deployment_pipeline import DeploymentPipeline
+from orchestration.experiment_tracker import ExperimentTracker
 from orchestration.factory import make_orchestrator
+from orchestration.hermes import HermesOrchestrator
+from state.circuit_breaker import CircuitBreakerState
 
 logging.basicConfig(
     level=logging.INFO,
@@ -103,7 +119,6 @@ def get_health_tracker() -> APIHealthTracker:
 @app.get("/")
 async def serve_ui():
     """Serve the single-file React frontend."""
-    from pathlib import Path
     ui_path = Path(__file__).parent.parent / "ui" / "index.html"
     if ui_path.exists():
         return HTMLResponse(ui_path.read_text(encoding="utf-8"))
@@ -211,24 +226,17 @@ async def autonomous_start():
         global _autonomous_loop_ref
         try:
             logger.info("Building autonomous loop...")
-            from orchestration.factory import make_orchestrator
-            from api.event_bus import monkey_patch_hermes
-            from memory.vector_store import VectorStore
-            from orchestration.autonomous_loop import AutonomousResearchLoop
-            from orchestration.experiment_tracker import ExperimentTracker
-            from data.regime import MarketRegimeDetector
-            from config import settings
             orchestrator = make_orchestrator()
             event_bus = getattr(app.state, "event_bus", None)
             if event_bus:
-                monkey_patch_hermes(orchestrator, event_bus)
+                cb = event_bus.make_callback()
+                orchestrator.event_callback = with_token_tracking(cb)
             vs = VectorStore(); et = ExperimentTracker(); rd = MarketRegimeDetector()
             loop = AutonomousResearchLoop(orchestrator=orchestrator, regime_detector=rd, experiment_tracker=et, vector_store=vs, interval_minutes=settings.AUTONOMOUS_INTERVAL_MINUTES, event_bus=getattr(app.state, "event_bus", None))
             _autonomous_loop_ref = loop
             _startup_tasks["autonomous_loop"] = {"status": "running", "error": None}
             asyncio.create_task(loop.run_forever())
-            from datetime import datetime as dt
-            _save_autonomous_state(enabled=True, started_at=dt.utcnow().isoformat())
+            _save_autonomous_state(enabled=True, started_at=datetime.utcnow().isoformat())
             logger.info("Autonomous loop started via API")
         except Exception as exc:
             _startup_tasks["autonomous_loop"] = {"status": "failed", "error": str(exc)}
@@ -269,24 +277,21 @@ async def autonomous_resume():
 @app.get("/api/circuit-breaker/status")
 async def circuit_breaker_status():
     """Return current circuit breaker state."""
-    from agents.risk_manager import CircuitBreakerState
-    return CircuitBreakerState.status()
+    return app.state.circuit_breaker.status()
 
 
 @app.post("/api/circuit-breaker/halt")
 async def circuit_breaker_halt(reason: str = "Manual halt via API"):
     """Manually halt trading."""
-    from agents.risk_manager import CircuitBreakerState
     duration = 60
-    CircuitBreakerState.halt(reason, duration_minutes=duration)
+    app.state.circuit_breaker.halt(reason, duration_minutes=duration)
     return {"status": "halted", "reason": reason, "resume_in_minutes": duration}
 
 
 @app.post("/api/circuit-breaker/clear")
 async def circuit_breaker_clear():
     """Manually clear the circuit breaker."""
-    from agents.risk_manager import CircuitBreakerState
-    CircuitBreakerState.clear()
+    app.state.circuit_breaker.clear()
     return {"status": "cleared"}
 
 
@@ -366,7 +371,6 @@ async def oos_validate_strategy(strategy_id: str):
     Results are stored in oos_results.jsonl (NOT ChromaDB).
     This endpoint cannot be called from autonomous pipelines.
     """
-    from backtesting.oos_validator import OOSValidator
     vs = VectorStore()
 
     # Find strategy by ID in ChromaDB
@@ -403,7 +407,6 @@ async def oos_results():
     Never reads from ChromaDB — results are stored separately to prevent
     contamination of future research cycles.
     """
-    from backtesting.oos_validator import OOSValidator
     validator = OOSValidator()
     results = validator.get_results()
     return {"results": [r.to_dict() for r in results], "count": len(results)}
@@ -412,7 +415,6 @@ async def oos_results():
 @app.get("/api/monitoring/report/{strategy_id}")
 async def monitoring_report(strategy_id: str):
     """Return full monitoring report for a strategy."""
-    from monitoring.performance_monitor import PerformanceMonitor
     monitor = PerformanceMonitor()
     report = monitor.generate_monitoring_report(strategy_id)
     return {"report": report.to_dict() if hasattr(report, "to_dict") else str(report)}
@@ -421,7 +423,6 @@ async def monitoring_report(strategy_id: str):
 @app.get("/api/monitoring/summary")
 async def monitoring_summary():
     """Return degradation status for all strategies."""
-    from monitoring.performance_monitor import PerformanceMonitor
     monitor = PerformanceMonitor()
     summary = monitor.get_summary()
     return {"summary": summary}
@@ -430,7 +431,6 @@ async def monitoring_summary():
 @app.get("/api/monitoring/oos/pending")
 async def oos_pending():
     """Return strategies awaiting OOS validation."""
-    from backtesting.oos_validator import OOSValidator
     validator = OOSValidator()
     pending = validator.get_pending_validation()
     return {"pending": pending, "count": len(pending)}
@@ -439,7 +439,6 @@ async def oos_pending():
 @app.get("/api/deployment/pipeline/status")
 async def pipeline_status():
     """Return full deployment pipeline state for all strategies."""
-    from orchestration.deployment_pipeline import DeploymentPipeline
     pipeline = DeploymentPipeline()
     status = pipeline.get_all_status()
     return status
@@ -458,8 +457,7 @@ async def portfolio_risk():
     executor = getattr(app.state, "live_executor", None)
     if executor:
         risk["total_open_positions"] = len(executor.get_open_positions())
-    from agents.risk_manager import CircuitBreakerState
-    risk["circuit_breaker"] = CircuitBreakerState.status()
+    risk["circuit_breaker"] = app.state.circuit_breaker.status()
     return risk
 
 
@@ -472,9 +470,6 @@ async def startup_status():
 @app.get("/api/regime/current")
 async def current_regime():
     """Return current regime snapshot for all configured pairs."""
-    from data.fetcher import MarketDataFetcher
-    from data.regime import MarketRegimeDetector
-    from config import settings
     try:
         fetcher = MarketDataFetcher()
         df = fetcher.fetch_ohlcv(settings.SYMBOL, "1h", limit=250)
@@ -606,18 +601,19 @@ async def ws_autonomous_events(websocket: WebSocket):
 
 async def _run_orchestration(run_id: str, goal: str, max_cycles: int, max_iterations: int, bus: EventBus):
     """Run orchestrator in a thread, publishing events to the bus."""
-    from orchestration.hermes import HermesOrchestrator
-    from orchestration.auto_research import run_auto_research
-
     orchestrator = make_orchestrator()
 
     # Reset and emit starting token count
-    from agents.token_tracker import TokenTracker
     TokenTracker.get().reset()
     await bus.publish("token_usage", TokenTracker.get().get_usage())
 
-    # Patch: inject event publishing into the orchestrator
-    _patch_orchestrator(orchestrator, bus, run_id)
+    # Wire native event callback (replaces _patch_orchestrator)
+    cb = bus.make_callback()
+    def logged_callback(event_type: str, payload: Dict[str, Any]):
+        if event_type in ("hypothesis", "critique", "iteration_result", "iteration_start", "task_done"):
+            logger.info("[RUN %s] Event: %s", run_id, event_type)
+        cb(event_type, payload)
+    orchestrator.event_callback = with_token_tracking(logged_callback)
 
     logger.info("━" * 50)
     logger.info("[RUN %s] Starting goal: %s", run_id, goal)
@@ -675,108 +671,6 @@ async def _run_orchestration(run_id: str, goal: str, max_cycles: int, max_iterat
         _active_runs[run_id] = {"status": "error", "goal": goal, "error": str(exc)}
 
 
-def _patch_orchestrator(orchestrator: "HermesOrchestrator", bus: EventBus, run_id: str):
-    """Patch orchestrator methods to emit events to the bus.
-
-    Captures the event loop at patch time (main thread) so emit() works
-    from executor threads where asyncio.get_running_loop() would fail.
-    """
-    try:
-        _loop = asyncio.get_running_loop()
-    except RuntimeError:
-        _loop = None
-
-    def emit(event_type: str, payload: Dict[str, Any]):
-        if _loop is None:
-            return
-        asyncio.run_coroutine_threadsafe(
-            bus.publish(event_type, payload), _loop
-        )
-
-    def emit_tokens():
-        """Emit current cumulative token usage."""
-        try:
-            from agents.token_tracker import TokenTracker
-            emit("token_usage", TokenTracker.get().get_usage())
-        except Exception:
-            pass
-
-    # Wrap _generate_hypothesis
-    if hasattr(orchestrator, "_generate_hypothesis"):
-        orig_gen = orchestrator._generate_hypothesis
-
-        def patched_generate(goal, past_iterations, iter_num, max_iterations):
-            hypothesis = orig_gen(goal, past_iterations, iter_num, max_iterations)
-            logger.info("[RUN %s] Hypothesis iter %s/%s: %s", run_id, iter_num, max_iterations, hypothesis[:120])
-            emit("hypothesis", {
-                "hypothesis": hypothesis,
-                "iteration": iter_num,
-                "max_iterations": max_iterations,
-            })
-            emit_tokens()
-            return hypothesis
-
-        orchestrator._generate_hypothesis = patched_generate
-
-    # Wrap _critique_iteration
-    if hasattr(orchestrator, "_critique_iteration"):
-        orig_crit = orchestrator._critique_iteration
-
-        def patched_critique(output, goal, hypothesis):
-            critique = orig_crit(output, goal, hypothesis)
-            logger.info("[RUN %s] Critique for '%s': %s", run_id, hypothesis[:60], critique[:200])
-            emit("critique", {
-                "critique": critique,
-                "hypothesis": hypothesis,
-            })
-            emit_tokens()
-            return critique
-
-        orchestrator._critique_iteration = patched_critique
-
-    # Wrap _run_research_goal to emit agent events
-    if hasattr(orchestrator, "_run_research_goal"):
-        orig_run = orchestrator._run_research_goal
-
-        async def patched_run(goal, max_cycles=5, hypothesis="", iteration=1):
-            logger.info("[RUN %s] ── Iteration %s starting ──", run_id, iteration)
-            emit("iteration_start", {"iteration": iteration, "goal": goal[:200]})
-            result = await orig_run(goal, max_cycles=max_cycles, hypothesis=hypothesis, iteration=iteration)
-            # Emit events for each board task
-            done_tasks = orchestrator.board.get_tasks_by_status("DONE") if hasattr(orchestrator, "board") else []
-            for task in done_tasks:
-                if task.result:
-                    logger.info("[RUN %s]   Task done [%s]: %s", run_id, task.assigned_to, task.description[:80])
-                    emit("task_done", {
-                        "task_id": task.id,
-                        "agent": task.assigned_to,
-                        "description": task.description[:200],
-                        "result": str(task.result)[:500],
-                    })
-            # Extract and emit metrics
-            metrics = orchestrator._extract_metrics(result) if hasattr(orchestrator, "_extract_metrics") else {}
-            logger.info("[RUN %s] ── Iteration %s done — metrics: Sharpe=%.2f WR=%s DD=%s Trades=%s",
-                        run_id, iteration,
-                        metrics.get("sharpe_ratio", 0),
-                        metrics.get("win_rate", "—"),
-                        metrics.get("max_drawdown", "—"),
-                        metrics.get("total_trades", 0))
-            emit_tokens()
-            emit("iteration_result", {
-                "iteration": iteration,
-                "task_count": len(done_tasks),
-                "metrics": metrics,
-            })
-            # Emit sentiment if available in result
-            if isinstance(result, dict):
-                sentiment = result.get("sentiment")
-                if sentiment:
-                    emit("sentiment", sentiment)
-            return result
-
-        orchestrator._run_research_goal = patched_run
-
-
 # ── Startup event: launch background tasks ──
 
 
@@ -788,10 +682,11 @@ async def startup():
     autonomous_loop = getattr(app.state, "autonomous_loop", None)
     event_bus = getattr(app.state, "event_bus", None)
 
+    # 0. Circuit breaker — always initialise
+    app.state.circuit_breaker = CircuitBreakerState()
+
     # 1. Market data stream
     try:
-        from config import settings
-        from data.stream import MarketDataStream
         pairs = [settings.SYMBOL]
         stream = MarketDataStream()
         await stream.connect(pairs)
@@ -813,23 +708,11 @@ async def startup():
         _startup_tasks["autonomous_loop"] = {"status": "starting", "error": None}
         async def _rebuild_loop():
             try:
-                from agents.analyst import AnalystAgent
-                from agents.strategist import StrategistAgent
-                from agents.risk_manager import RiskManagerAgent
-                from agents.curator import CuratorAgent
-                from agents.researcher import ResearcherAgent
-                from backtesting.engine import BacktestEngine
-                from memory.vector_store import VectorStore
-                from orchestration.autonomous_loop import AutonomousResearchLoop
-                from orchestration.experiment_tracker import ExperimentTracker
-                from orchestration.factory import make_orchestrator
-                from api.event_bus import monkey_patch_hermes
-                from data.regime import MarketRegimeDetector
-                from config import settings
                 global _autonomous_loop_ref
                 orchestrator = make_orchestrator()
                 if event_bus:
-                    monkey_patch_hermes(orchestrator, event_bus)
+                    cb = event_bus.make_callback()
+                    orchestrator.event_callback = with_token_tracking(cb)
                 vs = VectorStore(); et = ExperimentTracker(); rd = MarketRegimeDetector()
                 loop = AutonomousResearchLoop(orchestrator=orchestrator, regime_detector=rd, experiment_tracker=et, vector_store=vs, interval_minutes=settings.AUTONOMOUS_INTERVAL_MINUTES, event_bus=event_bus)
                 _autonomous_loop_ref = loop
@@ -851,9 +734,6 @@ async def startup():
             logger.info("SignalScanner started (from app.state)")
         elif getattr(app.state, "autonomous_loop", None):
             # Auto-create scanner when autonomous loop is running
-            from execution.signal_scanner import SignalScanner
-            from data.regime import MarketRegimeDetector
-            from config import settings
             scanner = SignalScanner(
                 pairs=[settings.SYMBOL],
                 regime_detector=MarketRegimeDetector(),
@@ -873,12 +753,12 @@ async def startup():
 
     # 4. Anomaly detector
     try:
-        from monitoring.anomaly_detector import AnomalyDetector
         detector = AnomalyDetector(
             live_executor=getattr(app.state, "live_executor", None),
             signal_scanner=getattr(app.state, "signal_scanner", None),
             market_data_stream=getattr(app.state, "market_data_stream", None),
             event_bus=event_bus,
+            circuit_breaker=app.state.circuit_breaker,
         )
         app.state.anomaly_detector = detector
         asyncio.create_task(detector.monitor_loop())

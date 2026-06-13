@@ -1,9 +1,11 @@
 """Event bus for WebSocket streaming of orchestration events."""
 
 import asyncio
-import json
+import logging
 from datetime import datetime
 from typing import Any, AsyncGenerator, Callable, Dict, Optional
+
+from agents.token_tracker import TokenTracker
 
 
 class EventBus:
@@ -78,90 +80,49 @@ class EventBus:
         return callback
 
 
-def monkey_patch_hermes(orchestrator: Any, bus: EventBus):
-    """Patch HermesOrchestrator methods to emit events to the bus.
+def with_token_tracking(
+    callback: Callable[[str, Dict[str, Any]], None],
+) -> Callable[[str, Dict[str, Any]], None]:
+    """Wrap an event callback to also emit *token_usage* after key lifecycle events.
 
-    Simplified version of server.py's _patch_orchestrator — suitable for
-    auto_research mode where there's no run_id.
+    Usage::
 
-    Uses asyncio.get_running_loop() on each emit call to avoid caching
-    a destroyed loop reference (asyncio.run() creates + destroys loops).
+        bus = EventBus()
+        cb = with_token_tracking(bus.make_callback())
+        orchestrator.event_callback = cb
     """
-    import logging
-    logger = logging.getLogger("event_bus.monkey_patch")
+    def wrapped(event_type: str, payload: Dict[str, Any]):
+        callback(event_type, payload)
+        if event_type in ("hypothesis", "critique", "iteration_result"):
+            try:
+                callback("token_usage", TokenTracker.get().get_usage())
+            except Exception:
+                pass  # Never crash for telemetry
+    return wrapped
 
-    def emit(event_type: str, payload: Dict[str, Any]):
-        """Publish an event to the bus from any thread.
 
-        Queries the running loop on each call — safe when called
-        from inside asyncio.run() in a thread pool, or from the
-        main event loop directly.
-        """
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return  # No running loop — silently drop
-        try:
-            asyncio.run_coroutine_threadsafe(
-                bus.publish(event_type, payload), loop
-            )
-        except RuntimeError:
-            pass
+class LoggingEventBusHandler(logging.Handler):
+    """Publish all log records to an EventBus as ``log`` events.
 
-    def emit_tokens():
-        """Emit current cumulative token usage."""
+    Usage::
+
+        bus = EventBus()
+        handler = LoggingEventBusHandler(bus)
+        logging.getLogger().addHandler(handler)
+    """
+
+    def __init__(self, event_bus: EventBus, level: int = logging.INFO):
+        super().__init__(level)
+        self._callback = event_bus.make_callback()
+
+    def emit(self, record: logging.LogRecord):
         try:
-            from agents.token_tracker import TokenTracker
-            emit("token_usage", TokenTracker.get().get_usage())
+            msg = self.format(record)
+            self._callback("log", {
+                "level": record.levelname.lower(),
+                "logger": record.name,
+                "message": msg,
+                "line": record.lineno,
+            })
         except Exception:
-            pass
-
-    # Wrap _generate_hypothesis
-    if hasattr(orchestrator, "_generate_hypothesis"):
-        orig_gen = orchestrator._generate_hypothesis
-
-        def patched_generate(goal, past_iterations, iter_num, max_iterations):
-            hypothesis = orig_gen(goal, past_iterations, iter_num, max_iterations)
-            emit("hypothesis", {
-                "hypothesis": hypothesis,
-                "iteration": iter_num,
-                "max_iterations": max_iterations,
-            })
-            emit_tokens()
-            return hypothesis
-
-        orchestrator._generate_hypothesis = patched_generate
-
-    # Wrap _critique_iteration
-    if hasattr(orchestrator, "_critique_iteration"):
-        orig_crit = orchestrator._critique_iteration
-
-        def patched_critique(output, goal, hypothesis):
-            critique = orig_crit(output, goal, hypothesis)
-            emit("critique", {
-                "critique": critique,
-                "hypothesis": hypothesis,
-            })
-            emit_tokens()
-            return critique
-
-        orchestrator._critique_iteration = patched_critique
-
-    # Wrap _run_research_goal to emit iteration events
-    if hasattr(orchestrator, "_run_research_goal"):
-        orig_run = orchestrator._run_research_goal
-
-        async def patched_run(goal, max_cycles=5, hypothesis="", iteration=1):
-            emit("iteration_start", {"iteration": iteration, "goal": goal[:200]})
-            result = await orig_run(goal, max_cycles=max_cycles, hypothesis=hypothesis, iteration=iteration)
-            metrics = orchestrator._extract_metrics(result) if hasattr(orchestrator, "_extract_metrics") else {}
-            emit("iteration_result", {
-                "iteration": iteration,
-                "metrics": metrics,
-            })
-            emit_tokens()
-            return result
-
-        orchestrator._run_research_goal = patched_run
-
-    logger.info("HermesOrchestrator patched for EventBus streaming.")
+            self.handleError(record)

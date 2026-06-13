@@ -14,12 +14,12 @@ Bayesian Kelly (v8+ upgrade):
 import json
 import logging
 import math
-from datetime import datetime, timedelta
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 from langchain_core.tools import Tool
+from scipy.stats import beta as beta_dist
 
 from agents.base import BaseAgent
 from data.fetcher import MarketDataFetcher
@@ -60,46 +60,9 @@ IMPORTANT: Use ONLY plain ASCII text. No emoji, no Unicode symbols.
 """
 
 
-# ── Shared circuit breaker state (module-level singleton) ──
-
-class CircuitBreakerState:
-    """Global circuit breaker. Halted state is shared across all instances."""
-    _halted: bool = False
-    _halt_reason: str = ""
-    _halted_at: Optional[datetime] = None
-    _resume_after: Optional[datetime] = None
-    _research_mode: ClassVar[bool] = False  # Skip hard halt during research cycles (hallucinated PnL)
-
-    @classmethod
-    def halt(cls, reason: str, duration_minutes: int = 60):
-        cls._halted = True
-        cls._halt_reason = reason
-        cls._halted_at = datetime.utcnow()
-        cls._resume_after = datetime.utcnow() + timedelta(minutes=duration_minutes)
-        logger.warning("CIRCUIT BREAKER HALTED: %s (resume after %s)", reason, cls._resume_after)
-
-    @classmethod
-    def clear(cls):
-        cls._halted = False
-        cls._halt_reason = ""
-        cls._halted_at = None
-        cls._resume_after = None
-        logger.info("Circuit breaker cleared — trading resumed.")
-
-    @classmethod
-    def is_halted(cls) -> bool:
-        if cls._halted and cls._resume_after and datetime.utcnow() > cls._resume_after:
-            cls.clear()
-        return cls._halted
-
-    @classmethod
-    def status(cls) -> dict:
-        return {
-            "halted": cls._halted,
-            "reason": cls._halt_reason,
-            "halted_at": cls._halted_at.isoformat() if cls._halted_at else None,
-            "resume_after": cls._resume_after.isoformat() if cls._resume_after else None,
-        }
+# ── Shared circuit breaker state — lives in state/circuit_breaker.py ──
+# Imported by callers; RiskManagerAgent receives an instance via constructor.
+from state.circuit_breaker import CircuitBreakerState
 
 
 def _normalize(symbol: str) -> str:
@@ -273,7 +236,6 @@ BAYESIAN_CI_UPPER = 0.95  # 90% CI upper bound
 
 
 def _beta_posterior_win_rate(wins: float, losses: float) -> dict:
-    from scipy.stats import beta as beta_dist
     alpha_post = BETA_PRIOR_ALPHA + wins
     beta_post = BETA_PRIOR_BETA + losses
     if alpha_post > 1 and beta_post > 1:
@@ -546,9 +508,10 @@ class PerAssetDrawdownTracker:
 class RiskManagerAgent(BaseAgent):
     """Evaluates trading strategies for risk and produces quantitative go/no-go decisions."""
 
-    def __init__(self, fetcher: Optional[MarketDataFetcher] = None, drawdown_tracker: Optional[PerAssetDrawdownTracker] = None):
+    def __init__(self, fetcher: Optional[MarketDataFetcher] = None, drawdown_tracker: Optional[PerAssetDrawdownTracker] = None, circuit_breaker: Optional[CircuitBreakerState] = None):
         self._fetcher = fetcher or MarketDataFetcher()
         self._drawdown_tracker = drawdown_tracker or PerAssetDrawdownTracker()
+        self._circuit_breaker = circuit_breaker or CircuitBreakerState()
         self._quality_scorer = TradeQualityScorer()
         tools = self._build_tools()
         super().__init__(name="risk_manager", tools=tools, system_prompt=RISK_MANAGER_PROMPT)
@@ -781,7 +744,7 @@ class RiskManagerAgent(BaseAgent):
                 weekly_pnl = 0.0
 
             # Skip hard halt during research mode — research uses hallucinated PnL, not real
-            if CircuitBreakerState._research_mode:
+            if self._circuit_breaker.research_mode:
                 return json.dumps({
                     "trading_allowed": True,
                     "reason": f"Research mode: daily_pnl={daily_pnl:.4f} would halt in live mode",
@@ -811,8 +774,8 @@ class RiskManagerAgent(BaseAgent):
             weekly_limit = _clamp_limit(weekly_limit_raw, 0.08)
 
             # Check if already halted
-            if CircuitBreakerState.is_halted():
-                status = CircuitBreakerState.status()
+            if self._circuit_breaker.is_halted():
+                status = self._circuit_breaker.status()
                 return json.dumps({
                     "trading_allowed": False,
                     "reason": status["reason"],
@@ -822,7 +785,7 @@ class RiskManagerAgent(BaseAgent):
 
             # Check daily drawdown — only halt on actual negative P&L exceeding limit
             if daily_pnl < 0 and abs(daily_pnl) > daily_limit:
-                CircuitBreakerState.halt(
+                self._circuit_breaker.halt(
                     f"Daily drawdown {daily_pnl:.2%} exceeds limit {daily_limit:.2%}",
                     duration_minutes=60,
                 )
@@ -830,12 +793,12 @@ class RiskManagerAgent(BaseAgent):
                     "trading_allowed": False,
                     "reason": f"Daily drawdown {abs(daily_pnl):.2%} > {daily_limit:.2%} limit",
                     "triggered_by": "daily_drawdown",
-                    "resume_after": CircuitBreakerState.status()["resume_after"],
+                    "resume_after": self._circuit_breaker.status()["resume_after"],
                 })
 
             # Check weekly drawdown
             if weekly_pnl < 0 and abs(weekly_pnl) > weekly_limit:
-                CircuitBreakerState.halt(
+                self._circuit_breaker.halt(
                     f"Weekly drawdown {weekly_pnl:.2%} exceeds limit {weekly_limit:.2%}",
                     duration_minutes=360,  # 6 hours for weekly limit breach
                 )
@@ -843,7 +806,7 @@ class RiskManagerAgent(BaseAgent):
                     "trading_allowed": False,
                     "reason": f"Weekly drawdown {abs(weekly_pnl):.2%} > {weekly_limit:.2%} limit",
                     "triggered_by": "weekly_drawdown",
-                    "resume_after": CircuitBreakerState.status()["resume_after"],
+                    "resume_after": self._circuit_breaker.status()["resume_after"],
                 })
 
             return json.dumps({

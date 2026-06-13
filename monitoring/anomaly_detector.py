@@ -2,7 +2,7 @@
 AnomalyDetector — monitors system state and emits alerts.
 
 Background task that runs all anomaly checks every 30 seconds.
-On critical anomalies: calls CircuitBreaker.halt().
+On critical anomalies: calls self._circuit_breaker.halt().
 Always emits alerts to EventBus and audit log.
 
 CircuitBreaker is a global halt switch shared with the RiskManagerAgent.
@@ -13,13 +13,11 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional
 
-from agents.risk_manager import CircuitBreakerState
+from state.circuit_breaker import CircuitBreakerState
 
 logger = logging.getLogger(__name__)
 
-# ── CircuitBreaker is now in agents/risk_manager.py (shared singleton) ──
-# Re-export for convenience
-CircuitBreaker = CircuitBreakerState
+# ── CircuitBreaker lives in state/circuit_breaker.py ──
 
 MONITOR_INTERVAL = 30  # seconds between check cycles
 
@@ -34,12 +32,14 @@ class AnomalyDetector:
         market_data_stream=None,
         audit_log=None,
         event_bus=None,
+        circuit_breaker: Optional[CircuitBreakerState] = None,
     ):
         self._live_executor = live_executor
         self._signal_scanner = signal_scanner
         self._market_data_stream = market_data_stream
         self._audit_log = audit_log
         self._event_bus = event_bus
+        self._circuit_breaker = circuit_breaker or CircuitBreakerState()
 
         # State tracking for anomaly detection
         self._last_price: Optional[float] = None
@@ -92,7 +92,7 @@ class AnomalyDetector:
                 "rapid_drawdown", "critical",
                 {"drawdown_pct": round(drawdown_pct, 2), "time_span_seconds": int(time_span.total_seconds())},
             )
-            CircuitBreaker.halt(f"Rapid drawdown {drawdown_pct:.1f}% in {int(time_span.total_seconds())}s")
+            self._circuit_breaker.halt(f"Rapid drawdown {drawdown_pct:.1f}% in {int(time_span.total_seconds())}s")
 
     async def _check_stuck_positions(self):
         """Open position unchanged for >4h with no update."""
@@ -127,7 +127,7 @@ class AnomalyDetector:
                 "api_error_cascade", "critical",
                 {"error_count": len(self._api_error_window), "window_seconds": 60},
             )
-            CircuitBreaker.halt(f"API error cascade: {len(self._api_error_window)} errors in 60s")
+            self._circuit_breaker.halt(f"API error cascade: {len(self._api_error_window)} errors in 60s")
 
     async def _check_signal_flood(self):
         """>10 signals in 60 seconds (likely bug)."""
@@ -139,7 +139,7 @@ class AnomalyDetector:
                 "strategy_signal_flood", "critical",
                 {"signal_count": len(self._signal_window), "window_seconds": 60},
             )
-            CircuitBreaker.halt(f"Signal flood: {len(self._signal_window)} signals in 60s")
+            self._circuit_breaker.halt(f"Signal flood: {len(self._signal_window)} signals in 60s")
 
     async def _check_stale_price(self):
         """Last price timestamp >5 minutes old."""
@@ -160,7 +160,7 @@ class AnomalyDetector:
                 "exchange_disconnect", "critical",
                 {"reconnect_count": len(self._reconnect_window), "window_seconds": 600},
             )
-            CircuitBreaker.halt("Exchange disconnect: >3 reconnects in 10 min")
+            self._circuit_breaker.halt("Exchange disconnect: >3 reconnects in 10 min")
 
     async def _check_negative_kelly(self):
         """Check for strategies with negative Kelly (edge flipped)."""
@@ -191,7 +191,7 @@ class AnomalyDetector:
 
         if not binance_ok and not coincap_ok:
             logger.critical("ALL PRICE SOURCES DOWN — Binance WebSocket disconnected, CoinCap REST failed")
-            CircuitBreaker.halt("All price sources unavailable")
+            self._circuit_breaker.halt("All price sources unavailable")
             await self._alert(
                 "price_source_critical", "critical",
                 {"binance_ws": binance_ok, "coincap_rest": coincap_ok},

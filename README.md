@@ -2,7 +2,17 @@
 
 Modular crypto trading bot with 7 LangGraph ReAct agents, Freqtrade backtesting, ChromaDB strategy memory, and a real-time Web UI.
 
-**Latest updates (June 2026 — v14: SearXNG Integration + ML Trade Quality Scorer):**
+**Latest updates (June 2026 — v14.1: Terminal Log Streaming + Sharpe History Chart):**
+
+### v14.1 Features — Live Terminal Logs in Dashboard & Sharpe History Chart
+- **Terminal Log dashboard panel** (`api/event_bus.py`, `ui/index.html`) — New `LoggingEventBusHandler` (logging.Handler subclass) pipes all `logger.info()`/`warning()`/`error()` output into the EventBus as `log` events. Collapsible `TerminalLogPanel` in the Dashboard tab with DM Mono font, color-coded severity badges (INFO=teal, WARNING=gold, ERROR=coral), auto-scroll to bottom, and 500-entry ring buffer. Collapsed by default.
+- **Sharpe History Chart** (`ui/index.html`) — New `SharpeHistoryChart` React component in the Dashboard tab plotting best-so-far Sharpe trajectory. Record-setting points are connected with a line and labelled; non-record iterations render as small greyed dots. SVG-based, no external charting deps.
+- **`with_token_tracking` decorator** (`api/event_bus.py`) — Replaces `monkey_patch_hermes` with a functional wrapper that emits `token_usage` events after key lifecycle events (`hypothesis`, `critique`, `iteration_result`). Thread-safe via `make_callback()`.
+- **Top-level imports** (`main.py`, `api/server.py`) — All modules use module-level imports instead of lazy local imports (`asyncio`, `httpx`, `uvicorn`, `signal`, `subprocess`, `webbrowser`, `rich.table`, `rich.console`, `Path`). No functional change — faster cold start, better IDE support.
+- **Circuit Breaker state module** (`state/circuit_breaker.py`) — New `CircuitBreakerState` class extracted from `RiskManagerAgent` for shared circuit breaker state between orchestration and execution layers. Used by `api/server.py` endpoints.
+- **Evaluation pipeline** (`orchestration/evaluation.py`) — New module for post-backtest strategy evaluation scoring.
+- **Test reorganization** — All test files moved from project root into `tests/test_agents/`, `tests/test_api/`, `tests/test_backtesting/`, `tests/test_data/`, `tests/test_database/`, `tests/test_execution/`, `tests/test_integration/`, `tests/test_monitoring/`, `tests/test_orchestration/`, `tests/test_risk/`, `tests/test_state/`, `tests/test_tools/`. Each directory has `__init__.py`. New tests: `test_graph.py`, `test_hermes.py`, `test_signal_evaluation.py`.
+- **Graphify knowledge graph updated** — 3,443 nodes (was 2,617), 6,094 edges (was 4,763), 289 communities (was 207).
 
 ### v14 Features — SearXNG Self-Hosted Search & ML Trade Quality
 - **SearXNG self-hosted metasearch** (`agents/researcher.py`, `config.py`) — Primary web search via local SearXNG instance (`SEARXNG_URL`), bypasses DuckDuckGo rate limits (HTTP 202 responses). Falls through to Tavily → DuckDuckGo. Config vars: `SEARXNG_URL` (default: `http://localhost:4000`), persistent override file at `searxng_settings.yml`.
@@ -25,7 +35,7 @@ Modular crypto trading bot with 7 LangGraph ReAct agents, Freqtrade backtesting,
 ### Core Infrastructure
 - **DeepSeek Chat API** — migrated from OpenRouter to direct DeepSeek API (`api.deepseek.com/v1`, model `deepseek-chat`)
 - **Live token usage** — real-time token counter in Web UI showing prompt/completion/total per run
-- **EventBus WebSocket streaming** — `monkey_patch_hermes` for auto-research mode, real-time agent activity pushed to UI
+- **EventBus WebSocket streaming** — native `event_callback` hook on `HermesOrchestrator` emits real-time agent activity (hypothesis, critique, task_done, iteration_result) to the Web UI
 - **Auto data download** — checks BTC/USDT 1h data ≥500KB on startup, auto-downloads latest 2 years if missing
 
 ### Anti-Overfitting System (v8, continued)
@@ -311,6 +321,8 @@ graph TD
 | **TradingDatabase** | `data/database.py` | SQLite-backed storage (5 tables, WAL mode) replacing JSONL as primary store |
 | **TradeQualityScorer** | `execution/quality_scorer.py` | ML sklearn RandomForest predictor of trade quality from backtest data |
 | **Quality Scorer Tests** | `test_quality_scorer.py` | 7 tests: cold start, training, feature encoding, mulitplier thresholds, persistence |
+| **CircuitBreakerState** | `state/circuit_breaker.py` | Shared circuit breaker state between orchestration and execution layers |
+| **EvaluationPipeline** | `orchestration/evaluation.py` | Post-backtest strategy evaluation scoring |
 
 ## Setup
 
@@ -457,6 +469,8 @@ Opens at `http://127.0.0.1:8765`. Features:
 - **Agent timeline**: real-time activity feed showing which agent is running
 - **Hypothesis display**: current hypothesis with iteration counter
 - **SVG Sharpe chart**: iteration history plotted as a line chart
+- **Sharpe History Chart**: best-so-far Sharpe trajectory with record-setting points labelled
+- **Terminal Log panel**: collapsible live stream of `logger.info()`/`warning()`/`error()` output with color-coded severity
 - **Auto-scrolling event log**: complete WebSocket event stream
 - **Run New Goal modal**: configure cycles, iterations, and goal text
 
@@ -464,9 +478,9 @@ Opens at `http://127.0.0.1:8765`. Features:
 
 An interactive knowledge graph of the entire codebase is available at `graphify-out/graph.html` — open it in a browser to explore.
 
-- **2,617 nodes** — every class, function, file, method, and concept
-- **4,763 edges** — calls, imports, contains, uses, references, method relationships
-- **207 communities** — automatically detected subsystems (API server, backtesting, data fetching, agents, etc.)
+- **3,443 nodes** — every class, function, file, method, and concept
+- **6,094 edges** — calls, imports, contains, uses, references, method relationships
+- **289 communities** — automatically detected subsystems (API server, backtesting, data fetching, agents, etc.)
 - **Top hubs**: BacktestEngine (deg=94), MarketDataFetcher (deg=86), StateBroker (deg=73), TradingDatabase (deg=58), VectorStore (deg=56)
 
 Regenerate locally: `pip install graphifyy && /graphify .` (requires OpenClaude).
@@ -542,7 +556,7 @@ python -m pytest test_autonomous_loop.py -v
 python -m pytest
 ```
 
-> Suite includes: regression (32), autonomous loop (6), validation mode (12), phase 2, sentiment, patterns, regime, experiment tracker, walk-forward, data split, blind search, OOS validator, deployment pipeline, Kelly/conservative sizing, synthetic validator, performance monitor, transaction costs, Tavily search, SQLite/database, quality scorer (7) — **636+ passed, 0 failures** (v14).
+> Suite includes: regression (32), autonomous loop (6), validation mode (12), phase 2, sentiment, patterns, regime, experiment tracker, walk-forward, data split, blind search, OOS validator, deployment pipeline, Kelly/conservative sizing, synthetic validator, performance monitor, transaction costs, Tavily search, SQLite/database, quality scorer (7), graph tests, hermes tests, signal evaluation — **636+ passed, 0 failures** (v14.1).
 
 ## How It Works
 
