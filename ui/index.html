@@ -1,2767 +1,1241 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Crypto Agent Bot — Autonomous Trading</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script>
-      // Silence Babel's unavoidable "use in-browser transformer" warning
-      const __origWarn = console.warn;
-      console.warn = (m) => {
-        if (typeof m === "string" && m.includes("in-browser Babel transformer")) return;
-        __origWarn(m);
-      };
-    </script>
-    <link
-      rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>⟐</text></svg>"
-    />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Sora:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      :root {
-        --bg-deep: #141210;
-        --bg-surface: #1b1815;
-        --bg-card: #221e1a;
-        --bg-elevated: #2d2722;
-        --border: #36302a;
-        --border-light: #443d36;
-        --text: #e6ddd4;
-        --text-secondary: #a6978a;
-        --text-muted: #73665a;
-        --amber: #e8854a;
-        --amber-dim: #cc7540;
-        --teal: #4a9e8c;
-        --teal-dim: #3a8a7a;
-        --sage: #7ab86a;
-        --coral: #d65d5d;
-        --gold: #d8a84a;
-        --amber-glow: rgba(232,133,74,0.08);
-        --teal-glow: rgba(74,158,140,0.08);
-        --sage-glow: rgba(122,184,106,0.08);
-        --coral-glow: rgba(214,93,93,0.08);
-        --gold-glow: rgba(216,168,74,0.08);
-        --radius: 10px;
-        --radius-sm: 6px;
-      }
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      body {
-        background: var(--bg-deep);
-        background-image:
-          radial-gradient(ellipse at 20% 30%, rgba(232,133,74,0.05) 0%, transparent 50%),
-          radial-gradient(ellipse at 80% 70%, rgba(74,158,140,0.04) 0%, transparent 50%);
-        color: var(--text);
-        font-family: "Sora", sans-serif;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-        min-height: 100vh;
-        position: relative;
-        overflow-x: hidden;
-      }
-      /* Noise grain overlay */
-      body::after {
-        content: "";
-        position: fixed;
-        inset: 0;
-        opacity: 0.025;
-        pointer-events: none;
-        z-index: 9999;
-        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='ng'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23ng)' opacity='0.5'/%3E%3C/svg%3E");
-        background-repeat: repeat;
-        background-size: 200px 200px;
-      }
-      /* Geometric grid background */
-      body::before {
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-image:
-          linear-gradient(rgba(54,48,42,0.25) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(54,48,42,0.25) 1px, transparent 1px);
-        background-size: 48px 48px;
-        pointer-events: none;
-        z-index: -1;
-      }
-      ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-      }
-      ::-webkit-scrollbar-track {
-        background: var(--bg-surface);
-      }
-      ::-webkit-scrollbar-thumb {
-        background: var(--border);
-        border-radius: 3px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: var(--border-light);
-      }
-      @keyframes reveal {
-        from { opacity: 0; transform: translateY(6px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      @keyframes slideUp {
-        from { opacity: 0; transform: translateY(12px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.3; }
-      }
-      @keyframes shimmer {
-        0% { background-position: -200% 0; }
-        100% { background-position: 200% 0; }
-      }
-      @keyframes stampIn {
-        from { opacity: 0; scale: 0.9; }
-        to { opacity: 1; scale: 1; }
-      }
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      .r1 { animation: reveal 0.4s ease-out both; }
-      .r2 { animation: reveal 0.4s ease-out 0.1s both; }
-      .r3 { animation: reveal 0.4s ease-out 0.2s both; }
-      .r4 { animation: reveal 0.4s ease-out 0.3s both; }
-      .r5 { animation: reveal 0.4s ease-out 0.4s both; }
-      .r6 { animation: reveal 0.4s ease-out 0.5s both; }
-      .rl { animation: slideUp 0.4s ease-out both; }
-      .rr { animation: slideUp 0.4s ease-out 0.08s both; }
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>crypto_agent_bot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;700&family=Sora:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<style>
+/* ─── Reset & Base ─── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%;width:100%}
+body{background:#0f0f12;color:#e0ddd5;font-family:'Sora',sans-serif;font-size:12px;line-height:1.5;overflow:hidden}
+/* ─── CSS Variables ─── */
+:root{
+  --bg:#0f0f12;
+  --surface:#1a1a20;
+  --elevated:#22222a;
+  --card:#16161c;
+  --border:#2a2a32;
+  --text:#e0ddd5;
+  --secondary:#a09e98;
+  --muted:#6b6963;
+  --amber:#d4a853;
+  --sage:#8bba7a;
+  --teal:#6bb5a5;
+  --coral:#c4685c;
+  --gold:#c9a13b;
+  --radius:6px;
+  --radius-sm:4px;
+}
 
-      /* Glass-morphism navbar */
-      .nav-glass {
-        background: rgba(15,14,12,0.85);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border-bottom: 1px solid var(--border);
-      }
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#2a2a32;border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:#3a3a42}
 
-      /* Skeleton shimmer */
-      .skeleton {
-        background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-elevated) 50%, var(--bg-card) 75%);
-        background-size: 200% 100%;
-        animation: shimmer 1.5s ease-in-out infinite;
-        border-radius: 4px;
-      }
+/* ─── Utility ─── */
+.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flex{display:flex}
+.flex-col{flex-direction:column}
+.gap-2{gap:2px}
+.gap-4{gap:4px}
+.gap-6{gap:6px}
+.gap-8{gap:8px}
+.gap-10{gap:10px}
+.items-center{align-items:center}
+.justify-between{justify-content:space-between}
+.flex-1{flex:1}
+.min-h-0{min-height:0}
+.shrink-0{flex-shrink:0}
+.text-mono{font-family:'DM Mono',monospace}
 
-      /* Table styles */
-      .data-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 10.5px;
-        font-family: "DM Mono", monospace;
-      }
-      .data-table thead th {
-        text-align: left;
-        padding: 6px 8px;
-        border-bottom: 1px solid var(--border);
-        font-weight: 600;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        font-size: 9px;
-        letter-spacing: 1px;
-        font-family: "Syne", sans-serif;
-      }
-      .data-table tbody td {
-        padding: 5px 8px;
-        border-bottom: 1px solid rgba(54,48,42,0.3);
-      }
-      .data-table tbody tr:hover {
-        background: rgba(45,39,34,0.5);
-      }
-      .data-table tbody tr:last-child td {
-        border-bottom: none;
-      }
+/* ─── Animations ─── */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+@keyframes stampIn{0%{opacity:0;transform:scale(0.95)}100%{opacity:1;transform:scale(1)}}
+@keyframes fadeIn{0%{opacity:0}100%{opacity:1}}
+@keyframes slideUp{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:translateY(0)}}
 
-      /* Smooth transitions */
-      button, input, select, textarea {
-        transition: all 0.15s ease;
-      }
-      button:hover:not(:disabled) {
-        filter: brightness(1.1);
-      }
-      button:active:not(:disabled) {
-        transform: scale(0.97);
-      }
+/* ─── Card base ─── */
+.card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:0 8px 0 8px;
+  position:relative;
+  overflow:hidden;
+}
+.card-accent{position:absolute;top:0;left:0;right:0;height:2px}
+.card-pad{padding:14px}
 
-      /* Card hover effects */
-      .r1, .r2, .r3, .r4, .r5, .r6 {
-        transition: transform 0.2s ease, border-color 0.2s ease;
-      }
-      .r1:hover, .r2:hover, .r3:hover, .r4:hover, .r5:hover, .r6:hover {
-        transform: translateY(-2px);
-        border-color: var(--amber);
-      }
+/* ─── Dashboard Grid ─── */
+.dash-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  flex:1;min-height:0;
+  overflow-y:auto;
+  padding:2px 0;
+  align-content:start;
+}
+@media(max-width:900px){.dash-grid{grid-template-columns:1fr}}
 
-      @media (max-width: 900px) {
-        .dash-grid { grid-template-columns: 1fr !important; }
-        .research-grid { grid-template-columns: 1fr !important; }
-        .metrics-grid { grid-template-columns: repeat(2,1fr) !important; }
-        .nav-tabs { gap: 4px !important; }
-        .nav-tab { font-size: 9px !important; padding: 6px 10px !important; }
-        .dash-row-3 { grid-template-columns: 1fr !important; }
-      }
-      @media (max-width: 600px) {
-        .metrics-grid { grid-template-columns: 1fr !important; }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="root"></div>
-    <div
-      id="error-banner"
-      style="display:none;position:fixed;top:0;left:0;right:0;background:var(--coral);color:#fff;padding:12px 20px;font-family:'DM Mono',monospace;font-size:13px;z-index:99999;"
-    ></div>
-    <script>
-      window.onerror = function (m, u, l, c, e) {
-        var b = document.getElementById("error-banner");
-        b.textContent = m + " at line " + l;
-        b.style.display = "block";
-      };
-    </script>
+/* ─── Data tables ─── */
+table.data-table{width:100%;border-collapse:collapse}
+table.data-table th{
+  padding:4px 8px;
+  font-family:'Syne',sans-serif;
+  font-size:7px;
+  font-weight:600;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:1.5px;
+  text-align:left;
+  border-bottom:1px solid var(--border);
+}
+table.data-table td{padding:4px 8px;border-bottom:1px solid var(--border)}
+table.data-table tr:last-child td{border-bottom:none}
+table.data-table tr:hover td{background:rgba(255,255,255,0.02)}
 
-    <script type="text/babel">
-const { useState, useEffect, useRef, useCallback, useMemo, Fragment } = React;
+/* ─── Section heading ─── */
+.section-heading{
+  font-family:'Syne',sans-serif;
+  font-size:9px;
+  font-weight:600;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:2px;
+  margin-bottom:10px;
+}
 
-// ── Color Constants ──
+/* ─── Status dot ─── */
+.status-dot{
+  width:8px;height:8px;
+  border-radius:50%;
+  flex-shrink:0;
+}
+
+/* ─── Inputs & Selects ─── */
+.input-field{
+  padding:6px 10px;
+  border-radius:0 4px 0 4px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  color:var(--text);
+  font-size:10px;
+  font-family:'DM Mono',monospace;
+  outline:none;
+}
+.input-field:focus{border-color:var(--amber)}
+
+/* ─── Mini stat ─── */
+.mini-stat{
+  padding:6px 10px;
+  background:var(--surface);
+  border-radius:var(--radius-sm);
+  border:1px solid var(--border);
+}
+.mini-stat-label{
+  font-size:7px;
+  color:var(--muted);
+  font-family:'DM Mono',monospace;
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+  margin-bottom:1px;
+}
+.mini-stat-value{
+  font-size:13px;
+  font-weight:700;
+  font-family:'DM Mono',monospace;
+}
+
+/* ─── Skeleton loading ─── */
+.skel{background:linear-gradient(90deg,var(--surface) 25%,var(--elevated) 50%,var(--surface) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:var(--radius-sm)}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ─── Signal badge ─── */
+.badge-buy{display:inline-block;padding:1px 8px;border-radius:0 4px 0 4px;background:rgba(139,186,122,0.2);color:var(--sage);font-weight:700;font-size:9px;font-family:'DM Mono',monospace;text-transform:uppercase}
+.badge-sell{display:inline-block;padding:1px 8px;border-radius:0 4px 0 4px;background:rgba(196,104,92,0.2);color:var(--coral);font-weight:700;font-size:9px;font-family:'DM Mono',monospace;text-transform:uppercase}
+.badge-hold{display:inline-block;padding:1px 8px;border-radius:0 4px 0 4px;background:rgba(107,105,99,0.15);color:var(--muted);font-weight:700;font-size:9px;font-family:'DM Mono',monospace;text-transform:uppercase}
+
+/* ─── Button ─── */
+.btn{padding:6px 14px;border-radius:0 4px 0 4px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;font-weight:500;transition:all .2s;border:1px solid transparent}
+.btn:disabled{cursor:not-allowed;opacity:0.5}
+.btn-primary{background:var(--amber);color:#000;border-color:var(--amber)}
+.btn-primary:hover:not(:disabled){background:#c49a40}
+.btn-danger{background:transparent;color:var(--coral);border-color:var(--coral)}
+.btn-danger:hover:not(:disabled){background:rgba(196,104,92,0.1)}
+.btn-ghost{background:transparent;color:var(--text);border-color:var(--border)}
+.btn-ghost:hover:not(:disabled){background:var(--surface)}
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script type="text/babel">
+const {useState,useEffect,useRef,useMemo,useCallback,createContext,useContext} = React;
+
+// ═══════════════════════════════════════════════
+// THEME
+// ═══════════════════════════════════════════════
 const T = {
-  deep: "#0f0e0c",
-  surface: "#1a1714",
-  card: "#231f1b",
-  elevated: "#2d2722",
-  border: "#36302a",
-  borderLight: "#443d36",
-  text: "#e6ddd4",
-  secondary: "#a6978a",
-  muted: "#73665a",
-  amber: "#e8854a",
-  amberDim: "#cc7540",
-  teal: "#4a9e8c",
-  tealDim: "#3a8a7a",
-  sage: "#7ab86a",
-  coral: "#d65d5d",
-  gold: "#d8a84a",
+  bg:"#0f0f12",surface:"#1a1a20",elevated:"#22222a",card:"#16161c",
+  border:"#2a2a32",text:"#e0ddd5",secondary:"#a09e98",muted:"#6b6963",
+  amber:"#d4a853",sage:"#8bba7a",teal:"#6bb5a5",coral:"#c4685c",gold:"#c9a13b",
 };
 
-const AGENTS = {
-  analyst: { icon: "\u25C8", label: "Analyst", color: "#448aff" },
-  strategist: { icon: "\u25C9", label: "Strategist", color: "#4a9e8c" },
-  risk_manager: { icon: "\u25A3", label: "Risk Mgr", color: "#7ab86a" },
-  curator: { icon: "\u25C7", label: "Curator", color: "#b388ff" },
-  researcher: { icon: "\u25CB", label: "Researcher", color: "#d8a84a" },
-};
+// ═══════════════════════════════════════════════
+// UTILITY HELPERS
+// ═══════════════════════════════════════════════
+const fmtPnl = (v) => v != null ? `${v >= 0 ? "+" : ""}${(v * 100).toFixed(2)}%` : "\u2014";
+const fmtTime = (ts) => ts ? new Date(ts).toLocaleTimeString() : "\u2014";
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-const TABS = [
-  { id: "research", label: "Research", icon: "\u27D0" },
-  { id: "dashboard", label: "Dashboard", icon: "\u25C8" },
-  { id: "strategies", label: "Strategies", icon: "\u25C9" },
-  { id: "signals", label: "Signals", icon: "\u25CB" },
-];
+const Skeleton = ({w,h,style}) => <div className="skel" style={{width:w||"100%",height:h||20,...style}} />;
+const EmptyState = ({icon,title,sub}) => (
+  <div style={{textAlign:"center",padding:40,flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+    <div style={{fontSize:28,color:T.muted,opacity:0.15,marginBottom:10}}>{icon||"\u25CB"}</div>
+    <div style={{fontSize:11,color:T.muted}}>{title}</div>
+    {sub && <div style={{fontSize:9,color:T.muted,marginTop:4}}>{sub}</div>}
+  </div>
+);
 
-function uid() { return Math.random().toString(36).slice(2, 6); }
-function fmtNum(n) { return n != null ? Number(n).toLocaleString() : "\u2014"; }
-function pct(v) { return v != null ? (v * 100).toFixed(v < 0.1 ? 1 : 0) + "%" : "\u2014"; }
-function fmtPnl(pnl) {
-  if (pnl == null) return "\u2014";
-  const n = typeof pnl === "number" ? pnl * 100 : pnl;
-  return (n >= 0 ? "+" : "") + Number(n).toFixed(1) + "%";
-}
-
-// ── Skeleton Loader ──
-function Skeleton({ width, height, style }) {
-  return (
-    <div
-      className="skeleton"
-      style={{ width: width || "100%", height: height || 16, ...(style || {}) }}
-    />
-  );
-}
-
-// ── MiniStat ──
-function MiniStat({ label, value, color, small }) {
-  return (
-    <div
-      style={{
-        background: T.surface,
-        borderRadius: "0 4px 0 4px",
-        padding: small ? "4px 8px" : "6px 10px",
-        border: `1px solid ${T.border}`,
-      }}
-    >
-      <div
-        style={{
-          fontSize: small ? 7 : 8,
-          color: T.muted,
-          fontFamily: "'DM Mono',monospace",
-          textTransform: "uppercase",
-          letterSpacing: small ? "0.5px" : "1px",
-          marginBottom: 1,
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontSize: small ? 13 : 16,
-          fontWeight: 700,
-          color: color || T.text,
-          fontFamily: "'DM Mono',monospace",
-          lineHeight: 1.3,
-        }}
-      >
-        {value}
-      </div>
+const SectionHeading = ({children,accent,extra}) => (
+  <div className="flex items-center justify-between shrink-0" style={{marginBottom:10}}>
+    <h2 className="section-heading">{children}</h2>
+    {extra}
+  </div>
+);
+const Accent = ({color=T.amber}) => <div className="card-accent" style={{background:`linear-gradient(90deg,${color},transparent)`}} />;
+const MiniStat = ({label,value,color=T.secondary,small}) => (
+  <div className="mini-stat">
+    <div className="mini-stat-label">{label}</div>
+    <div className="mini-stat-value" style={{fontSize:small?11:13,color}}>{value}</div>
+  </div>
+);
+const ConfBar = ({conf,size=50}) => (
+  <div className="flex items-center gap-6">
+    <div style={{width:size,height:4,background:T.surface,borderRadius:2,overflow:"hidden"}}>
+      <div style={{width:`${clamp(conf*100,0,100)}%`,height:"100%",background:conf>=0.6?T.sage:conf>=0.3?T.gold:T.muted,borderRadius:2,transition:"width .3s"}} />
     </div>
-  );
+    <span className="text-mono" style={{fontSize:9,fontWeight:600,color:conf>=0.6?T.sage:conf>=0.3?T.gold:T.muted}}>{(conf*100).toFixed(0)}%</span>
+  </div>
+);
+
+// ═══════════════════════════════════════════════
+// STATE CONTEXT + PERSISTENCE
+// ═══════════════════════════════════════════════
+const LS_KEY = "cabot_ui_state";
+
+function loadPersistedState() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) { /* ignore */ }
+  return null;
+}
+function persistState(state) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e) { /* ignore */ }
 }
 
-// ── App ──
-function App() {
-  const [tab, setTab] = useState("research");
-  const [runId, setRunId] = useState(null);
-  const [connected, setConnected] = useState(false);
+// ═══════════════════════════════════════════════
+// WEBSOCKET HOOK
+// ═══════════════════════════════════════════════
+function useWebSocket(url, handlers) {
+  const wsRef = useRef(null);
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
+  const reconnectTimer = useRef(null);
+  const mountCount = useRef(0);
 
-  // ── localStorage persistence (survives page refresh) ──
-  // NOTE: initialWs MUST be declared before useState calls that read it,
-  // otherwise Babel's var hoisting makes it undefined.
-  const WS_STORAGE_KEY = 'crypto_bot_ws_state';
-  function loadWsState() {
-    try {
-      const saved = localStorage.getItem(WS_STORAGE_KEY);
-      if (!saved) return {};
-      const parsed = JSON.parse(saved);
-      // Staleness guard: discard if > 1 hour old
-      if (parsed._savedAt && Date.now() - parsed._savedAt > 3600000) return {};
-      return parsed;
-    } catch { return {}; }
-  }
-  const initialWs = loadWsState();
-
-  const [hypothesis, setHypothesis] = useState(initialWs.hypothesis || "");
-  const [iteration, setIteration] = useState(initialWs.iteration || 0);
-  const [maxIter, setMaxIter] = useState(initialWs.maxIter || 5);
-  const [metrics, setMetrics] = useState(initialWs.metrics || {});
-  const [chartData, setChartData] = useState(initialWs.chartData || []);
-  const [showModal, setShowModal] = useState(false);
-  const [goalInput, setGoalInput] = useState("Test SMA crossover for BTC/USDT");
-  const [cycleInput, setCycleInput] = useState(3);
-  const [iterInput, setIterInput] = useState(5);
-  const [running, setRunning] = useState(false);
-  const [timeline, setTimeline] = useState(initialWs.timeline || []);
-  const [log, setLog] = useState(initialWs.log || []);
-  const [tokens, setTokens] = useState(initialWs.tokens || { total_tokens: 0 });
-  const [sentiment, setSentiment] = useState(initialWs.sentiment || null);
-  const logRef = useRef(null);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-
-  // ── Debounced save to localStorage (every 1s when state changes) ──
   useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        localStorage.setItem(WS_STORAGE_KEY, JSON.stringify({
-          hypothesis, iteration, maxIter, metrics, chartData,
-          timeline, log, sentiment, tokens,
-          _savedAt: Date.now(),
-        }));
-      } catch { /* quota exceeded or unavailable */ }
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [hypothesis, iteration, maxIter, metrics, chartData, timeline, log, sentiment, tokens]);
+    mountCount.current += 1;
+    const mountId = mountCount.current;
+    let stopped = false;
 
-  // Dashboard state
-  const [autonomousState, setAutonomousState] = useState(null);
-  const [autoStarting, setAutoStarting] = useState(false);
-  const [autoStopping, setAutoStopping] = useState(false);
-  const [autoPausing, setAutoPausing] = useState(false);
-  const [positions, setPositions] = useState([]);
-  const [wsReconnect, setWsReconnect] = useState(0);
-  const [circuitBreaker, setCircuitBreaker] = useState({ halted: false });
-  const [regimeSnapshot, setRegimeSnapshot] = useState(null);
-  const [iterationData, setIterationData] = useState({ results: [], discarded_count: 0, kept_count: 0, best_sharpe: 0 });
-  const [signalsTabData, setSignalsTabData] = useState([]);
-  const [strategyTabData, setStrategyTabData] = useState([]);
-  const [startupStatus, setStartupStatus] = useState(null);
-  const [riskPortfolio, setRiskPortfolio] = useState(null);
-  const [dataHealth, setDataHealth] = useState(null);
-  const [terminalLog, setTerminalLog] = useState([]);
-
-  // Loading states
-  const [loading, setLoading] = useState({
-    autonomous: true, positions: true, strategies: true,
-    circuit: true, regime: true, iterations: true,
-    signals: true, startup: true, risk: true,
-  });
-  const [errors, setErrors] = useState({});
-
-  // ── WebSocket for Research (fallback to /ws/autonomous when no manual run) ──
-  useEffect(() => {
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    let ws;
-    let closed = false;
     function connect() {
-      const url = runId
-        ? `${proto}//${window.location.host}/ws/run/${runId}`
-        : `${proto}//${window.location.host}/ws/autonomous`;
-      ws = new WebSocket(url);
-      ws.onopen = () => setConnected(true);
-      ws.onmessage = (m) => {
-        try { processEvent(JSON.parse(m.data)); } catch (e) { /* ignore parse errors */ }
+      if (stopped) return;
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host = window.location.host;
+      const ws = new WebSocket(`${protocol}//${host}${url}`);
+      wsRef.current = ws;
+
+      let initLogged = 0;
+
+      ws.onopen = () => {
+        if (mountId !== mountCount.current) return;
+        if (handlersRef.current.onOpen) handlersRef.current.onOpen();
       };
-      ws.onclose = () => { if (!closed) setConnected(false); setTimeout(() => setWsReconnect(n => n + 1), 2000); };
-      ws.onerror = () => setConnected(false);
-    }
-    connect();
-    return () => { closed = true; if (ws) ws.close(); };
-  }, [runId, wsReconnect]);
-
-  // ── WebSocket for Autonomous Loop (Dashboard live updates) ──
-  const [autoWsReconnect, setAutoWsReconnect] = useState(0);
-  useEffect(() => {
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    let ws;
-    let closed = false;
-    function connect() {
-      ws = new WebSocket(`${proto}//${window.location.host}/ws/autonomous`);
-      ws.onopen = () => setConnected(true);
-      ws.onmessage = (m) => {
-        try { processEvent(JSON.parse(m.data)); } catch (e) { /* ignore parse errors */ }
+      ws.onmessage = (evt) => {
+        if (mountId !== mountCount.current) return;
+        try {
+          const msg = JSON.parse(evt.data);
+          if (initLogged < 5) { initLogged++; }
+          if (handlersRef.current.onMessage) handlersRef.current.onMessage(msg);
+        } catch(e) { /* ignore parse errors */ }
       };
-      ws.onclose = () => { if (!closed) setTimeout(() => setAutoWsReconnect(n => n + 1), 3000); };
-      ws.onerror = () => ws.close();
+      ws.onclose = () => {
+        if (stopped) return;
+        reconnectTimer.current = setTimeout(connect, 3000);
+      };
+      ws.onerror = () => { ws.close(); };
     }
+
     connect();
-    return () => { closed = true; if (ws) ws.close(); };
-  }, [autoWsReconnect]);
-
-  function processEvent(ev) {
-    const { type, payload, timestamp } = ev;
-    const ts = timestamp ? new Date(timestamp).toLocaleTimeString() : "";
-    const entry = { type, payload, timestamp: ts, id: uid() };
-    setLog((prev) => [...prev.slice(-99), entry]);
-    switch (type) {
-      case "hypothesis":
-        setHypothesis(payload.hypothesis || "");
-        setIteration(payload.iteration || 0);
-        setMaxIter(payload.max_iterations || 5);
-        break;
-      case "iteration_start":
-        setIteration(payload.iteration || 0);
-        break;
-      case "critique":
-        setHypothesis((prev) => prev + "\n\n\u2550 Critique \u2550\n" + (payload.critique || ""));
-        break;
-      case "iteration_result":
-        setIteration(payload.iteration || 0);
-        setMetrics(payload.metrics || {});
-        if (payload.metrics)
-          setChartData((prev) => [
-            ...prev,
-            {
-              iter: payload.iteration,
-              sharpe: payload.metrics.sharpe_ratio || 0,
-              wr: payload.metrics.win_rate || 0,
-              dd: Math.abs(payload.metrics.max_drawdown || 0),
-            },
-          ]);
-        break;
-      case "sentiment":
-        if (payload) setSentiment(payload);
-        break;
-      case "task_done":
-        setTimeline((prev) => [
-          ...prev.slice(-99),
-          {
-            agent: payload.agent,
-            task: (payload.description || "").slice(0, 120),
-            time: ts,
-            id: uid(),
-          },
-        ]);
-        break;
-      case "run_start":
-        setRunning(true);
-        setHypothesis("");
-        setMetrics({});
-        setIteration(0);
-        break;
-      case "token_usage":
-        setTokens(payload || { total_tokens: 0 });
-        break;
-      case "run_complete":
-      case "run_error":
-        setRunning(false);
-        break;
-      // Dashboard events
-      case "autonomous_goal_generated":
-        setAutonomousState((prev) => ({
-          ...prev,
-          current_goal: payload.motivation,
-          last_regime: payload.regime,
-        }));
-        break;
-      case "autonomous_cycle_complete":
-        fetch("/api/autonomous/status").then(r=>r.json()).then(setAutonomousState).catch(()=>{});
-        fetch("/api/regime/current").then(r=>r.json()).then(setRegimeSnapshot).catch(()=>{});
-        fetch("/api/autonomous/iterations").then(r=>r.json()).then(setIterationData).catch(()=>{});
-        break;
-      case "strategy_decay_detected":
-        setLog((prev) => [...prev.slice(-99), { type: "decay_alert", payload, time: ts, id: uid() }]);
-        fetch("/api/strategies/deployable").then(r=>r.json()).then(d=>{const a=Array.isArray(d)?d:d.strategies||[];setStrategyTabData(a);}).catch(()=>{});
-        break;
-      case "strategy_retired":
-        fetch("/api/strategies/deployable").then(r=>r.json()).then(d=>{const a=Array.isArray(d)?d:d.strategies||[];setStrategyTabData(a);}).catch(()=>{});
-        break;
-      case "trade_signal_evaluated":
-        setSignalsTabData((prev) => [...prev.slice(-199), { signal: payload, time: ts, id: uid() }]);
-        break;
-      case "trade_executed":
-        setSignalsTabData((prev) => [...prev.slice(-199), { signal: { ...payload, type: "executed" }, time: ts, id: uid() }]);
-        fetch("/api/positions/open").then(r=>r.json()).then(d=>setPositions(Array.isArray(d)?d:[])).catch(()=>{});
-        break;
-      case "anomaly_detected":
-        setLog((prev) => [...prev.slice(-99), { type: "anomaly", payload, time: ts, id: uid() }]);
-        break;
-      case "circuit_breaker_triggered":
-        setCircuitBreaker({ halted: true, reason: payload.reason });
-        break;
-      case "circuit_breaker_cleared":
-        setCircuitBreaker({ halted: false });
-        break;
-      case "log":
-        setTerminalLog((prev) => [...prev.slice(-499), { ...payload, timestamp: ts, id: uid() }]);
-        break;
-    }
-  }
-
-  useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [log]);
-
-  function startRun(goal) {
-    if (!goal?.trim()) return;
-    setShowModal(false);
-    setRunning(true);
-    setHypothesis("");
-    setMetrics({});
-    setIteration(0);
-    fetch("/api/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ goal, max_cycles: cycleInput, max_iterations: iterInput }),
-    })
-      .then((r) => r.json())
-      .then((d) => { if (d.run_id) setRunId(d.run_id); })
-      .catch(() => setRunning(false));
-  }
-
-  // ── Autonomous Actions ──
-  function startAutonomous() {
-    setAutoStarting(true);
-    setLoading((p) => ({ ...p, autonomous: true }));
-    fetch("/api/autonomous/start", { method: "POST" })
-      .then((r) => r.json())
-      .then((d) => {
-        setAutoStarting(false);
-        setAutonomousState((prev) => ({ ...prev, is_running: true }));
-        setTimeout(pollAll, 500);
-      })
-      .catch(() => setAutoStarting(false));
-  }
-  function stopAutonomous() {
-    setAutoStopping(true);
-    fetch("/api/autonomous/stop", { method: "POST" })
-      .then((r) => r.json())
-      .then(() => {
-        setAutoStopping(false);
-        setAutonomousState((prev) => ({ ...prev, is_running: false }));
-      })
-      .catch(() => setAutoStopping(false));
-  }
-  function pauseAutonomous() {
-    setAutoPausing(true);
-    fetch("/api/autonomous/pause", { method: "POST" })
-      .then((r) => r.json())
-      .then(() => {
-        setAutoPausing(false);
-        setAutonomousState((prev) => ({ ...prev, is_paused: true, is_running: true }));
-      })
-      .catch(() => setAutoPausing(false));
-  }
-  function resumeAutonomous() {
-    setAutoPausing(true);
-    fetch("/api/autonomous/resume", { method: "POST" })
-      .then((r) => r.json())
-      .then(() => {
-        setAutoPausing(false);
-        setAutonomousState((prev) => ({ ...prev, is_paused: false, is_running: true }));
-      })
-      .catch(() => setAutoPausing(false));
-  }
-
-  function haltCircuitBreaker() {
-    fetch("/api/circuit-breaker/halt?reason=Manual halt from UI", { method: "POST" })
-      .then(r => r.json())
-      .then(d => { setCircuitBreaker(d); })
-      .catch(() => {});
-  }
-  function clearCircuitBreaker() {
-    fetch("/api/circuit-breaker/clear", { method: "POST" })
-      .then(r => r.json())
-      .then(d => { setCircuitBreaker(d); })
-      .catch(() => {});
-  }
-
-  // ── Dashboard Polling ──
-  function pollAll() {
-    const setLoaded = (key) => setLoading((p) => ({ ...p, [key]: false }));
-    fetch("/api/autonomous/status").then(r=>r.json()).then(d=>{setAutonomousState(d);setLoaded("autonomous");}).catch((err)=>{setLoaded("autonomous");setErrors(prev=>({...prev,autonomous:err.message}));});
-    fetch("/api/positions/open").then(r=>r.json()).then(d=>{setPositions(Array.isArray(d)?d:[]);setLoaded("positions");}).catch((err)=>{setLoaded("positions");setErrors(prev=>({...prev,positions:err.message}));});
-    fetch("/api/strategies/deployable").then(r=>r.json()).then(d=>{const a=Array.isArray(d)?d:d.strategies||[];setLoaded("strategies");}).catch((err)=>{setLoaded("strategies");setErrors(prev=>({...prev,strategies:err.message}));});
-    fetch("/api/circuit-breaker/status").then(r=>r.json()).then(d=>{setCircuitBreaker(d);setLoaded("circuit");}).catch((err)=>{setLoaded("circuit");setErrors(prev=>({...prev,circuit:err.message}));});
-    fetch("/api/regime/current").then(r=>r.json()).then(d=>{setRegimeSnapshot(d);setLoaded("regime");}).catch((err)=>{setLoaded("regime");setErrors(prev=>({...prev,regime:err.message}));});
-    fetch("/api/autonomous/iterations").then(r=>r.json()).then(d=>{setIterationData(d);setLoaded("iterations");}).catch((err)=>{setLoaded("iterations");setErrors(prev=>({...prev,iterations:err.message}));});
-    fetch("/api/signals/feed").then(r=>r.json()).then(d=>{const a=Array.isArray(d)?d:d.signals||[];setSignalsTabData(a);setLoaded("signals");}).catch((err)=>{setLoaded("signals");setErrors(prev=>({...prev,signals:err.message}));});
-    fetch("/api/startup/status").then(r=>r.json()).then(d=>{setStartupStatus(d);setLoaded("startup");}).catch((err)=>{setLoaded("startup");setErrors(prev=>({...prev,startup:err.message}));});
-    fetch("/api/risk/portfolio").then(r=>r.json()).then(d=>{setRiskPortfolio(d);setLoaded("risk");}).catch((err)=>{setLoaded("risk");setErrors(prev=>({...prev,risk:err.message}));});
-    fetch("/api/data/health").then(r=>r.json()).then(d=>{setDataHealth(d);}).catch(()=>{});
-  }
-
-  // Poll dashboard data every 10s
-  useEffect(() => {
-    if (tab !== "dashboard") return;
-    pollAll();
-    const iv = setInterval(pollAll, 10000);
-    return () => clearInterval(iv);
-  }, [tab]);
-
-  // Fetch strategies data when on strategies tab
-  useEffect(() => {
-    if (tab !== "strategies") return;
-    fetch("/api/strategies/deployable").then(r=>r.json()).then(d=>{
-      const a = Array.isArray(d) ? d : d.strategies || [];
-      setStrategyTabData(a);
-    }).catch(()=>{});
-  }, [tab]);
-
-  // Fetch signals data when on signals tab
-  useEffect(() => {
-    if (tab !== "signals") return;
-    const poll = () => {
-      fetch("/api/signals/feed").then(r=>r.json()).then(d=>{
-        const a = Array.isArray(d) ? d : d.signals || [];
-        setSignalsTabData(a);
-      }).catch(()=>{});
+    return () => {
+      stopped = true;
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
     };
-    poll();
-    const iv = setInterval(poll, 10000);
-    return () => clearInterval(iv);
-  }, [tab]);
+  }, [url]);
 
-  if (!mounted) return null;
+  const send = useCallback((data) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(data));
+    }
+  }, []);
 
-  const isLive = running || autonomousState?.is_running;
-  const isActive = isLive;
-  const dotColor = isActive ? T.sage : connected ? T.teal : T.muted;
-  const dotLabel = running ? "Running" : autonomousState?.is_running ? (autonomousState?.is_paused ? "Paused" : "Auto") : connected ? "Standby" : "Offline";
-
-  return (
-    <div
-      style={{
-        maxWidth: 1440,
-        margin: "0 auto",
-        padding: "0 24px",
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      {/* ── NavBar ── */}
-      <NavBar
-        tab={tab}
-        setTab={setTab}
-        dotColor={dotColor}
-        dotLabel={dotLabel}
-        tokens={tokens}
-        circuitBreaker={circuitBreaker}
-        running={running}
-        autonomousState={autonomousState}
-        startAutonomous={startAutonomous}
-        stopAutonomous={stopAutonomous}
-        autoStarting={autoStarting}
-        autoStopping={autoStopping}
-        pauseAutonomous={pauseAutonomous}
-        resumeAutonomous={resumeAutonomous}
-        autoPausing={autoPausing}
-        setShowModal={setShowModal}
-      />
-
-      {/* ── Tab Content ── */}
-      <div style={{ flex: 1, minHeight: 0, paddingTop: 12, overflow: "hidden" }}>
-        {tab === "research" && (
-          <ResearchView
-            hypothesis={hypothesis}
-            iteration={iteration}
-            maxIter={maxIter}
-            metrics={metrics}
-            chartData={chartData}
-            sentiment={sentiment}
-            running={running}
-            timeline={timeline}
-            tokens={tokens}
-            log={log}
-            logRef={logRef}
-            goalInput={goalInput}
-            setGoalInput={setGoalInput}
-            cycleInput={cycleInput}
-            setCycleInput={setCycleInput}
-            iterInput={iterInput}
-            setIterInput={setIterInput}
-            startRun={startRun}
-          />
-        )}
-        {tab === "dashboard" && (
-          <DashboardView
-            autonomousState={autonomousState}
-            circuitBreaker={circuitBreaker}
-            regimeSnapshot={regimeSnapshot}
-            positions={positions}
-            tokens={tokens}
-            iterationData={iterationData}
-            loading={loading}
-            startupStatus={startupStatus}
-            riskPortfolio={riskPortfolio}
-            dataHealth={dataHealth}
-            startAutonomous={startAutonomous}
-            stopAutonomous={stopAutonomous}
-            pauseAutonomous={pauseAutonomous}
-            resumeAutonomous={resumeAutonomous}
-            autoStarting={autoStarting}
-            autoStopping={autoStopping}
-            autoPausing={autoPausing}
-            haltCircuitBreaker={haltCircuitBreaker}
-            clearCircuitBreaker={clearCircuitBreaker}
-            terminalLog={terminalLog}
-          />
-        )}
-        {tab === "strategies" && <StrategyLibraryView strategies={strategyTabData} />}
-        {tab === "signals" && <SignalFeedView signals={signalsTabData} />}
-      </div>
-
-      {/* Error Status Bar */}
-      {Object.keys(errors).length > 0 && (
-        <div style={{position: 'fixed', bottom: 0, left: 0, right: 0, background: 'var(--coral)', color: '#fff', padding: '4px 16px', fontSize: 11, fontFamily: 'DM Mono', zIndex: 9999, display: 'flex', gap: 16}}>
-          <span>⚠ API Errors: {Object.keys(errors).length}</span>
-          {Object.entries(errors).slice(0, 3).map(([k, v]) => (
-            <span key={k} style={{opacity: 0.8}}>{k}: {v}</span>
-          ))}
-        </div>
-      )}
-
-      {showModal && (
-        <Modal
-          goal={goalInput}
-          setGoal={setGoalInput}
-          cycles={cycleInput}
-          setCycles={setCycleInput}
-          iters={iterInput}
-          setIters={setIterInput}
-          onStart={startRun}
-          onClose={() => setShowModal(false)}
-        />
-      )}
-    </div>
-  );
+  return send;
 }
 
-// ════════════════════════════════════════════
-// NAVBAR
-// ════════════════════════════════════════════
-function NavBar({
-  tab, setTab, dotColor, dotLabel, tokens, circuitBreaker,
-  running, autonomousState, startAutonomous, stopAutonomous,
-  autoStarting, autoStopping, pauseAutonomous, resumeAutonomous,
-  autoPausing, setShowModal
-}) {
-  const isRunning = autonomousState?.is_running;
-  const isPaused = autonomousState?.is_paused;
-  return (
-    <header className="nav-glass" style={{
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      padding: "0 4px",
-      margin: "0 -24px",
-      height: 48,
-      flexShrink: 0,
-      position: "sticky",
-      top: 0,
-      zIndex: 100,
-    }}>
-      {/* Logo + Status */}
-      <div style={{ display: "flex", alignItems: "center", gap: 14, paddingLeft: 24 }}>
-        <div style={{
-          width: 30, height: 30,
-          borderRadius: "0 6px 0 6px",
-          border: `2px solid ${T.amber}`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 14, fontWeight: 700, color: T.amber,
-          fontFamily: "'Syne',sans-serif",
-        }}>
-          ⟐
-        </div>
-        <div>
-          <h1 style={{
-            fontFamily: "'Syne',sans-serif",
-            fontSize: 14, fontWeight: 700,
-            letterSpacing: "-0.3px", color: T.text,
-            lineHeight: 1.2,
-          }}>
-            Crypto Agent Bot
-          </h1>
-          <div style={{
-            fontSize: 9, color: T.muted,
-            fontFamily: "'DM Mono',monospace",
-            display: "flex", alignItems: "center", gap: 8,
-          }}>
-            <span style={{ color: dotColor, fontSize: 7 }}>●</span>
-            <span>{dotLabel}</span>
-            {tokens.total_tokens > 0 && (
-              <span style={{ color: T.gold }}>◆ {tokens.total_tokens.toLocaleString()} tok</span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Tab Navigation */}
-      <div className="nav-tabs" style={{
-        display: "flex", alignItems: "center", gap: 2,
-        height: "100%",
-      }}>
-        {TABS.map((t) => {
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              style={{
-                position: "relative",
-                height: "100%",
-                padding: "0 18px",
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                fontSize: 10,
-                fontWeight: active ? 700 : 500,
-                fontFamily: "'Syne',sans-serif",
-                color: active ? T.text : T.muted,
-                textTransform: "uppercase",
-                letterSpacing: "2px",
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                opacity: active ? 1 : 0.6,
-              }}
-            >
-              <span style={{ fontSize: 9, color: active ? T.amber : T.muted }}>{t.icon}</span>
-              {t.label}
-              {active && (
-                <div style={{
-                  position: "absolute",
-                  bottom: 0, left: "10%", right: "10%",
-                  height: 2,
-                  background: `linear-gradient(90deg,transparent,${T.amber},transparent)`,
-                  borderRadius: "1px 1px 0 0",
-                }} />
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Action Controls */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, paddingRight: 24 }}>
-        {/* Circuit Breaker Alert */}
-        {circuitBreaker?.halted && (
-          <div style={{
-            display: "flex", alignItems: "center", gap: 4,
-            padding: "4px 10px",
-            background: `${T.coral}15`,
-            border: `1px solid ${T.coral}30`,
-            borderRadius: "0 4px 0 4px",
-          }}>
-            <div style={{
-              width: 6, height: 6, borderRadius: "50%",
-              background: T.coral,
-              animation: "pulse 1.5s ease-in-out infinite",
-            }} />
-            <span style={{ fontSize: 9, color: T.coral, fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>
-              HALTED
-            </span>
-          </div>
-        )}
-
-        {/* Auto Start/Stop */}
-        {!isRunning ? (
-          <button
-            onClick={startAutonomous}
-            disabled={autoStarting || running}
-            style={{
-              padding: "5px 12px",
-              borderRadius: "0 4px 0 4px",
-              background: autoStarting ? T.gold : "transparent",
-              color: autoStarting ? "#000" : T.teal,
-              border: `1px solid ${autoStarting ? T.gold : T.teal}`,
-              cursor: (autoStarting || running) ? "not-allowed" : "pointer",
-              fontSize: 9,
-              fontWeight: 700,
-              fontFamily: "'Syne',sans-serif",
-              textTransform: "uppercase",
-              letterSpacing: "1.5px",
-              opacity: (autoStarting || running) ? 0.5 : 1,
-            }}
-          >
-            {autoStarting ? "..." : "Start Auto"}
-          </button>
-        ) : (
-          <div style={{ display: "flex", gap: 4 }}>
-            {!isPaused ? (
-              <button
-                onClick={pauseAutonomous}
-                disabled={autoPausing}
-                style={{
-                  padding: "5px 10px",
-                  borderRadius: "0 4px 0 4px",
-                  background: "transparent",
-                  color: T.gold,
-                  border: `1px solid ${T.gold}`,
-                  cursor: autoPausing ? "not-allowed" : "pointer",
-                  fontSize: 8,
-                  fontWeight: 700,
-                  fontFamily: "'Syne',sans-serif",
-                  textTransform: "uppercase",
-                  letterSpacing: "1px",
-                  opacity: autoPausing ? 0.5 : 1,
-                }}
-              >
-                Pause
-              </button>
-            ) : (
-              <button
-                onClick={resumeAutonomous}
-                disabled={autoPausing}
-                style={{
-                  padding: "5px 10px",
-                  borderRadius: "0 4px 0 4px",
-                  background: "transparent",
-                  color: T.sage,
-                  border: `1px solid ${T.sage}`,
-                  cursor: autoPausing ? "not-allowed" : "pointer",
-                  fontSize: 8,
-                  fontWeight: 700,
-                  fontFamily: "'Syne',sans-serif",
-                  textTransform: "uppercase",
-                  letterSpacing: "1px",
-                  opacity: autoPausing ? 0.5 : 1,
-                }}
-              >
-                Resume
-              </button>
-            )}
-            <button
-              onClick={stopAutonomous}
-              disabled={autoStopping}
-              style={{
-                padding: "5px 10px",
-                borderRadius: "0 4px 0 4px",
-                background: "transparent",
-                color: T.coral,
-                border: `1px solid ${T.coral}`,
-                cursor: autoStopping ? "not-allowed" : "pointer",
-                fontSize: 8,
-                fontWeight: 700,
-                fontFamily: "'Syne',sans-serif",
-                textTransform: "uppercase",
-                letterSpacing: "1px",
-                opacity: autoStopping ? 0.5 : 1,
-              }}
-            >
-              Stop
-            </button>
-          </div>
-        )}
-
-        <button
-          onClick={() => setShowModal(true)}
-          disabled={running}
-          style={{
-            padding: "5px 12px",
-            borderRadius: "0 4px 0 4px",
-            background: T.amber,
-            color: "#000",
-            border: `1px solid ${T.amber}`,
-            cursor: running ? "not-allowed" : "pointer",
-            fontSize: 9,
-            fontWeight: 700,
-            fontFamily: "'Syne',sans-serif",
-            textTransform: "uppercase",
-            letterSpacing: "1.5px",
-            opacity: running ? 0.4 : 1,
-            marginLeft: 2,
-          }}
-        >
-          + New Run
-        </button>
-      </div>
-    </header>
-  );
+// ═══════════════════════════════════════════════
+// API HOOK
+// ═══════════════════════════════════════════════
+function useApi() {
+  const apiBase = `/api`;
+  const call = useCallback(async (path, opts = {}) => {
+    const r = await fetch(`${apiBase}${path}`, {
+      headers: { "Content-Type":"application/json", ...opts.headers },
+      ...opts,
+    });
+    if (!r.ok) { const err = await r.text(); throw new Error(err); }
+    return r.json();
+  }, []);
+  return call;
 }
 
-// ════════════════════════════════════════════
-// RESEARCH VIEW
-// ════════════════════════════════════════════
-function ResearchView({
-  hypothesis, iteration, maxIter, metrics, chartData,
-  sentiment, running, timeline, tokens, log, logRef,
-  goalInput, setGoalInput, cycleInput, setCycleInput,
-  iterInput, setIterInput, startRun,
-}) {
-  const hasM = metrics && Object.keys(metrics).length > 0;
-  return (
-    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-      {/* 3-col grid */}
-      <div className="research-grid" style={{
-        flex: 1, minHeight: 0,
-        display: "grid",
-        gridTemplateColumns: "210px 1fr 190px",
-        gap: 10,
-      }}>
-        {/* Left: Timeline Panel */}
-        <div className="r1" style={{ overflow: "hidden" }}>
-          <TimelinePanel events={timeline} />
-        </div>
-
-        {/* Center: Hypothesis + Chart + Metrics */}
-        <div className="r2" style={{ display: "flex", flexDirection: "column", gap: 8, overflow: "hidden" }}>
-          {/* Hypothesis Card */}
-          <div style={{
-            background: T.card,
-            borderRadius: "0 8px 0 8px",
-            border: `1px solid ${T.border}`,
-            flexShrink: 0,
-            maxHeight: 150,
-            overflowY: "auto",
-            position: "relative",
-          }}>
-            <div style={{
-              position: "absolute", top: 12, left: 0,
-              width: 3, height: 26,
-              background: T.amber,
-              borderRadius: "0 2px 2px 0",
-            }} />
-            <div style={{ padding: "10px 16px 10px 22px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                <h2 style={{
-                  fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
-                  color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
-                }}>
-                  Hypothesis
-                </h2>
-                {iteration > 0 && (
-                  <span style={{
-                    fontSize: 8, fontWeight: 600,
-                    padding: "1px 8px",
-                    borderRadius: "0 4px 0 4px",
-                    background: `${T.amber}15`,
-                    color: T.amber,
-                    fontFamily: "'DM Mono',monospace",
-                  }}>
-                    IT {iteration}/{maxIter}
-                  </span>
-                )}
-              </div>
-              {hypothesis ? (
-                <pre style={{
-                  fontSize: 11, color: T.text, lineHeight: 1.7,
-                  fontFamily: "'DM Mono',monospace", whiteSpace: "pre-wrap",
-                }}>
-                  {hypothesis}
-                </pre>
-              ) : (
-                <div style={{ fontSize: 11, color: T.muted, fontStyle: "italic" }}>
-                  {running ? "Generating hypothesis..." : "No hypothesis yet."}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Metrics Grid */}
-          <div className="metrics-grid" style={{
-            display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6,
-            flexShrink: 0,
-          }}>
-            <MetricBox label="Sharpe" value={hasM ? metrics.sharpe_ratio?.toFixed(2) : "\u2014"} color={T.amber} />
-            <MetricBox label="Win Rate" value={hasM && metrics.win_rate != null ? `${(metrics.win_rate * 100).toFixed(0)}%` : "\u2014"} color={T.sage} />
-            <MetricBox label="Max DD" value={hasM && metrics.max_drawdown != null ? `${(Math.abs(metrics.max_drawdown) * 100).toFixed(1)}%` : "\u2014"} color={T.coral} />
-            <MetricBox label="Trades" value={hasM ? metrics.total_trades : "\u2014"} color={T.teal} />
-            <SentimentBox sentiment={sentiment} />
-          </div>
-
-          {/* Chart */}
-          <div style={{
-            flex: 1, minHeight: 80,
-            background: T.card,
-            borderRadius: "0 8px 0 8px",
-            border: `1px solid ${T.border}`,
-            padding: "10px 16px",
-            position: "relative",
-          }}>
-            <div style={{
-              position: "absolute", top: 12, left: 0,
-              width: 3, height: 20,
-              background: T.teal,
-              borderRadius: "0 2px 2px 0",
-            }} />
-            <h2 style={{
-              fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
-              color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
-              marginBottom: 4, paddingLeft: 10,
-            }}>
-              Sharpe Progress
-            </h2>
-            {chartData.length === 0 ? (
-              <div style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                height: "calc(100% - 24px)",
-              }}>
-                <div style={{ fontSize: 10, color: T.muted }}>
-                  {running ? "Waiting for data..." : "No iterations yet"}
-                </div>
-              </div>
-            ) : (
-              <Chart data={chartData} xKey="iter" yKey="sharpe" color={T.amber} />
-            )}
-          </div>
-        </div>
-
-        {/* Right: Stats Panel */}
-        <div className="r3" style={{ overflow: "hidden" }}>
-          <StatsPanel chartData={chartData} tokens={tokens} />
-        </div>
-      </div>
-
-      {/* Run Controls */}
-      <RunControls
-        goal={goalInput} setGoal={setGoalInput}
-        cycles={cycleInput} setCycles={setCycleInput}
-        iters={iterInput} setIters={setIterInput}
-        onStart={startRun}
-        running={running}
-      />
-
-      {/* Log Panel */}
-      <LogPanel events={log} ref={logRef} />
-    </div>
-  );
+// ═══════════════════════════════════════════════
+// SKELETON LOADING WRAPPER
+// ═══════════════════════════════════════════════
+function LazyLoad({loading,children,height=60}) {
+  if (loading) return <Skeleton w="100%" h={height} />;
+  return children;
 }
 
-function TimelinePanel({ events }) {
-  return (
-    <div style={{
-      background: T.card,
-      borderRadius: "0 8px 0 8px",
-      border: `1px solid ${T.border}`,
-      display: "flex",
-      flexDirection: "column",
-      height: "100%",
-      overflow: "hidden",
-      position: "relative",
-    }}>
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: 2,
-        background: `linear-gradient(90deg,${T.amber},transparent)`,
-      }} />
-      <div style={{
-        padding: "12px 14px 4px",
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-      }}>
-        <h2 style={{
-          fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
-          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
-        }}>
-          Agents
-        </h2>
-        <span style={{ fontSize: 9, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
-          {events.length}
-        </span>
-      </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: "2px 8px 8px" }}>
-        {events.length === 0 ? (
-          <div style={{ padding: "32px 8px", textAlign: "center" }}>
-            <div style={{ fontSize: 16, color: T.muted, marginBottom: 4, opacity: 0.3 }}>⟐</div>
-            <div style={{ fontSize: 10, color: T.muted }}>Awaiting activity...</div>
-          </div>
-        ) : (
-          events.map((evt) => {
-            const ag = AGENTS[evt.agent] || { icon: "\u25C6", label: evt.agent, color: T.muted };
-            return (
-              <div key={evt.id} style={{
-                display: "flex", alignItems: "center", gap: 8,
-                padding: "5px 6px",
-                borderRadius: 4,
-                borderBottom: `1px solid ${T.border}15`,
-              }}>
-                <div style={{
-                  width: 22, height: 22,
-                  borderRadius: "0 4px 0 4px",
-                  background: `${ag.color}15`,
-                  border: `1px solid ${ag.color}30`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 9, color: ag.color, flexShrink: 0, fontWeight: 700,
-                }}>
-                  {ag.icon}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: T.text, lineHeight: 1.3 }}>
-                    {ag.label}
-                  </div>
-                  <div style={{
-                    fontSize: 8, color: T.secondary,
-                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                    lineHeight: 1.3,
-                  }}>
-                    {evt.task}
-                  </div>
-                </div>
-                <span style={{
-                  fontSize: 8, color: T.muted,
-                  fontFamily: "'DM Mono',monospace", flexShrink: 0,
-                }}>
-                  {evt.time}
-                </span>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MetricBox({ label, value, color }) {
-  return (
-    <div style={{
-      background: T.card,
-      borderRadius: "0 6px 0 6px",
-      border: `1px solid ${T.border}`,
-      padding: "8px 8px",
-      textAlign: "center",
-      position: "relative",
-      overflow: "hidden",
-    }}>
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: 1.5,
-        background: color, opacity: 0.4,
-      }} />
-      <div style={{
-        fontSize: 8, color: T.muted,
-        textTransform: "uppercase", letterSpacing: "1.5px",
-        marginBottom: 2, fontWeight: 500,
-        fontFamily: "'Syne',sans-serif",
-      }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 15, fontWeight: 700, color, fontFamily: "'DM Mono',monospace" }}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function SentimentBox({ sentiment }) {
-  const bias = sentiment?.bias || "NEUTRAL";
-  const fg = sentiment?.fear_greed;
-  const c = bias === "bullish" ? T.sage : bias === "bearish" ? T.coral : T.muted;
-  return (
-    <div style={{
-      background: T.card,
-      borderRadius: "0 6px 0 6px",
-      border: `1px solid ${T.border}`,
-      padding: "8px 8px",
-      textAlign: "center",
-      position: "relative",
-      overflow: "hidden",
-    }}>
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: 1.5,
-        background: c, opacity: 0.4,
-      }} />
-      <div style={{
-        fontSize: 8, color: T.muted,
-        textTransform: "uppercase", letterSpacing: "1.5px",
-        marginBottom: 2, fontWeight: 500,
-        fontFamily: "'Syne',sans-serif",
-      }}>
-        Sentiment
-      </div>
-      <div style={{
-        fontSize: 12, fontWeight: 700, color: c,
-        fontFamily: "'DM Mono',monospace", letterSpacing: "1px",
-      }}>
-        {bias}
-      </div>
-      {fg && (
-        <div style={{ fontSize: 7, color: T.muted, marginTop: 1, fontFamily: "'DM Mono',monospace" }}>
-          {fg.value} {fg.classification}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function RunControls({ goal, setGoal, cycles, setCycles, iters, setIters, onStart, running }) {
-  return (
-    <div style={{
-      background: T.card,
-      borderRadius: "0 6px 0 6px",
-      border: `1px solid ${T.border}`,
-      padding: "8px 14px",
-      display: "flex", alignItems: "center", gap: 10,
-      flexShrink: 0,
-    }}>
-      <input type="text" value={goal} onChange={e => setGoal(e.target.value)}
-        placeholder="Research goal..." disabled={running}
-        style={{
-          flex: 1, padding: "5px 10px", borderRadius: "0 4px 0 4px",
-          background: T.surface, border: `1px solid ${T.border}`, color: T.text,
-          fontSize: 10, fontFamily: "'DM Mono',monospace", outline: "none",
-        }} />
-      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <label style={{ fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>Cycles</label>
-        <input type="number" min={1} max={10} value={cycles}
-          onChange={e => setCycles(Number(e.target.value))} disabled={running}
-          style={{
-            width: 48, padding: "4px 6px", borderRadius: "0 4px 0 4px",
-            background: T.surface, border: `1px solid ${T.border}`, color: T.text,
-            fontSize: 10, fontFamily: "'DM Mono',monospace", outline: "none", textAlign: "center",
-          }} />
-        <label style={{ fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>Iters</label>
-        <input type="number" min={1} max={10} value={iters}
-          onChange={e => setIters(Number(e.target.value))} disabled={running}
-          style={{
-            width: 48, padding: "4px 6px", borderRadius: "0 4px 0 4px",
-            background: T.surface, border: `1px solid ${T.border}`, color: T.text,
-            fontSize: 10, fontFamily: "'DM Mono',monospace", outline: "none", textAlign: "center",
-          }} />
-        <button onClick={() => onStart(goal)} disabled={running || !goal?.trim()}
-          style={{
-            padding: "5px 14px", borderRadius: "0 4px 0 4px",
-            background: running || !goal?.trim() ? T.muted : T.amber,
-            color: "#000",
-            border: `1px solid ${running || !goal?.trim() ? T.muted : T.amber}`,
-            cursor: (running || !goal?.trim()) ? "not-allowed" : "pointer",
-            fontSize: 9, fontWeight: 700, fontFamily: "'Syne',sans-serif",
-            textTransform: "uppercase", letterSpacing: "1px",
-            opacity: (running || !goal?.trim()) ? 0.5 : 1,
-          }}>
-          Run
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function Chart({ data, xKey, yKey, color }) {
-  const w = 700, h = 120, pl = 40, pr = 14, pt = 6, pb = 20;
-  const cw = w - pl - pr, ch = h - pt - pb;
-  const xV = data.map((d) => d[xKey]), yV = data.map((d) => d[yKey] || 0);
-  const xM = Math.min(...xV), xX = Math.max(...xV);
-  const yM = Math.min(...yV), yX = Math.max(...yV);
-  const xR = xX - xM || 1, yR = yX - yM || 1;
-  const pts = data.map((d) => ({
-    x: pl + ((d[xKey] - xM) / xR) * cw,
-    y: pt + ch - (((d[yKey] || 0) - yM) / yR) * ch,
-  }));
-  const ln = pts.map((p) => `${p.x},${p.y}`).join(" ");
-  const fl = pts.map((p) => `${p.x},${p.y}`).join(" ");
-  const bs = `${pl},${pt + ch} ${pl + cw},${pt + ch}`;
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: "100%", display: "block" }}>
-      <defs>
-        <linearGradient id={`af-${color.replace("#","")}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.18" />
-          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
-      {[0.25, 0.5, 0.75].map((f, i) => (
-        <line key={i} x1={pl} y1={pt + ch * f} x2={pl + cw} y2={pt + ch * f}
-          stroke={T.border} strokeWidth="1" strokeDasharray="3 3" />
-      ))}
-      <polygon points={`${fl} ${bs}`} fill={`url(#af-${color.replace("#","")})`} />
-      <polyline points={ln} fill="none" stroke={color} strokeWidth="2"
-        strokeLinejoin="round" strokeLinecap="round" />
-      {pts.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r="2.5" fill={color} stroke={T.card} strokeWidth="1.5" />
-      ))}
-      {pts.length > 0 && (() => {
-        const last = pts[pts.length - 1];
-        return <circle cx={last.x} cy={last.y} r="5" fill={`${color}25`} />;
-      })()}
-      <text x={pl - 4} y={pt + 4} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">
-        {yX.toFixed(2)}
-      </text>
-      <text x={pl - 4} y={pt + ch + 4} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">
-        {yM.toFixed(2)}
-      </text>
-      <text x={pl} y={h - 2} fill={T.muted} fontSize="8" fontFamily="DM Mono">{xM}</text>
-      <text x={w - pr} y={h - 2} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{xX}</text>
-    </svg>
-  );
-}
-
-function StatsPanel({ chartData, tokens }) {
-  const best = chartData.length > 0 ? Math.max(...chartData.map((d) => d.sharpe || 0)) : null;
-  return (
-    <div style={{
-      background: T.card,
-      borderRadius: "0 8px 0 8px",
-      border: `1px solid ${T.border}`,
-      display: "flex", flexDirection: "column",
-      padding: "12px 14px",
-      height: "100%",
-      position: "relative",
-    }}>
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: 2,
-        background: `linear-gradient(90deg,${T.teal},transparent)`,
-      }} />
-      <h2 style={{
-        fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
-        color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
-        marginBottom: 10,
-      }}>
-        Run Stats
-      </h2>
-      <StatRow label="Iterations" value={chartData.length || "\u2014"} />
-      <StatRow label="Best Sharpe" value={best != null ? best.toFixed(2) : "\u2014"} color={T.amber} />
-      <div style={{ flex: 1 }} />
-      <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 8, marginTop: 4 }}>
-        <StatRow label="Total Tokens" value={tokens.total_tokens?.toLocaleString() || "0"} color={T.gold} />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6 }}>
-          <div style={{ background: T.surface, borderRadius: "0 4px 0 4px", padding: "4px 8px" }}>
-            <div style={{ fontSize: 7, color: T.muted, fontFamily: "'DM Mono',monospace" }}>Prompt</div>
-            <div style={{ fontSize: 10, fontWeight: 600, color: T.text, fontFamily: "'DM Mono',monospace" }}>
-              {fmtNum(tokens.prompt_tokens)}
-            </div>
-          </div>
-          <div style={{ background: T.surface, borderRadius: "0 4px 0 4px", padding: "4px 8px" }}>
-            <div style={{ fontSize: 7, color: T.muted, fontFamily: "'DM Mono',monospace" }}>Completion</div>
-            <div style={{ fontSize: 10, fontWeight: 600, color: T.text, fontFamily: "'DM Mono',monospace" }}>
-              {fmtNum(tokens.completion_tokens)}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatRow({ label, value, color }) {
-  return (
-    <div style={{
-      display: "flex", justifyContent: "space-between",
-      alignItems: "center", padding: "3px 0",
-    }}>
-      <span style={{ fontSize: 10, color: T.secondary }}>{label}</span>
-      <span style={{
-        fontSize: 11, fontWeight: 700, color: color || T.text,
-        fontFamily: "'DM Mono',monospace",
-      }}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-const LogPanel = React.forwardRef(function LogPanel({ events }, ref) {
-  const [collapsed, setCollapsed] = React.useState(true);
-  return (
-    <div className="r4" style={{
-      background: T.card,
-      borderRadius: "0 6px 0 6px",
-      border: `1px solid ${T.border}`,
-      maxHeight: collapsed ? 30 : 300,
-      display: "flex",
-      flexDirection: "column",
-      overflow: "hidden",
-      transition: "max-height 0.3s ease",
-    }}>
-      <div
-        style={{
-          padding: "4px 14px",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          cursor: "pointer", flexShrink: 0,
-        }}
-        onClick={() => setCollapsed(!collapsed)}
-      >
-        <h2 style={{
-          fontFamily: "'Syne',sans-serif", fontSize: 8, fontWeight: 600,
-          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
-        }}>
-          Event Log
-        </h2>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
-            {events.length}
-          </span>
-          <button style={{
-            background: "transparent", border: `1px solid ${T.border}`,
-            color: T.muted, borderRadius: "0 3px 0 3px",
-            padding: "1px 6px", cursor: "pointer", fontSize: 8,
-            lineHeight: 1.4,
-          }}>
-            {collapsed ? "\u25BC" : "\u25B2"}
-          </button>
-        </div>
-      </div>
-      {!collapsed && (
-        <div ref={ref} style={{
-          flex: 1, overflowY: "auto",
-          padding: "2px 14px 4px",
-          fontSize: 10, fontFamily: "'DM Mono',monospace",
-          lineHeight: 1.8, color: T.secondary,
-        }}>
-          {events.length === 0 ? (
-            <span style={{ color: T.muted }}>Waiting for events...</span>
-          ) : (
-            events.map((evt) => (
-              <div key={evt.id} style={{ display: "flex", gap: 8 }}>
-                <span style={{ color: T.muted, flexShrink: 0, fontSize: 9 }}>{evt.timestamp}</span>
-                <span style={{
-                  color: evt.type === "anomaly" ? T.coral
-                       : evt.type === "decay_alert" ? T.gold
-                       : evt.type === "run_error" ? T.coral
-                       : T.teal,
-                  flexShrink: 0, fontSize: 9,
-                }}>
-                  [{evt.type}]
-                </span>
-                <span style={{
-                  color: T.text,
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  fontSize: 9,
-                }}>
-                  {typeof evt.payload === "string" ? evt.payload.slice(0, 180)
-                   : JSON.stringify(evt.payload).slice(0, 180)}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-});
-
-const TerminalLogPanel = React.forwardRef(function TerminalLogPanel({ events }, ref) {
-  const [collapsed, setCollapsed] = React.useState(true);
-  const scrollRef = React.useRef(null);
-  React.useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [events]);
-  return (
-    <div style={{
-      background: T.card,
-      borderRadius: "0 8px 0 8px",
-      border: `1px solid ${T.border}`,
-      maxHeight: collapsed ? 30 : 200,
-      display: "flex",
-      flexDirection: "column",
-      overflow: "hidden",
-      transition: "max-height 0.3s ease",
-    }}>
-      <div
-        onClick={() => setCollapsed(!collapsed)}
-        style={{
-          padding: "4px 14px",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          cursor: "pointer", flexShrink: 0,
-        }}
-      >
-        <h2 style={{
-          fontFamily: "'Syne',sans-serif", fontSize: 8, fontWeight: 600,
-          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
-        }}>
-          Terminal Log
-        </h2>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
-            {events.length}
-          </span>
-          <button style={{
-            background: "transparent", border: `1px solid ${T.border}`,
-            color: T.muted, borderRadius: "0 3px 0 3px",
-            padding: "1px 6px", cursor: "pointer", fontSize: 8,
-            lineHeight: 1.4,
-          }}>
-            {collapsed ? "\u25BC" : "\u25B2"}
-          </button>
-        </div>
-      </div>
-      {!collapsed && (
-        <div ref={scrollRef} style={{
-          flex: 1, overflowY: "auto",
-          padding: "2px 14px 4px",
-          fontSize: 9.5, fontFamily: "'DM Mono',monospace",
-          lineHeight: 1.6, color: T.secondary,
-        }}>
-          {events.length === 0 ? (
-            <span style={{ color: T.muted }}>Waiting for log output...</span>
-          ) : (
-            events.map((evt) => (
-              <div key={evt.id} style={{ display: "flex", gap: 8 }}>
-                <span style={{ color: T.muted, flexShrink: 0, fontSize: 8 }}>{evt.timestamp}</span>
-                <span style={{
-                  color: evt.level === "error" ? T.coral
-                       : evt.level === "warning" ? T.gold
-                       : evt.level === "debug" ? T.muted
-                       : T.teal,
-                  flexShrink: 0, fontSize: 8,
-                }}>
-                  [{evt.level ? evt.level.toUpperCase() : "INFO"}]
-                </span>
-                <span style={{
-                  color: T.text,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  fontSize: 8.5,
-                }}>
-                  {evt.message || JSON.stringify(evt).slice(0, 300)}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-});
-
-const SharpeHistoryChart = React.forwardRef(function SharpeHistoryChart({ results }, ref) {
-  if (!results || results.length < 2) {
+// ═══════════════════════════════════════════════
+// SHARPE HISTORY CHART
+// ═══════════════════════════════════════════════
+function SharpeChart({results}) {
+  if (!results || results.length < 1) {
     return (
-      <div style={{
-        background: T.card,
-        borderRadius: "0 8px 0 8px",
-        border: `1px solid ${T.border}`,
-        padding: 14,
-        position: "relative",
-      }}>
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, height: 2,
-          background: `linear-gradient(90deg,${T.amber},transparent)`,
-        }} />
-        <h2 style={{
-          fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
-          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
-          marginBottom: 8,
-        }}>
-          Sharpe History
-        </h2>
-        <div style={{ fontSize: 10, color: T.muted, textAlign: "center", padding: 16 }}>
-          {results?.length === 1 ? "Not enough data points yet" : "No iterations yet"}
+      <div className="card card-pad">
+        <Accent color={T.amber} />
+        <SectionHeading>Sharpe History</SectionHeading>
+        <div style={{fontSize:10,color:T.muted,textAlign:"center",padding:16}}>
+          No iterations yet
         </div>
       </div>
     );
   }
 
-  const sorted = [...results].sort((a, b) => (a.iteration || 0) - (b.iteration || 0));
+  const sorted = [...results].sort((a, b) => (a.iteration||0) - (b.iteration||0));
   let runningBest = -Infinity;
-  const points = sorted.map((r) => {
-    const sharpe = r.sharpe_ratio ?? 0;
-    const isRecord = sharpe > runningBest + 0.000001;
+  const points = sorted.map((r, idx) => {
+    const iter = (r.iteration != null && r.iteration > 0) ? r.iteration : idx + 1;
+    const sharpe = r.sharpe_ratio ?? r.sharpe ?? 0;
+    const isRecord = sharpe > runningBest + 1e-9;
     if (isRecord) runningBest = sharpe;
-    return { iter: r.iteration ?? 0, sharpe, isRecord };
+    return {iter, sharpe, isRecord};
   });
 
-  const bestGlobal = Math.max(...points.map((p) => p.sharpe));
-  const w = 700, h = 130, pl = 40, pr = 14, pt = 10, pb = 22;
-  const cw = w - pl - pr, ch = h - pt - pb;
-  const xV = points.map((p) => p.iter), yV = points.map((p) => p.sharpe);
-  const xMin = Math.min(...xV), xMax = Math.max(...xV);
-  const yMin = Math.min(...yV, 0), yMax = Math.max(...yV, 0.01);
-  const xR = xMax - xMin || 1, yR = yMax - yMin || 0.01;
-  const toX = (v) => pl + ((v - xMin) / xR) * cw;
-  const toY = (v) => pt + ch - ((v - yMin) / yR) * ch;
-  const dots = points.map((p) => ({ ...p, x: toX(p.iter), y: toY(p.sharpe) }));
-  const recDots = dots.filter((p) => p.isRecord);
-  const recLine = recDots.map((p) => `${p.x},${p.y}`).join(" ");
-  const best = dots.find((p) => p.sharpe >= bestGlobal - 0.0001);
+  const bestGlobal = Math.max(...points.map(p=>p.sharpe));
+  const w=700,h=130,pl=40,pr=14,pt=10,pb=22;
+  const cw=w-pl-pr, ch=h-pt-pb;
+  const xV=points.map(p=>p.iter), yV=points.map(p=>p.sharpe);
+  const xMin=Math.min(...xV), xMax=Math.max(...xV);
+  const yMin=Math.min(...yV,0), yMax=Math.max(...yV,0.01);
+  const xR=xMax-xMin||1, yR=yMax-yMin||0.01;
+  const toX=v=>pl+((v-xMin)/xR)*cw;
+  const toY=v=>pt+ch-((v-yMin)/yR)*ch;
+  const dots=points.map(p=>({...p,x:toX(p.iter),y:toY(p.sharpe)}));
+  const allLine = dots.map(p => `${p.x},${p.y}`).join(" ");
+  const recDots = dots.filter(p => p.isRecord);
+  const recLine = recDots.map(p => `${p.x},${p.y}`).join(" ");
+  const best = dots.find(p => p.sharpe >= bestGlobal - 0.0001);
   const isBestLast = best === dots[dots.length - 1];
 
   return (
-    <div style={{
-      background: T.card,
-      borderRadius: "0 8px 0 8px",
-      border: `1px solid ${T.border}`,
-      padding: 14, position: "relative",
-    }}>
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: 2,
-        background: `linear-gradient(90deg,${T.amber},transparent)`,
-      }} />
-      <h2 style={{
-        fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
-        color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
-        marginBottom: 8,
-      }}>
-        Sharpe History
-      </h2>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", display: "block" }}>
+    <div className="card card-pad">
+      <Accent color={T.amber} />
+      <SectionHeading>Sharpe History</SectionHeading>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",display:"block"}}>
         <defs>
           <linearGradient id="sg-rec" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={T.amber} stopOpacity="0.12" />
             <stop offset="100%" stopColor={T.amber} stopOpacity="0.02" />
           </linearGradient>
         </defs>
-        {[0.25, 0.5, 0.75].map((f, i) => (
-          <line key={i} x1={pl} y1={pt + ch * f} x2={pl + cw} y2={pt + ch * f}
-            stroke={T.border} strokeWidth="1" strokeDasharray="3 3" />
+        {[0.25,0.5,0.75].map((f,i)=>(
+          <line key={i} x1={pl} y1={pt+ch*f} x2={pl+cw} y2={pt+ch*f} stroke={T.border} strokeWidth="1" strokeDasharray="3 3" />
         ))}
-        {yMin < 0 && yMax > 0 && (
-          <line x1={pl} y1={toY(0)} x2={pl + cw} y2={toY(0)}
-            stroke={T.muted} strokeWidth="1" strokeDasharray="2 4" opacity={0.3} />
+        {yMin<0&&yMax>0&&(
+          <line x1={pl} y1={toY(0)} x2={pl+cw} y2={toY(0)} stroke={T.muted} strokeWidth="1" strokeDasharray="2 4" opacity={0.3} />
         )}
-        {recDots.length > 1 && (
-          <polygon points={`${recLine} ${pl + cw},${pt + ch} ${pl},${pt + ch}`} fill="url(#sg-rec)" />
-        )}
-        {recDots.length > 1 && (
-          <polyline points={recLine} fill="none" stroke={T.amber} strokeWidth="2"
-            strokeLinejoin="round" strokeLinecap="round" />
-        )}
-        {dots.map((p, i) => !p.isRecord && (
-          <circle key={i} cx={p.x} cy={p.y} r="2.5" fill={T.muted} stroke="none" opacity={0.25} />
-        ))}
-        {recDots.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r="3" fill={T.amber} stroke={T.card} strokeWidth="1.5" />
-        ))}
-        {best && (
-          <>
-            <circle cx={best.x} cy={best.y} r="7" fill="none"
-              stroke={isBestLast ? T.sage : T.amber} strokeWidth="2" opacity={0.5} />
-            <circle cx={best.x} cy={best.y} r="4" fill={isBestLast ? T.sage : T.amber}
-              stroke={T.card} strokeWidth="1.5" />
-          </>
-        )}
-        <text x={pl - 4} y={pt + 4} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{yMax.toFixed(2)}</text>
-        <text x={pl - 4} y={pt + ch + 4} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{yMin.toFixed(2)}</text>
-        <text x={pl} y={h - 2} fill={T.muted} fontSize="8" fontFamily="DM Mono">{xMin}</text>
-        <text x={w - pr} y={h - 2} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{xMax}</text>
+        {dots.length > 0 && <polyline points={allLine} fill="none" stroke={T.muted} strokeWidth="1.5" strokeOpacity="0.4" strokeLinejoin="round" strokeLinecap="round" />}
+        {recDots.length>1&&<polygon points={`${recLine} ${pl+cw},${pt+ch} ${pl},${pt+ch}`} fill="url(#sg-rec)" />}
+        {recDots.length>1&&<polyline points={recLine} fill="none" stroke={T.amber} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
+        {dots.map((p,i)=>!p.isRecord&&<circle key={i} cx={p.x} cy={p.y} r="2.5" fill={T.muted} stroke="none" opacity={0.25} />)}
+        {recDots.map((p,i)=><circle key={i} cx={p.x} cy={p.y} r="3" fill={T.amber} stroke={T.card} strokeWidth="1.5" />)}
+        {best&&(<>
+          <circle cx={best.x} cy={best.y} r="7" fill="none" stroke={isBestLast?T.sage:T.amber} strokeWidth="2" opacity={0.5} />
+          <circle cx={best.x} cy={best.y} r="4" fill={isBestLast?T.sage:T.amber} stroke={T.card} strokeWidth="1.5" />
+        </>)}
+        <text x={pl-4} y={pt+4} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{yMax.toFixed(2)}</text>
+        <text x={pl-4} y={pt+ch+4} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{yMin.toFixed(2)}</text>
+        <text x={pl} y={h-2} fill={T.muted} fontSize="8" fontFamily="DM Mono">{xMin}</text>
+        <text x={w-pr} y={h-2} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{xMax}</text>
       </svg>
     </div>
   );
-});
+}
 
-const btnStyle = (color, disabled) => ({
-  background: disabled ? 'var(--bg-elevated)' : color,
-  color: disabled ? 'var(--text-muted)' : '#fff',
-  border: `1px solid ${disabled ? 'var(--border)' : 'transparent'}`,
-  borderRadius: 'var(--radius-sm)',
-  padding: '6px 14px',
-  cursor: disabled ? 'not-allowed' : 'pointer',
-  fontFamily: 'DM Mono',
-  fontSize: 11,
-  fontWeight: 500,
-  transition: 'all 0.2s ease',
-});
+// ═══════════════════════════════════════════════
+// LOG PANEL
+// ═══════════════════════════════════════════════
+function EventLogPanel({events}) {
+  const [collapsed,setCollapsed] = useState(true);
+  const scrollRef = useRef(null);
+  useEffect(()=>{if(scrollRef.current)scrollRef.current.scrollTop=scrollRef.current.scrollHeight},[events]);
 
-// ════════════════════════════════════════════
-// DASHBOARD VIEW
-// ════════════════════════════════════════════
-function DashboardView({
-  autonomousState, circuitBreaker, regimeSnapshot, positions, tokens,
-  iterationData, loading, startupStatus, riskPortfolio, dataHealth,
-  startAutonomous, stopAutonomous, pauseAutonomous, resumeAutonomous,
-  autoStarting, autoStopping, autoPausing,
-  haltCircuitBreaker, clearCircuitBreaker,
-  terminalLog,
-}) {
+  return (
+    <div className="card" style={{display:"flex",flexDirection:"column",overflow:"hidden",transition:"max-height .3s",maxHeight:collapsed?30:260}}>
+      <div className="flex items-center justify-between shrink-0" style={{padding:"4px 14px",cursor:"pointer"}} onClick={()=>setCollapsed(!collapsed)}>
+        <h2 className="section-heading" style={{marginBottom:0,fontSize:8}}>Event Log</h2>
+        <div className="flex items-center gap-6">
+          <span style={{fontSize:8,color:T.muted,fontFamily:"'DM Mono',monospace"}}>{events.length}</span>
+          <button style={{background:"transparent",border:`1px solid ${T.border}`,color:T.muted,borderRadius:"0 3px 0 3px",padding:"1px 6px",cursor:"pointer",fontSize:8,lineHeight:1.4}}>
+            {collapsed?"\u25BC":"\u25B2"}
+          </button>
+        </div>
+      </div>
+      {!collapsed&&(
+        <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:"2px 14px 4px",fontSize:10,fontFamily:"'DM Mono',monospace",lineHeight:1.8,color:T.secondary}}>
+          {events.length===0?(<span style={{color:T.muted}}>Waiting for events...</span>):events.map(evt=>(
+            <div key={evt.id} className="flex gap-8">
+              <span style={{color:T.muted,flexShrink:0,fontSize:9}}>{evt.timestamp}</span>
+              <span style={{color:evt.type==="anomaly"?T.coral:evt.type==="decay_alert"?T.gold:evt.type==="run_error"?T.coral:T.teal,flexShrink:0,fontSize:9}}>[{evt.type}]</span>
+              <span className="truncate" style={{color:T.text,fontSize:9}}>{(typeof evt.payload==="string"?evt.payload:JSON.stringify(evt.payload)).slice(0,180)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TerminalLogPanel({events}) {
+  const [collapsed,setCollapsed] = useState(true);
+  const scrollRef = useRef(null);
+  useEffect(()=>{if(scrollRef.current)scrollRef.current.scrollTop=scrollRef.current.scrollHeight},[events]);
+
+  return (
+    <div className="card" style={{display:"flex",flexDirection:"column",overflow:"hidden",transition:"max-height .3s",maxHeight:collapsed?30:200}}>
+      <div className="flex items-center justify-between shrink-0" style={{padding:"4px 14px",cursor:"pointer"}} onClick={()=>setCollapsed(!collapsed)}>
+        <h2 className="section-heading" style={{marginBottom:0,fontSize:8}}>Terminal Log</h2>
+        <div className="flex items-center gap-6">
+          <span style={{fontSize:8,color:T.muted,fontFamily:"'DM Mono',monospace"}}>{events.length}</span>
+          <button style={{background:"transparent",border:`1px solid ${T.border}`,color:T.muted,borderRadius:"0 3px 0 3px",padding:"1px 6px",cursor:"pointer",fontSize:8,lineHeight:1.4}}>
+            {collapsed?"\u25BC":"\u25B2"}
+          </button>
+        </div>
+      </div>
+      {!collapsed&&(
+        <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:"2px 14px 4px",fontSize:9.5,fontFamily:"'DM Mono',monospace",lineHeight:1.6,color:T.secondary}}>
+          {events.length===0?(<span style={{color:T.muted}}>Waiting for log output...</span>):events.map((evt,i)=>(
+            <div key={i} className="flex gap-8">
+              <span style={{color:T.muted,flexShrink:0,fontSize:8}}>{evt.timestamp}</span>
+              <span style={{color:evt.level==="error"?T.coral:evt.level==="warning"?T.gold:evt.level==="debug"?T.muted:T.teal,flexShrink:0,fontSize:8}}>[{evt.level?evt.level.toUpperCase():"INFO"}]</span>
+              <span style={{color:T.text,whiteSpace:"pre-wrap",wordBreak:"break-word",fontSize:8.5}}>{evt.message||JSON.stringify(evt).slice(0,300)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// HEADER / NAVIGATION
+// ═══════════════════════════════════════════════
+const NAV_ITEMS = [
+  {id:"dashboard",label:"Dashboard",icon:"\u2302"},
+  {id:"research",label:"Research",icon:"\u25C9"},
+  {id:"strategies",label:"Strategies",icon:"\u2246"},
+  {id:"signals",label:"Signals",icon:"\u2606"},
+];
+const LIGHT_DOTS = Array.from({length:3}, (_,i)=>i);
+
+function Header({activeView,setActiveView,autonomousState,onNewResearch}) {
+  const isRunning = autonomousState?.is_running;
+  return (
+    <header style={{
+      display:"flex",alignItems:"center",justifyContent:"space-between",
+      padding:"10px 16px",borderBottom:`1px solid ${T.border}`,
+      background:T.card,flexShrink:0,minHeight:48,
+    }}>
+      {/* Left: Brand + Status */}
+      <div className="flex items-center gap-10">
+        <div className="flex items-center gap-6">
+          <span style={{fontFamily:"'Syne',sans-serif",fontSize:13,fontWeight:800,color:T.amber,letterSpacing:"1px",textTransform:"uppercase"}}>
+            CAB
+          </span>
+          <div className="flex items-center gap-2" style={{padding:"2px 6px",background:T.surface,borderRadius:"0 3px 0 3px",border:`1px solid ${T.border}`}}>
+            <div className="status-dot" style={{background:isRunning?T.sage:T.muted,animation:isRunning?"pulse 1.5s ease-in-out infinite":"none"}} />
+            <span className="text-mono" style={{fontSize:7,fontWeight:600,color:isRunning?T.sage:T.muted,textTransform:"uppercase",letterSpacing:"0.5px"}}>
+              {isRunning?"Live":"Standby"}
+            </span>
+          </div>
+        </div>
+        {/* Nav dots */}
+        <div className="flex items-center gap-4" style={{marginLeft:8}}>
+          {LIGHT_DOTS.map(i=>(
+            <div key={i} style={{width:3,height:3,borderRadius:"50%",background:T.muted,opacity:0.3}} />
+          ))}
+        </div>
+        {/* Nav */}
+        <nav className="flex items-center gap-2">
+          {NAV_ITEMS.map(item=>(
+            <button key={item.id} onClick={()=>setActiveView(item.id)}
+              style={{
+                padding:"4px 10px",borderRadius:"0 4px 0 4px",
+                background:activeView===item.id?`${T.amber}15`:"transparent",
+                border:`1px solid ${activeView===item.id?T.amber:T.border}`,
+                color:activeView===item.id?T.amber:T.secondary,
+                cursor:"pointer",fontSize:9,fontWeight:600,
+                fontFamily:"'Syne',sans-serif",textTransform:"uppercase",
+                letterSpacing:"1px",transition:"all .2s",
+              }}>
+              {item.icon} {item.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Right: New Research */}
+      <button onClick={onNewResearch} className="btn btn-primary" style={{fontSize:9,letterSpacing:"1px",fontWeight:700,fontFamily:"'Syne',sans-serif",textTransform:"uppercase",padding:"5px 12px"}}>
+        + New Research
+      </button>
+    </header>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// MODAL — New Research Run
+// ═══════════════════════════════════════════════
+function ResearchModal({goal:initialGoal,cycles:initialCycles,iters:initialIters,onStart,onClose}) {
+  const [input,setInput] = useState(initialGoal);
+  const [cycles,setCycles] = useState(initialCycles);
+  const [iters,setIters] = useState(initialIters);
+
+  return (
+    <div style={{
+      position:"fixed",inset:0,zIndex:1000,
+      display:"flex",alignItems:"center",justifyContent:"center",
+      background:"rgba(0,0,0,0.75)",backdropFilter:"blur(4px)",
+      WebkitBackdropFilter:"blur(4px)",
+    }} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{
+        width:460,maxWidth:"90vw",animation:"stampIn .3s ease-out",
+        background:T.card,borderRadius:"0 14px 0 14px",
+        border:`1px solid ${T.border}`,padding:28,position:"relative",overflow:"hidden",
+      }}>
+        <div style={{position:"absolute",top:0,left:0,width:36,height:36,borderTop:`2px solid ${T.amber}`,borderLeft:`2px solid ${T.amber}`}} />
+        <div style={{position:"absolute",bottom:0,right:0,width:36,height:36,borderBottom:`2px solid ${T.teal}`,borderRight:`2px solid ${T.teal}`}} />
+
+        <div style={{marginBottom:22}}>
+          <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:T.text}}>New Research Run</div>
+          <p style={{fontSize:10,color:T.muted,marginTop:4}}>Configure research experiment parameters</p>
+        </div>
+
+        <label style={{fontSize:9,color:T.muted,fontWeight:600,display:"block",textTransform:"uppercase",letterSpacing:"1.5px",fontFamily:"'Syne',sans-serif",marginBottom:4}}>Goal</label>
+        <textarea rows={3} value={input} onChange={e=>setInput(e.target.value)} style={{
+          width:"100%",resize:"vertical",fontFamily:"'Sora',sans-serif",fontSize:11.5,
+          padding:"10px 14px",borderRadius:"0 6px 0 6px",background:T.surface,
+          border:`1px solid ${T.border}`,color:T.text,marginBottom:18,outline:"none",
+        }} />
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18,marginBottom:24}}>
+          <div>
+            <label style={{fontSize:9,color:T.muted,fontWeight:600,display:"block",textTransform:"uppercase",letterSpacing:"1.5px",fontFamily:"'Syne',sans-serif",marginBottom:2}}>
+              Max Cycles: <span style={{color:T.amber,fontFamily:"'DM Mono',monospace"}}>{cycles}</span>
+            </label>
+            <input type="range" min={1} max={10} value={cycles} onChange={e=>setCycles(Number(e.target.value))} style={{width:"100%",margin:"8px 0"}} />
+            <div className="flex justify-between text-mono" style={{fontSize:8,color:T.muted}}><span>1</span><span>10</span></div>
+          </div>
+          <div>
+            <label style={{fontSize:9,color:T.muted,fontWeight:600,display:"block",textTransform:"uppercase",letterSpacing:"1.5px",fontFamily:"'Syne',sans-serif",marginBottom:2}}>
+              Max Iterations: <span style={{color:T.amber,fontFamily:"'DM Mono',monospace"}}>{iters}</span>
+            </label>
+            <input type="range" min={1} max={10} value={iters} onChange={e=>setIters(Number(e.target.value))} style={{width:"100%",margin:"8px 0"}} />
+            <div className="flex justify-between text-mono" style={{fontSize:8,color:T.muted}}><span>1</span><span>10</span></div>
+          </div>
+        </div>
+
+        <div className="flex" style={{gap:8,justifyContent:"flex-end"}}>
+          <button onClick={onClose} className="btn btn-ghost" style={{padding:"8px 18px",fontSize:11,fontWeight:600,fontFamily:"'Sora',sans-serif"}}>Cancel</button>
+          <button onClick={()=>onStart(input, cycles, iters)} className="btn btn-primary" style={{padding:"8px 18px",fontSize:11,fontWeight:700,letterSpacing:"1px",fontFamily:"'Syne',sans-serif",textTransform:"uppercase"}}>Start Run</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// VIEW: DASHBOARD
+// ═══════════════════════════════════════════════
+function DashboardView({autonomousState,circuitBreaker,regimeSnapshot,positions,tokens,iterationSummary,iterationResults,loading,startupStatus,riskPortfolio,dataHealth,startAutonomous,stopAutonomous,pauseAutonomous,resumeAutonomous,autoStarting,autoStopping,autoPausing,haltCircuitBreaker,clearCircuitBreaker,terminalLog,events}) {
   const isRunning = autonomousState?.is_running;
   const isPaused = autonomousState?.is_paused;
 
-  const LD = (key, children) => loading[key] ? (
-    <div style={{ padding: 8 }}><Skeleton width="100%" height={60} /></div>
-  ) : children;
+  // ─── Autonomous Loop Card ───
+  const autoCard = (
+    <div className="card card-pad" style={{display:"flex",flexDirection:"column",gap:10}}>
+      <Accent color={T.amber} />
+      <SectionHeading>Autonomous Loop</SectionHeading>
+      {loading.autonomous ? <Skeleton w="100%" h={60} /> : <>
+        <div className="flex items-center gap-10">
+          <div className="status-dot" style={{width:10,height:10,background:isRunning?(isPaused?T.gold:T.sage):T.muted,animation:isRunning&&!isPaused?"pulse 1.5s ease-in-out infinite":"none"}} />
+          <span className="text-mono" style={{fontSize:14,fontWeight:700,color:isRunning?(isPaused?T.gold:T.sage):T.muted}}>{isRunning?(isPaused?"PAUSED":"RUNNING"):"STOPPED"}</span>
+        </div>
+        {autonomousState?.current_goal&&<div style={{padding:"6px 10px",background:T.surface,borderRadius:4,border:`1px solid ${T.border}`}}>
+          <div className="text-mono" style={{fontSize:8,color:T.muted,marginBottom:2}}>Current Goal</div>
+          <div style={{fontSize:10.5,color:T.text,lineHeight:1.4}}>{autonomousState.current_goal}</div>
+        </div>}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+          <MiniStat label="Cycles" value={autonomousState?.total_cycles||0} color={T.teal} small />
+          <MiniStat label="Sharpe" value={autonomousState?.current_sharpe?.toFixed(2)||"\u2014"} color={T.amber} small />
+          <MiniStat label="Best" value={autonomousState?.current_best_sharpe?.toFixed(2)||"\u2014"} color={T.sage} small />
+        </div>
+        {autonomousState?.last_error&&<div style={{padding:"4px 8px",background:`${T.coral}10`,borderRadius:4,border:`1px solid ${T.coral}30`}}>
+          <div className="text-mono" style={{fontSize:9,color:T.coral}}>Error: {autonomousState.last_error}</div>
+        </div>}
+      </>}
+      <div className="flex gap-6">
+        {!isRunning?(
+          <button onClick={startAutonomous} disabled={autoStarting} className="btn" style={{background:autoStarting?T.gold:T.teal,borderColor:"transparent",color:"#fff"}}>
+            {autoStarting?"Starting...":"Start"}
+          </button>
+        ):(
+          <>
+            {!isPaused?(
+              <button onClick={pauseAutonomous} disabled={autoPausing} className="btn" style={{background:T.gold,borderColor:"transparent",color:"#fff"}}>Pause</button>
+            ):(
+              <button onClick={resumeAutonomous} disabled={autoPausing} className="btn" style={{background:T.sage,borderColor:"transparent",color:"#fff"}}>Resume</button>
+            )}
+            <button onClick={stopAutonomous} disabled={autoStopping} className="btn" style={{background:T.coral,borderColor:"transparent",color:"#fff"}}>Stop</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  // ─── Circuit Breaker + Regime Card ───
+  const cbCard = (
+    <div className="card card-pad" style={{display:"flex",flexDirection:"column",gap:10}}>
+      <Accent color={T.coral} />
+      <SectionHeading>Circuit Breaker &amp; Regime</SectionHeading>
+
+      {loading.circuit ? <Skeleton w="100%" h={60} /> : <div style={{padding:"8px 12px",borderRadius:6,background:circuitBreaker?.halted?`${T.coral}15`:T.surface,border:`1px solid ${circuitBreaker?.halted?T.coral:T.border}`}}>
+        <div className="flex items-center gap-8">
+          <div className="status-dot" style={{width:8,height:8,background:circuitBreaker?.halted?T.coral:T.sage,animation:circuitBreaker?.halted?"pulse 1.5s ease-in-out infinite":"none"}} />
+          <span className="text-mono" style={{fontSize:12,fontWeight:700,color:circuitBreaker?.halted?T.coral:T.sage}}>{circuitBreaker?.halted?"HALTED":"OPERATIONAL"}</span>
+        </div>
+        {circuitBreaker?.reason&&<div className="text-mono" style={{fontSize:9,color:T.muted,marginTop:4}}>{circuitBreaker.reason}</div>}
+        {circuitBreaker?.triggered_by&&<div className="text-mono" style={{fontSize:8,color:T.muted,marginTop:2}}>Triggered by: {circuitBreaker.triggered_by}</div>}
+        {circuitBreaker?.resume_after&&<div className="text-mono" style={{fontSize:8,color:T.gold,marginTop:2}}>Resume after: {circuitBreaker.resume_after}</div>}
+        <div className="flex gap-6" style={{marginTop:8}}>
+          <button onClick={haltCircuitBreaker} className="btn" style={{fontSize:8,fontWeight:700,fontFamily:"'Syne',sans-serif",textTransform:"uppercase",letterSpacing:"1px",background:"transparent",color:T.coral,borderColor:T.coral}}>Halt</button>
+          <button onClick={clearCircuitBreaker} className="btn" style={{fontSize:8,fontWeight:700,fontFamily:"'Syne',sans-serif",textTransform:"uppercase",letterSpacing:"1px",background:"transparent",color:T.sage,borderColor:T.sage}}>Clear</button>
+        </div>
+      </div>}
+      /* Regime */
+      {loading.regime ? <Skeleton w="100%" h={60} /> : (regimeSnapshot?<>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-mono" style={{fontSize:13,fontWeight:700,color:T.amber,textTransform:"uppercase"}}>{regimeSnapshot.regime?.replace(/_/g," ")||"\u2014"}</div>
+            {regimeSnapshot.confidence!=null&&<div className="text-mono" style={{fontSize:9,color:T.muted,marginTop:1}}>Confidence: {(regimeSnapshot.confidence*100).toFixed(0)}%</div>}
+          </div>
+          {regimeSnapshot.adx!=null&&<MiniStat label="ADX" value={regimeSnapshot.adx.toFixed(1)} color={regimeSnapshot.adx>25?T.teal:T.muted} small />}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+          {regimeSnapshot.atr_pct!=null&&<MiniStat label="ATR%" value={(regimeSnapshot.atr_pct*100).toFixed(1)+"%"} color={T.gold} small />}
+          {regimeSnapshot.sma200_distance!=null&&<MiniStat label="200SMA Dist" value={regimeSnapshot.sma200_distance?.toFixed(2)||"\u2014"} color={T.secondary} small />}
+        </div>
+        {regimeSnapshot.recommended_strategies?.length>0&&<div className="text-mono" style={{fontSize:7,color:T.muted}}>Recommended: {regimeSnapshot.recommended_strategies.join(", ")}</div>}
+        {regimeSnapshot.discouraged_strategies?.length>0&&<div className="text-mono" style={{fontSize:7,color:T.coral}}>Avoid: {regimeSnapshot.discouraged_strategies.join(", ")}</div>}
+      </>:<div style={{fontSize:10,color:T.muted}}>No regime data yet.</div>)}
+    </div>
+  );
+
+  // ─── Research Results Card ───
+  const resultsCard = (
+    <div className="card card-pad" style={{display:"flex",flexDirection:"column",maxHeight:280,overflow:"hidden"}}>
+      <Accent color={T.gold} />
+      <SectionHeading>Research Results</SectionHeading>
+      {loading.iterations ? <Skeleton w="100%" h={180} /> : <>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:10}}>
+          <MiniStat label="Best Sharpe" value={iterationSummary?.best_sharpe?.toFixed(2)||"\u2014"} color={T.amber} small />
+          <MiniStat label="Discarded" value={iterationSummary?.discarded_count||0} color={T.coral} small />
+          <MiniStat label="Kept" value={iterationSummary?.kept_count||0} color={T.sage} small />
+          <MiniStat label="Total It" value={iterationResults.length||0} color={T.teal} small />
+        </div>
+        {iterationResults.length>0&&(
+          <div style={{flex:1,overflowY:"auto"}}>
+            <table className="data-table" style={{fontSize:9}}>
+              <thead><tr><th>It</th><th>Sharpe</th><th>WR</th><th>DD</th><th>Trades</th><th>Verdict</th></tr></thead>
+              <tbody>{iterationResults.slice(-30).reverse().map((r,i)=>(
+                <tr key={i}>
+                  <td style={{padding:"2px 6px",color:T.muted}}>{r.iteration}</td>
+                  <td style={{padding:"2px 6px",color:r.sharpe_ratio>=0.8?T.sage:r.sharpe_ratio>=0?T.text:T.coral}}>{r.sharpe_ratio?.toFixed(2)||"\u2014"}</td>
+                  <td style={{padding:"2px 6px",color:T.text}}>{r.win_rate?`${(r.win_rate*100).toFixed(0)}%`:"\u2014"}</td>
+                  <td style={{padding:"2px 6px",color:T.text}}>{r.max_drawdown?`${(Math.abs(r.max_drawdown)*100).toFixed(1)}%`:"\u2014"}</td>
+                  <td style={{padding:"2px 6px",color:T.text}}>{r.total_trades||0}</td>
+                  <td style={{padding:"2px 6px",color:r.verdict==="kept"||r.verdict==="converged"?T.sage:T.coral,fontWeight:600}}>
+                    {r.verdict==="kept"?"KEPT":r.verdict==="converged"?"KEPT":r.verdict==="discarded"?"DISCARDED":r.verdict||"\u2014"}
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+      </>}
+    </div>
+  );
+
+  // ─── Live Positions Card ───
+  const positionsCard = (
+    <div className="card card-pad" style={{display:"flex",flexDirection:"column",maxHeight:280,overflow:"hidden"}}>
+      <Accent color={T.teal} />
+      <SectionHeading>Live Positions</SectionHeading>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8}}>
+        <MiniStat label="Open Positions" value={riskPortfolio?.total_open_positions??positions.length} color={T.teal} small />
+        <MiniStat label="Daily PnL" value={fmtPnl(riskPortfolio?.daily_pnl_pct)} color={(riskPortfolio?.daily_pnl_pct||0)>=0?T.sage:T.coral} small />
+      </div>
+      {loading.positions ? <Skeleton w="100%" h={60} /> : (
+        positions.length===0?<EmptyState icon={"\u25CB"} title="No open positions" sub="Signals will appear when opportunities are detected" />:
+        <div style={{flex:1,overflowY:"auto"}}>
+          <table className="data-table" style={{fontSize:9.5}}>
+            <thead><tr><th>Pair</th><th>Side</th><th>Size</th><th>Entry</th><th>PnL</th><th>Duration</th></tr></thead>
+            <tbody>{positions.map((p,i)=>(
+              <tr key={i}>
+                <td style={{padding:"4px 6px",color:T.text,fontWeight:600}}>{p.pair||"\u2014"}</td>
+                <td style={{padding:"4px 6px",color:p.side==="buy"||p.side==="long"?T.sage:T.coral,fontWeight:600}}>{(p.side||"\u2014").toUpperCase()}</td>
+                <td style={{padding:"4px 6px",color:T.text}}>{p.size||"\u2014"}</td>
+                <td style={{padding:"4px 6px",color:T.text}}>{p.entry_price?`$${p.entry_price}`:"\u2014"}</td>
+                <td style={{padding:"4px 6px",color:(p.pnl_pct||0)>=0?T.sage:T.coral,fontWeight:600}}>{fmtPnl(p.pnl_pct)}</td>
+                <td style={{padding:"4px 6px",color:T.muted}}>{fmtTime(p.entry_time)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
+  // ─── Bottom Row: Portfolio Risk, Startup, Data Health ───
+  const miniCards = (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+      {/* Portfolio Risk */}
+      <div className="card card-pad">
+        <Accent color={T.gold} />
+        <SectionHeading>Portfolio Risk</SectionHeading>
+        {riskPortfolio?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+          <MiniStat label="Open" value={riskPortfolio.total_open_positions??"\u2014"} color={T.teal} small />
+          <MiniStat label="Daily PnL" value={fmtPnl(riskPortfolio.daily_pnl_pct)} color={(riskPortfolio.daily_pnl_pct||0)>=0?T.sage:T.coral} small />
+          <MiniStat label="Weekly PnL" value={fmtPnl(riskPortfolio.weekly_pnl_pct)} color={(riskPortfolio.weekly_pnl_pct||0)>=0?T.sage:T.coral} small />
+          <MiniStat label="Max DD" value={riskPortfolio.max_drawdown!=null?`${(Math.abs(riskPortfolio.max_drawdown)*100).toFixed(1)}%`:"\u2014"} color={T.coral} small />
+        </div>:<div style={{fontSize:10,color:T.muted}}>Waiting for data...</div>}
+      </div>
+      {/* Startup Status */}
+      <div className="card card-pad">
+        <Accent color={T.sage} />
+        <SectionHeading>Startup Tasks</SectionHeading>
+        {startupStatus?.tasks?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+          {Object.entries(startupStatus.tasks).map(([k,t])=>{
+            const c=t.status==="running"?T.sage:t.status==="failed"?T.coral:t.status==="stopped"?T.muted:T.gold;
+            return (<div key={k} style={{padding:"4px 8px",background:T.surface,borderRadius:4,border:`1px solid ${T.border}`}}>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-mono" style={{fontSize:7,color:T.muted,textTransform:"uppercase",letterSpacing:"0.5px"}}>{k.replace(/_/g," ")}</span>
+                <span className="text-mono" style={{fontSize:7,color:c,fontWeight:600,flexShrink:0}}>{t.status}</span>
+              </div>
+              {t.error&&<div style={{fontSize:7,color:T.coral,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.error}</div>}
+            </div>);
+          })}
+        </div>:<div style={{fontSize:10,color:T.muted}}>No startup data</div>}
+      </div>
+      {/* Data Health */}
+      <div className="card card-pad">
+        <Accent color={T.teal} />
+        <SectionHeading>Data Sources</SectionHeading>
+        {dataHealth&&Object.keys(dataHealth).length>0?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+          {Object.entries(dataHealth).slice(0,6).map(([name,s])=>{
+            const h=s.is_healthy!==false;
+            return (<div key={name} style={{padding:"4px 8px",background:T.surface,borderRadius:4,border:`1px solid ${T.border}`}}>
+              <div className="flex items-center justify-between">
+                <span className="text-mono" style={{fontSize:7,color:T.muted,textTransform:"uppercase",letterSpacing:"0.5px"}}>{name.replace(/_/g," ")}</span>
+                <span className="text-mono" style={{fontSize:7,color:h?T.sage:T.coral}}>{h?"OK":"DOWN"}</span>
+              </div>
+              {s.last_success&&<div className="text-mono" style={{fontSize:7,color:T.muted,marginTop:1}}>{fmtTime(s.last_success)}</div>}
+            </div>);
+          })}
+        </div>:<div style={{fontSize:10,color:T.muted}}>No source data</div>}
+      </div>
+    </div>
+  );
 
   return (
-    <div className="dash-grid" style={{
-      flex: 1, minHeight: 0,
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: 10,
-      overflow: "auto",
-      padding: "2px 0",
-    }}>
-      {/* ── Top-left: Autonomous Loop ── */}
-      <div className="r1" style={{
-        background: T.card,
-        borderRadius: "0 8px 0 8px",
-        border: `1px solid ${T.border}`,
-        padding: 14,
-        position: "relative",
-      }}>
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, height: 2,
-          background: `linear-gradient(90deg,${T.amber},transparent)`,
-        }} />
-        <h2 style={{
-          fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
-          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
-          marginBottom: 10,
-        }}>
-          Autonomous Loop
-        </h2>
-        {LD("autonomous", (
-          <>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-              <div style={{
-                width: 10, height: 10, borderRadius: "50%",
-                background: isRunning ? (isPaused ? T.gold : T.sage) : T.muted,
-                animation: isRunning && !isPaused ? "pulse 1.5s ease-in-out infinite" : "none",
-              }} />
-              <span style={{
-                fontSize: 14, fontWeight: 700,
-                color: isRunning ? (isPaused ? T.gold : T.sage) : T.muted,
-                fontFamily: "'DM Mono',monospace",
-              }}>
-                {isRunning ? (isPaused ? "PAUSED" : "RUNNING") : "STOPPED"}
-              </span>
-            </div>
+    <div className="dash-grid">
+      {autoCard}
+      {cbCard}
+      {resultsCard}
+      {positionsCard}
+      <div style={{gridColumn:"1/-1"}}><SharpeChart results={iterationResults} /></div>
+      <div style={{gridColumn:"1/-1"}}>{miniCards}</div>
+      <div style={{gridColumn:"1/-1"}}><TerminalLogPanel events={terminalLog} /></div>
+    </div>
+  );
+}
 
-            {autonomousState?.current_goal && (
-              <div style={{
-                marginBottom: 10,
-                padding: "6px 10px",
-                background: T.surface,
-                borderRadius: 4,
-                border: `1px solid ${T.border}`,
-              }}>
-                <div style={{ fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace", marginBottom: 2 }}>
-                  Current Goal
-                </div>
-                <div style={{ fontSize: 10.5, color: T.text, lineHeight: 1.4 }}>
-                  {autonomousState.current_goal}
-                </div>
-              </div>
-            )}
+// ═══════════════════════════════════════════════
+// VIEW: RESEARCH (iteration detail / explorer)
+// ═══════════════════════════════════════════════
+function ResearchView({iterationSummary,iterationResults,events,terminalLog,autonomousState}) {
+  const results = iterationResults;
+  const hasData = results?.length>0;
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 10 }}>
-              <MiniStat label="Cycles" value={autonomousState?.total_cycles || 0} color={T.teal} small />
-              <MiniStat label="Sharpe" value={autonomousState?.current_sharpe?.toFixed(2) || "\u2014"} color={T.amber} small />
-              <MiniStat label="Best" value={autonomousState?.current_best_sharpe?.toFixed(2) || "\u2014"} color={T.sage} small />
-            </div>
-
-            {autonomousState?.last_error && (
-              <div style={{
-                padding: "4px 8px",
-                background: `${T.coral}10`,
-                borderRadius: 4,
-                border: `1px solid ${T.coral}30`,
-                marginBottom: 10,
-              }}>
-                <div style={{ fontSize: 9, color: T.coral, fontFamily: "'DM Mono',monospace" }}>
-                  Error: {autonomousState.last_error}
-                </div>
-              </div>
-            )}
-          </>
-        ))}
-
-        {/* Action Buttons */}
-        <div style={{ display: "flex", gap: 6 }}>
-          {!isRunning ? (
-            <button onClick={startAutonomous} disabled={autoStarting}
-              style={btnStyle(autoStarting ? T.gold : T.teal, autoStarting)}>
-              {autoStarting ? "Starting..." : "Start"}
-            </button>
-          ) : (
-            <>
-              {!isPaused ? (
-                <button onClick={pauseAutonomous} disabled={autoPausing}
-                  style={btnStyle(T.gold, autoPausing)}>
-                  Pause
-                </button>
-              ) : (
-                <button onClick={resumeAutonomous} disabled={autoPausing}
-                  style={btnStyle(T.sage, autoPausing)}>
-                  Resume
-                </button>
-              )}
-              <button onClick={stopAutonomous} disabled={autoStopping}
-                style={btnStyle(T.coral, autoStopping)}>
-                Stop
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* ── Top-right: Circuit Breaker + Regime ── */}
-      <div className="r2" style={{
-        background: T.card,
-        borderRadius: "0 8px 0 8px",
-        border: `1px solid ${T.border}`,
-        padding: 14,
-        position: "relative",
-      }}>
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, height: 2,
-          background: `linear-gradient(90deg,${T.coral},transparent)`,
-        }} />
-        <h2 style={{
-          fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
-          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
-          marginBottom: 10,
-        }}>
-          Circuit Breaker &amp; Regime
-        </h2>
-
-        {/* CB Status */}
-        {LD("circuit", (
-          <div style={{
-            padding: "8px 12px",
-            borderRadius: 6,
-            background: circuitBreaker?.halted ? `${T.coral}15` : T.surface,
-            border: `1px solid ${circuitBreaker?.halted ? T.coral : T.border}`,
-            marginBottom: 10,
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{
-                width: 8, height: 8, borderRadius: "50%",
-                background: circuitBreaker?.halted ? T.coral : T.sage,
-                animation: circuitBreaker?.halted ? "pulse 1.5s ease-in-out infinite" : "none",
-              }} />
-              <span style={{
-                fontSize: 12, fontWeight: 700,
-                color: circuitBreaker?.halted ? T.coral : T.sage,
-                fontFamily: "'DM Mono',monospace",
-              }}>
-                {circuitBreaker?.halted ? "HALTED" : "OPERATIONAL"}
-              </span>
-            </div>
-            {circuitBreaker?.reason && (
-              <div style={{ fontSize: 9, color: T.muted, marginTop: 4, fontFamily: "'DM Mono',monospace" }}>
-                {circuitBreaker.reason}
-              </div>
-            )}
-            {circuitBreaker?.triggered_by && (
-              <div style={{ fontSize: 8, color: T.muted, marginTop: 2, fontFamily: "'DM Mono',monospace" }}>
-                Triggered by: {circuitBreaker.triggered_by}
-              </div>
-            )}
-            {circuitBreaker?.resume_after && (
-              <div style={{ fontSize: 8, color: T.gold, marginTop: 2, fontFamily: "'DM Mono',monospace" }}>
-                Resume after: {circuitBreaker.resume_after}
-              </div>
-            )}
-            {/* Circuit Breaker Action Buttons */}
-            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-              <button onClick={haltCircuitBreaker}
-                style={{
-                  padding: "4px 10px", borderRadius: "0 4px 0 4px",
-                  background: "transparent", color: T.coral,
-                  border: `1px solid ${T.coral}`,
-                  cursor: "pointer", fontSize: 8, fontWeight: 700,
-                  fontFamily: "'Syne',sans-serif",
-                  textTransform: "uppercase", letterSpacing: "1px",
-                }}>
-                Halt
-              </button>
-              <button onClick={clearCircuitBreaker}
-                style={{
-                  padding: "4px 10px", borderRadius: "0 4px 0 4px",
-                  background: "transparent", color: T.sage,
-                  border: `1px solid ${T.sage}`,
-                  cursor: "pointer", fontSize: 8, fontWeight: 700,
-                  fontFamily: "'Syne',sans-serif",
-                  textTransform: "uppercase", letterSpacing: "1px",
-                }}>
-                Clear
-              </button>
-            </div>
+  return (
+    <div style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",gap:10,overflow:"hidden"}}>
+      {/* Summary stats */}
+      <div className="card card-pad">
+        <Accent color={T.amber} />
+        <SectionHeading>Research Overview</SectionHeading>
+        {!hasData?<EmptyState icon={"\u25C9"} title="No research data yet" sub="Start an autonomous run or use New Research to begin" />:<>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:6,marginBottom:10}}>
+            <MiniStat label="Best Sharpe" value={iterationSummary?.best_sharpe?.toFixed(2)||"\u2014"} color={T.amber} />
+            <MiniStat label="Kept" value={iterationSummary?.kept_count||0} color={T.sage} />
+            <MiniStat label="Discarded" value={iterationSummary?.discarded_count||0} color={T.coral} />
+            <MiniStat label="Total Iterations" value={results.length} color={T.teal} />
+            <MiniStat label="Total Cycles" value={autonomousState?.total_cycles||0} color={T.secondary} />
+            <MiniStat label="Current Sharpe" value={autonomousState?.current_sharpe?.toFixed(2)||"\u2014"} color={T.gold} />
           </div>
-        ))}
-
-        {/* Regime */}
-        {LD("regime", (
-          regimeSnapshot ? (
-            <>
-              <div style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                marginBottom: 6,
-              }}>
-                <div>
-                  <div style={{
-                    fontSize: 13, fontWeight: 700, color: T.amber,
-                    fontFamily: "'DM Mono',monospace", textTransform: "uppercase",
-                  }}>
-                    {regimeSnapshot.regime?.replace(/_/g, " ") || "\u2014"}
-                  </div>
-                  {regimeSnapshot.confidence != null && (
-                    <div style={{
-                      fontSize: 9, color: T.muted, fontFamily: "'DM Mono',monospace",
-                      marginTop: 1,
-                    }}>
-                      Confidence: {(regimeSnapshot.confidence * 100).toFixed(0)}%
-                    </div>
-                  )}
-                </div>
-                {regimeSnapshot.adx != null && (
-                  <MiniStat label="ADX" value={regimeSnapshot.adx.toFixed(1)} color={regimeSnapshot.adx > 25 ? T.teal : T.muted} small />
-                )}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginTop: 6 }}>
-                {regimeSnapshot.atr_pct != null && (
-                  <MiniStat label="ATR%" value={(regimeSnapshot.atr_pct * 100).toFixed(1) + "%"} color={T.gold} small />
-                )}
-                {regimeSnapshot.sma200_distance != null && (
-                  <MiniStat label="200SMA Dist" value={regimeSnapshot.sma200_distance?.toFixed(2) || "\u2014"} color={T.secondary} small />
-                )}
-              </div>
-              {regimeSnapshot.recommended_strategies?.length > 0 && (
-                <div style={{ marginTop: 6 }}>
-                  <div style={{ fontSize: 7, color: T.muted, fontFamily: "'DM Mono',monospace", marginBottom: 2 }}>
-                    Recommended: {regimeSnapshot.recommended_strategies.join(", ")}
-                  </div>
-                </div>
-              )}
-              {regimeSnapshot.discouraged_strategies?.length > 0 && (
-                <div style={{ marginTop: 2 }}>
-                  <div style={{ fontSize: 7, color: T.coral, fontFamily: "'DM Mono',monospace" }}>
-                    Avoid: {regimeSnapshot.discouraged_strategies.join(", ")}
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div style={{ fontSize: 10, color: T.muted }}>No regime data yet.</div>
-          )
-        ))}
+        </>}
       </div>
 
-      {/* ── Bottom-left: Research Results ── */}
-      <div className="r3" style={{
-        background: T.card,
-        borderRadius: "0 8px 0 8px",
-        border: `1px solid ${T.border}`,
-        padding: 14,
-        position: "relative",
-        maxHeight: 280,
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-      }}>
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, height: 2,
-          background: `linear-gradient(90deg,${T.gold},transparent)`,
-        }} />
-        <h2 style={{
-          fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
-          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
-          marginBottom: 10,
-        }}>
-          Research Results
-        </h2>
-        {LD("iterations", (
-          <>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, marginBottom: 10 }}>
-              <MiniStat label="Best Sharpe" value={iterationData?.best_sharpe?.toFixed(2) || "\u2014"} color={T.amber} small />
-              <MiniStat label="Discarded" value={iterationData?.discarded_count || 0} color={T.coral} small />
-              <MiniStat label="Kept" value={iterationData?.kept_count || 0} color={T.sage} small />
-              <MiniStat label="Total It" value={iterationData?.results?.length || 0} color={T.teal} small />
-            </div>
-            {iterationData?.results?.length > 0 && (
-              <div style={{ flex: 1, overflowY: "auto", fontSize: 9, fontFamily: "'DM Mono',monospace" }}>
-                <table className="data-table" style={{ fontSize: 9 }}>
-                  <thead>
-                    <tr>
-                      <th>It</th><th>Sharpe</th><th>WR</th><th>DD</th><th>Trades</th><th>Verdict</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {iterationData.results.slice(-30).reverse().map((r, i) => (
-                      <tr key={i}>
-                        <td style={{ padding: "2px 6px", color: T.muted }}>{r.iteration}</td>
-                        <td style={{
-                          padding: "2px 6px",
-                          color: r.sharpe_ratio >= 0.8 ? T.sage : r.sharpe_ratio >= 0 ? T.text : T.coral
-                        }}>{r.sharpe_ratio?.toFixed(2) || "\u2014"}</td>
-                        <td style={{ padding: "2px 6px", color: T.text }}>
-                          {r.win_rate ? `${(r.win_rate * 100).toFixed(0)}%` : "\u2014"}
-                        </td>
-                        <td style={{ padding: "2px 6px", color: T.text }}>
-                          {r.max_drawdown ? `${(Math.abs(r.max_drawdown) * 100).toFixed(1)}%` : "\u2014"}
-                        </td>
-                        <td style={{ padding: "2px 6px", color: T.text }}>{r.total_trades || 0}</td>
-                        <td style={{
-                          padding: "2px 6px",
-                          color: r.verdict === "kept" || r.verdict === "converged" ? T.sage : T.coral,
-                          fontWeight: 600,
-                        }}>
-                          {r.verdict === "kept" ? "KEPT" : r.verdict === "converged" ? "KEPT" : r.verdict === "discarded" ? "DISCARDED" : r.verdict || "\u2014"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        ))}
+      {/* Full results table */}
+      <div className="card card-pad" style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <Accent color={T.teal} />
+        <SectionHeading>Iteration History ({results?.length||0})</SectionHeading>
+        {!hasData?<EmptyState icon={"\u25B4"} title="No iterations yet" sub="Run autonomous research to populate" />:
+        <div style={{flex:1,overflowY:"auto"}}>
+          <table className="data-table">
+            <thead><tr><th>It</th><th>Sharpe</th><th>Win Rate</th><th>Max DD</th><th>Trades</th><th>Profit</th><th>Verdict</th><th>Strategy</th></tr></thead>
+            <tbody>{[...results].reverse().map((r,i)=>(
+              <tr key={i}>
+                <td style={{padding:"4px 8px",color:T.muted,fontWeight:600}}>{r.iteration}</td>
+                <td style={{padding:"4px 8px",color:r.sharpe_ratio>=0.8?T.sage:r.sharpe_ratio>=0?T.text:T.coral,fontWeight:700}}>{r.sharpe_ratio?.toFixed(2)||"\u2014"}</td>
+                <td style={{padding:"4px 8px",color:T.text}}>{r.win_rate?`${(r.win_rate*100).toFixed(0)}%`:"\u2014"}</td>
+                <td style={{padding:"4px 8px",color:Math.abs(r.max_drawdown||0)<0.05?T.sage:Math.abs(r.max_drawdown||0)<0.1?T.gold:T.coral}}>{r.max_drawdown?`${(Math.abs(r.max_drawdown)*100).toFixed(1)}%`:"\u2014"}</td>
+                <td style={{padding:"4px 8px",color:T.text}}>{r.total_trades||0}</td>
+                <td style={{padding:"4px 8px",color:(r.profit||0)>=0?T.sage:T.coral}}>{r.profit!=null?fmtPnl(r.profit):"\u2014"}</td>
+                <td style={{padding:"4px 8px",color:r.verdict==="kept"||r.verdict==="converged"?T.sage:T.coral,fontWeight:600}}>
+                  {r.verdict==="kept"?"KEPT":r.verdict==="converged"?"KEPT":r.verdict==="discarded"?"DISCARDED":r.verdict||"\u2014"}
+                </td>
+                <td style={{padding:"4px 8px",color:T.secondary,fontSize:9}}>{r.strategy_name||r.strategy_type||"\u2014"}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>}
       </div>
 
-      {/* ── Bottom-right: Live Positions ── */}
-      <div className="r4" style={{
-        background: T.card,
-        borderRadius: "0 8px 0 8px",
-        border: `1px solid ${T.border}`,
-        padding: 14,
-        position: "relative",
-        maxHeight: 280,
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-      }}>
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, height: 2,
-          background: `linear-gradient(90deg,${T.teal},transparent)`,
-        }} />
-        <h2 style={{
-          fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
-          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
-          marginBottom: 8,
-        }}>
-          Live Positions
-        </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 8 }}>
-          <MiniStat label="Open Positions" value={riskPortfolio?.total_open_positions ?? positions.length} color={T.teal} small />
-          <MiniStat label="Daily PnL" value={fmtPnl(riskPortfolio?.daily_pnl_pct)} color={(riskPortfolio?.daily_pnl_pct || 0) >= 0 ? T.sage : T.coral} small />
-        </div>
-        {LD("positions", (
-          positions.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 20 }}>
-              <div style={{ fontSize: 10, color: T.muted }}>No open positions</div>
-              <div style={{ fontSize: 8, color: T.muted, marginTop: 4 }}>
-                Signals will appear when opportunities are detected
-              </div>
-            </div>
-          ) : (
-            <div style={{ flex: 1, overflowY: "auto" }}>
-              <table className="data-table" style={{ fontSize: 9.5 }}>
-                <thead>
-                  <tr>
-                    <th>Pair</th><th>Side</th><th>Size</th><th>Entry</th><th>PnL</th><th>Duration</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {positions.map((p, i) => (
-                    <tr key={i}>
-                      <td style={{ padding: "4px 6px", color: T.text, fontWeight: 600 }}>{p.pair || "\u2014"}</td>
-                      <td style={{
-                        padding: "4px 6px",
-                        color: p.side === "buy" || p.side === "long" ? T.sage : T.coral,
-                        fontWeight: 600,
-                      }}>
-                        {(p.side || "\u2014").toUpperCase()}
-                      </td>
-                      <td style={{ padding: "4px 6px", color: T.text }}>{p.size || "\u2014"}</td>
-                      <td style={{ padding: "4px 6px", color: T.text }}>
-                        {p.entry_price ? `$${p.entry_price}` : "\u2014"}
-                      </td>
-                      <td style={{
-                        padding: "4px 6px",
-                        color: (p.pnl_pct || 0) >= 0 ? T.sage : T.coral,
-                        fontWeight: 600,
-                      }}>
-                        {fmtPnl(p.pnl_pct)}
-                      </td>
-                      <td style={{ padding: "4px 6px", color: T.muted }}>
-                        {p.entry_time ? new Date(p.entry_time).toLocaleTimeString() : "\u2014"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )
-        ))}
+      {/* Chart + Logs row */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <SharpeChart results={results} />
+        <EventLogPanel events={events} />
       </div>
-
-      {/* ── Sharpe History Chart ── */}
-      <div style={{ gridColumn: "1 / -1" }}>
-        <SharpeHistoryChart results={iterationData?.results} />
-      </div>
-
-      {/* ── Row 2: Portfolio, Startup, Data Health ── */}
-      <div className="dash-row-3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
-        {/* Portfolio Risk */}
-        <div className="r5" style={{
-          background: T.card, borderRadius: "0 8px 0 8px",
-          border: `1px solid ${T.border}`, padding: 14,
-          position: "relative",
-        }}>
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg,${T.gold},transparent)` }} />
-          <h2 style={{ fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600, color: T.muted, textTransform: "uppercase", letterSpacing: "2px", marginBottom: 10 }}>
-            Portfolio Risk
-          </h2>
-          {riskPortfolio ? (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-              <MiniStat label="Open" value={riskPortfolio.total_open_positions ?? "\u2014"} color={T.teal} small />
-              <MiniStat label="Daily PnL" value={fmtPnl(riskPortfolio.daily_pnl_pct)} color={(riskPortfolio.daily_pnl_pct||0) >= 0 ? T.sage : T.coral} small />
-              <MiniStat label="Weekly PnL" value={fmtPnl(riskPortfolio.weekly_pnl_pct)} color={(riskPortfolio.weekly_pnl_pct||0) >= 0 ? T.sage : T.coral} small />
-              <MiniStat label="Max DD" value={riskPortfolio.max_drawdown != null ? `${(Math.abs(riskPortfolio.max_drawdown)*100).toFixed(1)}%` : "\u2014"} color={T.coral} small />
-            </div>
-          ) : (
-            <div style={{ fontSize: 10, color: T.muted }}>Waiting for data...</div>
-          )}
-        </div>
-
-        {/* Startup Status */}
-        <div className="r5" style={{
-          background: T.card, borderRadius: "0 8px 0 8px",
-          border: `1px solid ${T.border}`, padding: 14,
-          position: "relative",
-        }}>
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg,${T.sage},transparent)` }} />
-          <h2 style={{ fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600, color: T.muted, textTransform: "uppercase", letterSpacing: "2px", marginBottom: 10 }}>
-            Startup Tasks
-          </h2>
-          {startupStatus?.tasks ? (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-              {Object.entries(startupStatus.tasks).map(([k, t]) => {
-                const c = t.status === "running" ? T.sage : t.status === "failed" ? T.coral : t.status === "stopped" ? T.muted : T.gold;
-                return (
-                  <div key={k} style={{ padding: "4px 8px", background: T.surface, borderRadius: 4, border: `1px solid ${T.border}` }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
-                      <span style={{ fontSize: 7, color: T.muted, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                        {k.replace(/_/g, " ")}
-                      </span>
-                      <span style={{ fontSize: 7, color: c, fontFamily: "'DM Mono',monospace", fontWeight: 600, flexShrink: 0 }}>
-                        {t.status}
-                      </span>
-                    </div>
-                    {t.error && <div style={{ fontSize: 7, color: T.coral, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.error}</div>}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div style={{ fontSize: 10, color: T.muted }}>No startup data</div>
-          )}
-        </div>
-
-        {/* Data Health */}
-        <div className="r6" style={{
-          background: T.card, borderRadius: "0 8px 0 8px",
-          border: `1px solid ${T.border}`, padding: 14,
-          position: "relative",
-        }}>
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg,${T.teal},transparent)` }} />
-          <h2 style={{ fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600, color: T.muted, textTransform: "uppercase", letterSpacing: "2px", marginBottom: 10 }}>
-            Data Sources
-          </h2>
-          {dataHealth && Object.keys(dataHealth).length > 0 ? (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-              {Object.entries(dataHealth).slice(0, 6).map(([name, s]) => {
-                const h = s.is_healthy !== false;
-                return (
-                  <div key={name} style={{ padding: "4px 8px", background: T.surface, borderRadius: 4, border: `1px solid ${T.border}` }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ fontSize: 7, color: T.muted, fontFamily: "'DM Mono',monospace", textTransform: "uppercase", letterSpacing: "0.5px" }}>{name.replace(/_/g, " ")}</span>
-                      <span style={{ fontSize: 7, color: h ? T.sage : T.coral }}>{h ? "OK" : "DOWN"}</span>
-                    </div>
-                    {s.last_success && <div style={{ fontSize: 7, color: T.muted, marginTop: 1 }}>{new Date(s.last_success).toLocaleTimeString()}</div>}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div style={{ fontSize: 10, color: T.muted }}>No source data</div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Row 4: Terminal Log ── */}
       <TerminalLogPanel events={terminalLog} />
     </div>
   );
 }
 
-// ════════════════════════════════════════════
-// STRATEGY LIBRARY VIEW
-// ════════════════════════════════════════════
-function StrategyLibraryView({ strategies }) {
-  const [search, setSearch] = useState("");
-  const [regimeFilter, setRegimeFilter] = useState("all");
+// ═══════════════════════════════════════════════
+// VIEW: STRATEGY LIBRARY
+// ═══════════════════════════════════════════════
+function StrategyLibraryView({strategies}) {
+  const [search,setSearch] = useState("");
+  const [regimeFilter,setRegimeFilter] = useState("all");
 
-  const regimes = useMemo(() => {
-    const s = new Set();
-    (strategies||[]).forEach(r => { if (r.regime) s.add(r.regime); });
-    return ["all", ...Array.from(s)];
-  }, [strategies]);
+  const regimes = useMemo(()=>{
+    const s=new Set(); (strategies||[]).forEach(r=>{if(r.regime)s.add(r.regime)});
+    return ["all",...Array.from(s)];
+  },[strategies]);
 
-  const filtered = useMemo(() => {
-    let items = strategies || [];
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      items = items.filter((s) =>
-        (s.strategy_type || s.name || "").toLowerCase().includes(q) ||
-        (s.regime || s.metadata?.regime || "").toLowerCase().includes(q)
-      );
-    }
-    if (regimeFilter !== "all") items = items.filter(s => s.regime === regimeFilter);
+  const filtered = useMemo(()=>{
+    let items=strategies||[];
+    if(search.trim()){const q=search.toLowerCase();items=items.filter(s=>(s.strategy_type||s.name||"").toLowerCase().includes(q)||(s.regime||s.metadata?.regime||"").toLowerCase().includes(q))}
+    if(regimeFilter!=="all")items=items.filter(s=>s.regime===regimeFilter);
     return items;
-  }, [strategies, search, regimeFilter]);
+  },[strategies,search,regimeFilter]);
 
   return (
-    <div className="r1" style={{
-      flex: 1, minHeight: 0,
-      overflow: "hidden",
-      display: "flex",
-      flexDirection: "column",
-      background: T.card,
-      borderRadius: "0 8px 0 8px",
-      border: `1px solid ${T.border}`,
-      padding: 14,
-      position: "relative",
-    }}>
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: 2,
-        background: `linear-gradient(90deg,${T.teal},transparent)`,
-      }} />
-
-      {/* Header + Search */}
-      <div style={{
-        display: "flex", alignItems: "center",
-        justifyContent: "space-between", gap: 12,
-        marginBottom: 10, flexShrink: 0,
-      }}>
-        <h2 style={{
-          fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
-          color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
-        }}>
-          Strategy Library ({filtered.length})
-        </h2>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <input
-            type="text"
-            placeholder="Filter strategies..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{
-              width: 140,
-              padding: "6px 10px",
-              borderRadius: "0 4px 0 4px",
-              background: T.surface,
-              border: `1px solid ${T.border}`,
-              color: T.text,
-              fontSize: 10,
-              fontFamily: "'DM Mono',monospace",
-              outline: "none",
-            }}
-          />
-          <select
-            value={regimeFilter}
-            onChange={e => setRegimeFilter(e.target.value)}
-            style={{
-              padding: "6px 10px",
-              borderRadius: "0 4px 0 4px",
-              background: T.surface,
-              border: `1px solid ${T.border}`,
-              color: T.text,
-              fontSize: 10,
-              fontFamily: "'DM Mono',monospace",
-              cursor: "pointer",
-              outline: "none",
-            }}
-          >
-            {regimes.map(r => (
-              <option key={r} value={r}>{r === "all" ? "All Regimes" : r.replace(/_/g, " ")}</option>
-            ))}
+    <div className="card card-pad" style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <Accent color={T.teal} />
+      <div className="flex items-center justify-between gap-12 shrink-0" style={{marginBottom:10}}>
+        <h2 className="section-heading" style={{marginBottom:0}}>Strategy Library ({filtered.length})</h2>
+        <div className="flex gap-6 items-center">
+          <input type="text" placeholder="Filter strategies..." value={search} onChange={e=>setSearch(e.target.value)} className="input-field" style={{width:140}} />
+          <select value={regimeFilter} onChange={e=>setRegimeFilter(e.target.value)} className="input-field" style={{cursor:"pointer"}}>
+            {regimes.map(r=><option key={r} value={r}>{r==="all"?"All Regimes":r.replace(/_/g," ")}</option>)}
           </select>
         </div>
       </div>
+      {filtered.length===0?<EmptyState icon={"\u25C9"} title={strategies.length===0?"No deployable strategies yet":"No strategies match your filter"} sub="Run autonomous research to discover strategies" />:
+      <div style={{flex:1,overflowY:"auto"}}>
+        <table className="data-table">
+          <thead><tr><th>Name</th><th>Type</th><th>Regime</th><th>Sharpe</th><th>Win Rate</th><th>Max DD</th><th>Status</th></tr></thead>
+          <tbody>{filtered.map((s,i)=>{
+            const sharpe=s.sharpe||s.metadata?.sharpe||0;
+            const wr=s.win_rate||s.metadata?.win_rate||0;
+            const dd=Math.abs(s.max_drawdown||s.metadata?.max_drawdown||0);
+            const name=s.strategy_type||s.name||"Unnamed";
+            const type=s.strategy_type||"\u2014";
+            const regime=s.regime||s.metadata?.regime||"\u2014";
+            const status=dd>0.1?"\u26A0 Decaying":"\u25CF Active";
+            return (<tr key={i}>
+              <td style={{padding:"5px 8px",color:T.text,fontWeight:600,fontSize:10}}>{name}</td>
+              <td style={{padding:"5px 8px",color:T.secondary}}>{type}</td>
+              <td style={{padding:"5px 8px",color:T.amber}}>{regime}</td>
+              <td style={{padding:"5px 8px",color:sharpe>=0.8?T.sage:sharpe>=0?T.text:T.coral,fontWeight:700}}>{typeof sharpe==="number"?sharpe.toFixed(2):"\u2014"}</td>
+              <td style={{padding:"5px 8px",color:T.text}}>{typeof wr==="number"?`${(wr*100).toFixed(0)}%`:"\u2014"}</td>
+              <td style={{padding:"5px 8px",color:dd<0.05?T.sage:dd<0.1?T.gold:T.coral}}>{typeof dd==="number"?`${(dd*100).toFixed(1)}%`:"\u2014"}</td>
+              <td style={{padding:"5px 8px",color:status.includes("Active")?T.sage:T.gold,fontWeight:600}}>{status}</td>
+            </tr>);
+          })}</tbody>
+        </table>
+      </div>}
+    </div>
+  );
+}
 
-      {filtered.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 40, flex: 1 }}>
-          <div style={{ fontSize: 24, color: T.muted, opacity: 0.2, marginBottom: 8 }}>◉</div>
-          <div style={{ fontSize: 11, color: T.muted }}>
-            {strategies.length === 0
-              ? "No deployable strategies yet"
-              : "No strategies match your filter"}
-          </div>
-          <div style={{ fontSize: 9, color: T.muted, marginTop: 4 }}>
-            Run autonomous research to discover strategies
-          </div>
+// ═══════════════════════════════════════════════
+// VIEW: SIGNAL FEED
+// ═══════════════════════════════════════════════
+function SignalFeedView({signals}) {
+  const data = useMemo(()=>Array.isArray(signals)?[...signals].reverse().slice(0,100):[], [signals]);
+
+  return (
+    <div className="card card-pad" style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <Accent color={T.gold} />
+      <SectionHeading>Signal Feed ({data.length})</SectionHeading>
+      {data.length===0?<EmptyState icon={"\u25CB"} title="No signals evaluated yet" sub="Signals appear here when the scanner detects opportunities" />:
+      <div style={{flex:1,overflowY:"auto"}}>
+        <table className="data-table">
+          <thead><tr><th>Time</th><th>Pair</th><th>Signal</th><th>Strategy</th><th>Confidence</th><th>Regime</th><th>Status</th></tr></thead>
+          <tbody>{data.map((s,i)=>{
+            const sig=s.signal||s;
+            const isBuy=(sig.signal||"").toLowerCase()==="buy";
+            const isSell=(sig.signal||"").toLowerCase()==="sell";
+            const conf=sig.confidence!=null?sig.confidence:0;
+            const time=s.time||(sig.timestamp?fmtTime(sig.timestamp):"\u2014");
+            return (<tr key={s.id||i}>
+              <td className="text-mono" style={{padding:"4px 8px",color:T.muted,fontSize:9}}>{time}</td>
+              <td style={{padding:"4px 8px",color:T.text,fontWeight:600}}>{sig.pair||"\u2014"}</td>
+              <td style={{padding:"4px 8px"}}><span className={isBuy?"badge-buy":isSell?"badge-sell":"badge-hold"}>{sig.signal||"hold"}</span></td>
+              <td style={{padding:"4px 8px",color:T.secondary}}>{sig.strategy_type||"\u2014"}</td>
+              <td style={{padding:"4px 8px"}}><ConfBar conf={conf} /></td>
+              <td className="text-mono" style={{padding:"4px 8px",color:T.amber,fontSize:9}}>{sig.regime||"\u2014"}</td>
+              <td style={{padding:"4px 8px",color:sig.type==="executed"?T.sage:T.muted,fontWeight:600,fontSize:9}}>{sig.type==="executed"?"EXECUTED":"EVALUATED"}</td>
+            </tr>);
+          })}</tbody>
+        </table>
+      </div>}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════
+// APP — Main orchestrator
+// ═══════════════════════════════════════════════
+function App() {
+  // ─── View state ───
+  const [activeView,setActiveView] = useState("dashboard");
+  const [showModal,setShowModal] = useState(false);
+
+  // ─── Data state ───
+  const [positions,setPositions] = useState([]);
+  const [tokens,setTokens] = useState([]);
+  const [strategies,setStrategies] = useState([]);
+  const [signals,setSignals] = useState([]);
+  const [events,setEvents] = useState([]);
+  const [terminalLog,setTerminalLog] = useState([]);
+  const [circuitBreaker,setCircuitBreaker] = useState(null);
+  const [regimeSnapshot,setRegimeSnapshot] = useState(null);
+  const [autonomousState,setAutonomousState] = useState(null);
+  const [iterationResults,setIterationResults] = useState([]);
+  const [iterationSummary,setIterationSummary] = useState(null);
+  const [riskPortfolio,setRiskPortfolio] = useState(null);
+  const [startupStatus,setStartupStatus] = useState(null);
+  const [dataHealth,setDataHealth] = useState(null);
+
+  // ─── UI state ───
+  const [loading,setLoading] = useState({});
+  const [autoStarting,setAutoStarting] = useState(false);
+  const [autoStopping,setAutoStopping] = useState(false);
+  const [autoPausing,setAutoPausing] = useState(false);
+
+  // ─── Modal params ───
+  const [goal,setGoal] = useState("Optimize single pair BTCUSDT spot scalping");
+  const [cycles,setCycles] = useState(5);
+  const [iters,setIters] = useState(1);
+
+  const api = useApi();
+
+  // ─── Restore persisted state ───
+  useEffect(()=>{
+    const saved = loadPersistedState();
+    if(saved) {
+      if(saved.positions) setPositions(saved.positions);
+      if(saved.circuitBreaker) setCircuitBreaker(saved.circuitBreaker);
+      if(saved.regimeSnapshot) setRegimeSnapshot(saved.regimeSnapshot);
+      if(saved.autonomousState) setAutonomousState(saved.autonomousState);
+      // Clear stale iterationData format, use new split format
+      if(saved.iterationResults) setIterationResults(saved.iterationResults);
+      if(saved.iterationSummary) setIterationSummary(saved.iterationSummary);
+      if(saved.iterationData?.results) setIterationResults(saved.iterationData.results);
+      if(saved.riskPortfolio) setRiskPortfolio(saved.riskPortfolio);
+      if(saved.startupStatus) setStartupStatus(saved.startupStatus);
+      if(saved.dataHealth) setDataHealth(saved.dataHealth);
+      if(saved.goal) setGoal(saved.goal);
+    }
+  }, []);
+
+  // ─── Persist on changes ───
+  useEffect(()=>{
+    persistState({positions,circuitBreaker,regimeSnapshot,autonomousState,iterationResults,iterationSummary,riskPortfolio,startupStatus,dataHealth,goal});
+  }, [positions,circuitBreaker,regimeSnapshot,autonomousState,iterationResults,iterationSummary,riskPortfolio,startupStatus,dataHealth,goal]);
+
+  // ─── Initial data fetch ───
+  useEffect(()=>{
+    async function fetchInitial() {
+      setLoading(p=>({...p,autonomous:true,circuit:true,regime:true,positions:true,iterations:true}));
+      try {
+        const [auto,iter,pos,strat,sig,cb,regime,risk,startup,health] = await Promise.allSettled([
+          api("/autonomous/status"), api("/autonomous/iterations"), api("/positions/open"),
+          api("/strategies"), api("/signals/feed"), api("/circuit-breaker/status"),
+          api("/regime/current"), api("/risk/portfolio"), api("/startup/status"), api("/data/health"),
+        ]);
+        if(auto.status==="fulfilled"&&auto.value) setAutonomousState(auto.value);
+        if(iter.status==="fulfilled"&&iter.value) {
+          setIterationResults(iter.value.results||[]);
+          setIterationSummary(iter.value);
+        }
+        if(pos.status==="fulfilled") setPositions(Array.isArray(pos.value)?pos.value:pos.value?.positions||[]);
+        if(strat.status==="fulfilled") setStrategies(Array.isArray(strat.value)?strat.value:strat.value?.strategies||[]);
+        if(sig.status==="fulfilled") setSignals(Array.isArray(sig.value)?sig.value:sig.value?.signals||[]);
+        if(cb.status==="fulfilled") setCircuitBreaker(cb.value);
+        if(regime.status==="fulfilled") setRegimeSnapshot(regime.value);
+        if(risk.status==="fulfilled") setRiskPortfolio(risk.value);
+        if(startup.status==="fulfilled") setStartupStatus(startup.value);
+        if(health.status==="fulfilled") setDataHealth(health.value);
+      } finally {
+        setLoading({});
+      }
+    }
+    fetchInitial();
+  }, [api]);
+
+  // ─── WebSocket message handler ───
+  const wsHandlers = useMemo(()=>({
+    onMessage(msg) {
+      const {type,payload} = msg;
+      if(!type) return;
+      switch(type) {
+        case "autonomous_update":
+          setAutonomousState(payload);
+          break;
+        case "iteration_complete":
+        case "research_update":
+          setIterationResults(prev => {
+            const result = payload;
+            const existing = prev.findIndex(r => r.iteration === result.iteration);
+            if (existing >= 0) {
+              const next = [...prev];
+              next[existing] = result;
+              return next;
+            }
+            return [...prev, result];
+          });
+          setIterationSummary(payload);
+          break;
+        case "position_update":
+          setPositions(payload?.positions||(Array.isArray(payload)?payload:[]));
+          break;
+        case "signal":
+          setSignals(prev=>{
+            const next=[payload||msg,...prev].slice(0,500);
+            return next;
+          });
+          break;
+        case "circuit_breaker":
+          setCircuitBreaker(payload);
+          break;
+        case "regime_update":
+          setRegimeSnapshot(payload);
+          break;
+        case "risk_update":
+          setRiskPortfolio(payload);
+          break;
+        case "startup_update":
+          setStartupStatus(payload);
+          break;
+        case "run_start":
+        case "run_complete":
+        case "run_error":
+        case "hypothesis":
+        case "critique":
+        case "iteration_start":
+        case "iteration_result":
+        case "task_done":
+          setEvents(prev=>[...prev,{
+            id:Date.now()+Math.random(),
+            timestamp:msg.timestamp?new Date(msg.timestamp).toLocaleTimeString():"",
+            type,
+            payload:payload||msg,
+          }].slice(-200));
+          if(type==="run_start") {
+            setAutonomousState(p=>p||{is_running:true,current_goal:payload?.goal});
+            setIterationResults([]);
+            setIterationSummary(null);
+          }
+          if(type==="run_complete") setAutonomousState(p=>({...p,is_running:false}));
+          if(type==="run_error") setAutonomousState(p=>({...p,is_running:false,last_error:payload?.message}));
+          if(type==="iteration_result") setIterationResults(prev => {
+            const result = payload?.metrics || payload;
+            const existing = prev.findIndex(r => r.iteration === result.iteration);
+            if (existing >= 0) {
+              const next = [...prev];
+              next[existing] = result;
+              return next;
+            }
+            return [...prev, result];
+          });
+          break;
+        case "heartbeat":
+          break;
+        case "log":
+          setTerminalLog(prev=>[...prev,{...payload,id:Date.now()+Math.random()}].slice(-500));
+          break;
+      }
+    },
+  }),[]);
+
+  const wsSend = useWebSocket("/ws/autonomous", wsHandlers);
+
+  // ─── Actions ───
+  const withLoading = useCallback((key,promise)=>{
+    setLoading(l=>({...l,[key]:true}));
+    return promise.finally(()=>setLoading(l=>({...l,[key]:false})));
+  },[]);
+
+  const startAutonomous = useCallback(async()=>{
+    setAutoStarting(true);
+    try { await api("/autonomous/start",{method:"POST"}); }
+    catch(e){console.error(e)}
+    finally{setAutoStarting(false)}
+  },[api]);
+
+  const stopAutonomous = useCallback(async()=>{
+    setAutoStopping(true);
+    try { await api("/autonomous/stop",{method:"POST"}); }
+    catch(e){console.error(e)}
+    finally{setAutoStopping(false)}
+  },[api]);
+
+  const pauseAutonomous = useCallback(async()=>{
+    setAutoPausing(true);
+    try { await api("/autonomous/pause",{method:"POST"}); }
+    catch(e){console.error(e)}
+    finally{setAutoPausing(false)}
+  },[api]);
+
+  const resumeAutonomous = useCallback(async()=>{
+    setAutoPausing(true);
+    try { await api("/autonomous/resume",{method:"POST"}); }
+    catch(e){console.error(e)}
+    finally{setAutoPausing(false)}
+  },[api]);
+
+  const haltCircuitBreaker = useCallback(async()=>{
+    try { await api("/circuit-breaker/halt",{method:"POST"}); }
+    catch(e){console.error(e)}
+  },[api]);
+
+  const clearCircuitBreaker = useCallback(async()=>{
+    try { await api("/circuit-breaker/clear",{method:"POST"}); }
+    catch(e){console.error(e)}
+  },[api]);
+
+  const startResearch = useCallback((input, c, i)=>{
+    const finalGoal = input||goal;
+    setGoal(finalGoal);
+    setShowModal(false);
+    api("/run",{method:"POST",body:JSON.stringify({goal:finalGoal,max_cycles:c ?? cycles,max_iterations:i ?? iters})})
+      .catch(e=>console.error(e));
+  },[api,goal,cycles,iters]);
+
+  // ─── Render ───
+  const dashProps = {autonomousState,circuitBreaker,regimeSnapshot,positions,tokens,iterationSummary,iterationResults,loading,startupStatus,riskPortfolio,dataHealth,startAutonomous,stopAutonomous,pauseAutonomous,resumeAutonomous,autoStarting,autoStopping,autoPausing,haltCircuitBreaker,clearCircuitBreaker,terminalLog,events};
+
+  return (
+    <div style={{height:"100%",display:"flex",flexDirection:"column",background:T.bg,color:T.text}}>
+      <Header activeView={activeView} setActiveView={setActiveView} autonomousState={autonomousState} onNewResearch={()=>setShowModal(true)} />
+
+      <main style={{flex:1,display:"flex",flexDirection:"column",padding:"12px 16px",minHeight:0,overflow:"hidden"}}>
+        {activeView==="dashboard" && <DashboardView {...dashProps} />}
+        {activeView==="research" && <ResearchView iterationSummary={iterationSummary} iterationResults={iterationResults} events={events} terminalLog={terminalLog} autonomousState={autonomousState} />}
+        {activeView==="strategies" && <StrategyLibraryView strategies={strategies} />}
+        {activeView==="signals" && <SignalFeedView signals={signals} />}
+      </main>
+
+      <footer style={{flexShrink:0,padding:"4px 16px",borderTop:`1px solid ${T.border}`,background:T.card,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <span style={{fontSize:7,color:T.muted,fontFamily:"'DM Mono',monospace"}}>
+          crypto_agent_bot
+        </span>
+        <div className="flex items-center gap-8">
+          <div className="status-dot" style={{width:4,height:4,background:autonomousState?.is_running?T.sage:T.muted}} />
+          <span style={{fontSize:7,color:T.muted,fontFamily:"'DM Mono',monospace"}}>
+            {autonomousState?.current_sharpe!=null?`Sharpe: ${autonomousState.current_sharpe.toFixed(2)}`:"Idle"}
+          </span>
+          <span style={{fontSize:7,color:T.muted,fontFamily:"'DM Mono',monospace"}}>
+            {new Date().toLocaleTimeString()}
+          </span>
         </div>
-      ) : (
-        <div style={{ flex: 1, overflowY: "auto" }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Name</th><th>Type</th><th>Regime</th><th>Sharpe</th><th>Win Rate</th><th>Max DD</th><th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((s, i) => {
-                const sharpe = s.sharpe || s.metadata?.sharpe || 0;
-                const wr = s.win_rate || s.metadata?.win_rate || 0;
-                const dd = Math.abs(s.max_drawdown || s.metadata?.max_drawdown || 0);
-                const name = s.strategy_type || s.name || "Unnamed";
-                const type = s.strategy_type || "\u2014";
-                const regime = s.regime || s.metadata?.regime || "\u2014";
-                const status = dd > 0.1 ? "\u26A0 Decaying" : "\u25CF Active";
-                return (
-                  <tr key={i}>
-                    <td style={{ padding: "5px 8px", color: T.text, fontWeight: 600, fontSize: 10 }}>
-                      {name}
-                    </td>
-                    <td style={{ padding: "5px 8px", color: T.secondary }}>{type}</td>
-                    <td style={{ padding: "5px 8px", color: T.amber }}>{regime}</td>
-                    <td style={{
-                      padding: "5px 8px",
-                      color: sharpe >= 0.8 ? T.sage : sharpe >= 0 ? T.text : T.coral,
-                      fontWeight: 700,
-                    }}>
-                      {typeof sharpe === "number" ? sharpe.toFixed(2) : "\u2014"}
-                    </td>
-                    <td style={{ padding: "5px 8px", color: T.text }}>
-                      {typeof wr === "number" ? `${(wr * 100).toFixed(0)}%` : "\u2014"}
-                    </td>
-                    <td style={{
-                      padding: "5px 8px",
-                      color: dd < 0.05 ? T.sage : dd < 0.1 ? T.gold : T.coral,
-                    }}>
-                      {typeof dd === "number" ? `${(dd * 100).toFixed(1)}%` : "\u2014"}
-                    </td>
-                    <td style={{
-                      padding: "5px 8px",
-                      color: status.includes("Active") ? T.sage : T.gold,
-                      fontWeight: 600,
-                    }}>
-                      {status}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      </footer>
+
+      {showModal && (
+        <ResearchModal goal={goal} cycles={cycles} iters={iters}
+          setGoal={setGoal} setCycles={setCycles} setIters={setIters}
+          onStart={startResearch} onClose={()=>setShowModal(false)} />
       )}
     </div>
   );
 }
 
-// ════════════════════════════════════════════
-// SIGNAL FEED VIEW
-// ════════════════════════════════════════════
-function SignalFeedView({ signals }) {
-  const data = useMemo(() => {
-    return Array.isArray(signals) ? [...signals].reverse().slice(0, 100) : [];
-  }, [signals]);
-
-  return (
-    <div className="r1" style={{
-      flex: 1, minHeight: 0,
-      overflow: "hidden",
-      display: "flex",
-      flexDirection: "column",
-      background: T.card,
-      borderRadius: "0 8px 0 8px",
-      border: `1px solid ${T.border}`,
-      padding: 14,
-      position: "relative",
-    }}>
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: 2,
-        background: `linear-gradient(90deg,${T.gold},transparent)`,
-      }} />
-      <h2 style={{
-        fontFamily: "'Syne',sans-serif", fontSize: 9, fontWeight: 600,
-        color: T.muted, textTransform: "uppercase", letterSpacing: "2px",
-        marginBottom: 10, flexShrink: 0,
-      }}>
-        Signal Feed ({data.length})
-      </h2>
-
-      {data.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 40, flex: 1 }}>
-          <div style={{ fontSize: 24, color: T.muted, opacity: 0.2, marginBottom: 8 }}>○</div>
-          <div style={{ fontSize: 11, color: T.muted }}>No signals evaluated yet</div>
-          <div style={{ fontSize: 9, color: T.muted, marginTop: 4 }}>
-            Signals appear here when the scanner detects opportunities
-          </div>
-        </div>
-      ) : (
-        <div style={{ flex: 1, overflowY: "auto" }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Time</th><th>Pair</th><th>Signal</th><th>Strategy</th><th>Confidence</th><th>Regime</th><th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((s, i) => {
-                const sig = s.signal || s;
-                const isBuy = (sig.signal || "").toLowerCase() === "buy";
-                const isSell = (sig.signal || "").toLowerCase() === "sell";
-                const conf = sig.confidence != null ? sig.confidence : 0;
-                const time = s.time || (sig.timestamp ? new Date(sig.timestamp).toLocaleTimeString() : "\u2014");
-                return (
-                  <tr key={s.id || i}>
-                    <td style={{ padding: "4px 8px", color: T.muted, fontFamily: "'DM Mono',monospace", fontSize: 9 }}>
-                      {time}
-                    </td>
-                    <td style={{ padding: "4px 8px", color: T.text, fontWeight: 600 }}>
-                      {sig.pair || "\u2014"}
-                    </td>
-                    <td style={{ padding: "4px 8px" }}>
-                      <span style={{
-                        display: "inline-block",
-                        padding: "1px 8px",
-                        borderRadius: "0 4px 0 4px",
-                        background: isBuy ? `${T.sage}20` : isSell ? `${T.coral}20` : `${T.muted}15`,
-                        color: isBuy ? T.sage : isSell ? T.coral : T.muted,
-                        fontWeight: 700,
-                        fontSize: 9,
-                        fontFamily: "'DM Mono',monospace",
-                        textTransform: "uppercase",
-                      }}>
-                        {sig.signal || "hold"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "4px 8px", color: T.secondary }}>
-                      {sig.strategy_type || "\u2014"}
-                    </td>
-                    <td style={{ padding: "4px 8px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <div style={{
-                          width: 50,
-                          height: 4,
-                          background: T.surface,
-                          borderRadius: 2,
-                          overflow: "hidden",
-                        }}>
-                          <div style={{
-                            width: `${Math.min(conf * 100, 100)}%`,
-                            height: "100%",
-                            background: conf >= 0.6 ? T.sage : conf >= 0.3 ? T.gold : T.muted,
-                            borderRadius: 2,
-                            transition: "width 0.3s",
-                          }} />
-                        </div>
-                        <span style={{
-                          fontSize: 9,
-                          color: conf >= 0.6 ? T.sage : conf >= 0.3 ? T.gold : T.muted,
-                          fontFamily: "'DM Mono',monospace",
-                          fontWeight: 600,
-                        }}>
-                          {(conf * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                    </td>
-                    <td style={{ padding: "4px 8px", color: T.amber, fontSize: 9 }}>
-                      {sig.regime || "\u2014"}
-                    </td>
-                    <td style={{
-                      padding: "4px 8px",
-                      color: sig.type === "executed" ? T.sage : T.muted,
-                      fontWeight: 600,
-                      fontSize: 9,
-                    }}>
-                      {sig.type === "executed" ? "EXECUTED" : "EVALUATED"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════
-// MODAL
-// ════════════════════════════════════════════
-function Modal({ goal, setGoal, cycles, setCycles, iters, setIters, onStart, onClose }) {
-  const [input, setInput] = useState(goal);
-  return (
-    <div
-      style={{
-        position: "fixed", inset: 0, zIndex: 1000,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        background: "rgba(0,0,0,0.75)",
-        backdropFilter: "blur(4px)",
-        WebkitBackdropFilter: "blur(4px)",
-      }}
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: 460,
-          maxWidth: "90vw",
-          animation: "stampIn 0.3s ease-out",
-          background: T.card,
-          borderRadius: "0 14px 0 14px",
-          border: `1px solid ${T.border}`,
-          padding: 28,
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        {/* Corner accents */}
-        <div style={{
-          position: "absolute", top: 0, left: 0,
-          width: 36, height: 36,
-          borderTop: `2px solid ${T.amber}`,
-          borderLeft: `2px solid ${T.amber}`,
-        }} />
-        <div style={{
-          position: "absolute", bottom: 0, right: 0,
-          width: 36, height: 36,
-          borderBottom: `2px solid ${T.teal}`,
-          borderRight: `2px solid ${T.teal}`,
-        }} />
-
-        <div style={{ marginBottom: 22 }}>
-          <div style={{
-            fontFamily: "'Syne',sans-serif",
-            fontSize: 18, fontWeight: 700, color: T.text,
-          }}>
-            New Research Run
-          </div>
-          <p style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>
-            Configure research experiment parameters
-          </p>
-        </div>
-
-        <label style={{
-          fontSize: 9, color: T.muted, fontWeight: 600,
-          display: "block", textTransform: "uppercase",
-          letterSpacing: "1.5px", fontFamily: "'Syne',sans-serif",
-          marginBottom: 4,
-        }}>
-          Goal
-        </label>
-        <textarea
-          rows={3}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          style={{
-            width: "100%", resize: "vertical",
-            fontFamily: "'Sora',sans-serif", fontSize: 11.5,
-            padding: "10px 14px",
-            borderRadius: "0 6px 0 6px",
-            background: T.surface,
-            border: `1px solid ${T.border}`,
-            color: T.text,
-            marginBottom: 18,
-            outline: "none",
-          }}
-        />
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 24 }}>
-          <div>
-            <label style={{
-              fontSize: 9, color: T.muted, fontWeight: 600,
-              display: "block", textTransform: "uppercase",
-              letterSpacing: "1.5px", fontFamily: "'Syne',sans-serif",
-              marginBottom: 2,
-            }}>
-              Max Cycles: <span style={{ color: T.amber, fontFamily: "'DM Mono',monospace" }}>{cycles}</span>
-            </label>
-            <input type="range" min={1} max={10} value={cycles}
-              onChange={e => setCycles(Number(e.target.value))}
-              style={{ width: "100%", margin: "8px 0" }} />
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
-              <span>1</span><span>10</span>
-            </div>
-          </div>
-          <div>
-            <label style={{
-              fontSize: 9, color: T.muted, fontWeight: 600,
-              display: "block", textTransform: "uppercase",
-              letterSpacing: "1.5px", fontFamily: "'Syne',sans-serif",
-              marginBottom: 2,
-            }}>
-              Max Iterations: <span style={{ color: T.amber, fontFamily: "'DM Mono',monospace" }}>{iters}</span>
-            </label>
-            <input type="range" min={1} max={10} value={iters}
-              onChange={e => setIters(Number(e.target.value))}
-              style={{ width: "100%", margin: "8px 0" }} />
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: T.muted, fontFamily: "'DM Mono',monospace" }}>
-              <span>1</span><span>10</span>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button
-            style={{
-              padding: "8px 18px",
-              borderRadius: "0 6px 0 6px",
-              border: `1px solid ${T.border}`,
-              background: T.elevated,
-              color: T.text,
-              fontSize: 11,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: "'Sora',sans-serif",
-            }}
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button
-            style={{
-              padding: "8px 18px",
-              borderRadius: "0 6px 0 6px",
-              border: `1px solid ${T.amber}`,
-              background: T.amber,
-              color: "#000",
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: "pointer",
-              fontFamily: "'Syne',sans-serif",
-              textTransform: "uppercase",
-              letterSpacing: "1px",
-            }}
-            onClick={() => { setGoal(input); onStart(input); }}
-          >
-            Start Run
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);</script>
-  </body>
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
 </html>

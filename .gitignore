@@ -47,3 +47,5 @@ searxng_test.json
 # Runtime workspace artifacts
 workspace/audit_log.jsonl
 workspace/quality_scorer.pkl
+.claude/
+workspace/pipeline_results.jsonl
