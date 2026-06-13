@@ -10,269 +10,602 @@
 <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <style>
-/* ─── Reset & Base ─── */
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;border-radius:0!important}
 html,body,#root{height:100%;width:100%}
-body{background:#020617;color:#F8FAFC;font-family:'Exo 2',sans-serif;font-size:13px;line-height:1.6;overflow:hidden}
-/* ─── CSS Variables ─── */
+body{background:#060A12;color:#E2EBF5;font-family:'Exo 2',sans-serif;font-size:13px;line-height:1.6;overflow:hidden}
 :root{
-  --bg:#020617;
-  --surface:#0F172A;
-  --elevated:#1E293B;
-  --card:#0A0F1E;
-  --border:rgba(255,255,255,0.06);
-  --border-hover:rgba(255,255,255,0.12);
-  --text:#F8FAFC;
-  --secondary:#94A3B8;
-  --muted:#64748B;
-  --accent:#22C55E;
-  --coral:#EF4444;
-  --teal:#14B8A6;
-  --gold:#F59E0B;
-  --sage:#22C55E;
-  --radius:8px;
-  --radius-sm:6px;
-  --shadow:0 2px 8px rgba(0,0,0,0.3);
+  --bg:#060A12;--surface:#0C1220;--elevated:#111827;
+  --border:#1E2D45;--border-bright:#2A4060;
+  --text:#E2EBF5;--secondary:#7A95B0;--muted:#3D5470;
+  --green:#00FF88;--green-dim:#003D22;
+  --red:#FF3B5C;--red-dim:#3D0012;
+  --amber:#FFB830;--amber-dim:#3D2A00;
+  --blue:#3B82F6;--purple:#8B5CF6;--cyan:#06B6D4;
 }
-
-/* ─── Scrollbar ─── */
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:#2a2a32;border-radius:2px}
-::-webkit-scrollbar-thumb:hover{background:#3a3a42}
-
-/* ─── Utility ─── */
+::-webkit-scrollbar-thumb{background:#1E2D45}
 .truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.flex{display:flex}
-.flex-col{flex-direction:column}
-.gap-2{gap:2px}
-.gap-4{gap:4px}
-.gap-6{gap:6px}
-.gap-8{gap:8px}
-.gap-10{gap:10px}
-.items-center{align-items:center}
-.justify-between{justify-content:space-between}
-.flex-1{flex:1}
-.min-h-0{min-height:0}
-.shrink-0{flex-shrink:0}
-.text-mono{font-family:'DM Mono',monospace;font-size:12px}
-
-/* ─── Animations ─── */
+#root{display:flex;flex-direction:column;height:100vh}
+.main{display:flex;flex:1;min-height:0}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-@keyframes stampIn{0%{opacity:0;transform:scale(0.95)}100%{opacity:1;transform:scale(1)}}
 @keyframes fadeIn{0%{opacity:0}100%{opacity:1}}
-@keyframes slideUp{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:translateY(0)}}
-
-/* ─── Card base ─── */
-.card{
-  background:var(--card);
-  border:1px solid var(--border);
-  border-radius:var(--radius);
-  position:relative;
-  overflow:hidden;
-  box-shadow:var(--shadow);
-  transition:border-color 0.2s;
-}
-.card:hover{border-color:var(--border-hover)}
-.card-accent{position:absolute;top:0;left:0;right:0;height:2px;border-radius:var(--radius) var(--radius) 0 0}
-.card-pad{padding:16px}
-
-/* ─── Dashboard Grid (bento) ─── */
-.dash-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr 1fr;
-  gap:12px;
-  flex:1;min-height:0;
-  overflow-y:auto;
-  padding:4px 0;
-  align-content:start;
-}
-@media(max-width:1100px){.dash-grid{grid-template-columns:1fr 1fr}}
-@media(max-width:700px){.dash-grid{grid-template-columns:1fr}}
-
-/* ─── Data tables ─── */
-table.data-table{width:100%;border-collapse:collapse}
-table.data-table th{
-  padding:6px 10px;
-  font-family:'Orbitron',sans-serif;
-  font-size:8px;
-  font-weight:500;
-  color:var(--muted);
-  text-transform:uppercase;
-  letter-spacing:1.8px;
-  text-align:left;
-  border-bottom:1px solid var(--border);
-  background:rgba(255,255,255,0.02);
-}
-table.data-table td{padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px}
-table.data-table tr:last-child td{border-bottom:none}
-table.data-table tr:hover td{background:rgba(255,255,255,0.03)}
-
-/* ─── Section heading ─── */
-.section-heading{
-  font-family:'Orbitron',sans-serif;
-  font-size:9px;
-  font-weight:600;
-  color:var(--muted);
-  text-transform:uppercase;
-  letter-spacing:2.5px;
-  margin-bottom:12px;
-}
-
-/* ─── Status dot ─── */
-.status-dot{
-  width:8px;height:8px;
-  border-radius:50%;
-  flex-shrink:0;
-}
-
-/* ─── Buttons ─── */
-.btn{
-  display:inline-flex;align-items:center;justify-content:center;
-  padding:8px 16px;
-  border-radius:var(--radius-sm);
-  font-family:'Exo 2',sans-serif;
-  font-size:11px;
-  font-weight:600;
-  cursor:pointer;
-  transition:all 0.2s;
-  border:1px solid var(--border);
-  background:transparent;
-  color:var(--text);
-  gap:6px;
-  text-transform:none;
-}
-.btn:hover{opacity:0.85;transform:translateY(-0.5px)}
-.btn:active{transform:translateY(0)}
-.btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
-.btn-primary{
-  background:var(--accent);
-  color:#020617;
-  border-color:var(--accent);
-  font-weight:700;
-  box-shadow:0 0 12px rgba(34,197,94,0.15);
-}
-.btn-primary:hover{box-shadow:0 0 20px rgba(34,197,94,0.3);opacity:1}
-.btn-danger{background:var(--coral);color:#fff;border-color:var(--coral)}
-.btn-ghost{background:transparent;color:var(--secondary);border-color:var(--border)}
-
-/* ─── Inputs & Selects ─── */
-.input-field{
-  padding:7px 12px;
-  border-radius:var(--radius-sm);
-  background:var(--surface);
-  border:1px solid var(--border);
-  color:var(--text);
-  font-size:11px;
-  font-family:'Exo 2',sans-serif;
-  outline:none;
-  transition:border-color .2s;
-}
-.input-field:focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
-
-/* ─── Mini stat ─── */
-.mini-stat{
-  padding:6px 10px;
-  background:var(--surface);
-  border-radius:var(--radius-sm);
-  border:1px solid var(--border);
-}
-.mini-stat-label{
-  font-size:8px;
-  color:var(--muted);
-  font-family:'Orbitron',sans-serif;
-  text-transform:uppercase;
-  letter-spacing:1.2px;
-  margin-bottom:2px;
-}
-.mini-stat-value{
-  font-size:14px;
-  font-weight:600;
-  font-family:'DM Mono',monospace;
-}
-
-/* ─── Skeleton loading ─── */
-.skel{background:linear-gradient(90deg,var(--surface) 25%,var(--elevated) 50%,var(--surface) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:var(--radius-sm)}
-@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-
-/* ─── Signal badge ─── */
-.badge-buy{display:inline-block;padding:1px 10px;border-radius:var(--radius-sm);background:rgba(34,197,94,0.15);color:var(--accent);font-weight:600;font-size:9px;font-family:'Exo 2',sans-serif;text-transform:uppercase;letter-spacing:0.5px}
-.badge-sell{display:inline-block;padding:1px 10px;border-radius:var(--radius-sm);background:rgba(239,68,68,0.15);color:var(--coral);font-weight:600;font-size:9px;font-family:'Exo 2',sans-serif;text-transform:uppercase;letter-spacing:0.5px}
-.badge-hold{display:inline-block;padding:1px 10px;border-radius:var(--radius-sm);background:rgba(100,116,139,0.15);color:var(--muted);font-weight:600;font-size:9px;font-family:'Exo 2',sans-serif;text-transform:uppercase;letter-spacing:0.5px}
-
-/* ─── Button ─── */
-.btn-ghost{background:transparent;color:var(--text);border-color:var(--border)}
-.btn-ghost:hover:not(:disabled){background:var(--surface)}
+@keyframes slideUp{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}
+@keyframes slideDown{0%{opacity:0;transform:translateY(-6px)}100%{opacity:1;transform:translateY(0)}}@keyframes countUp{0%{opacity:0.6}100%{opacity:1}}
+.scanline{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,136,0.015)2px,rgba(0,255,136,0.015)4px);pointer-events:none;z-index:10}
 </style>
 </head>
 <body>
-
 <div id="root"></div>
-
 <script type="text/babel">
-const {useState,useEffect,useRef,useMemo,useCallback,createContext,useContext} = React;
+const {useState,useEffect,useRef,useMemo,useCallback} = React;
 
-// ═══════════════════════════════════════════════
-// THEME
-// ═══════════════════════════════════════════════
+// ═══ THEME ═══
 const T = {
-  bg:"#020617",surface:"#0F172A",elevated:"#1E293B",card:"#0A0F1E",
-  border:"#1E293B",text:"#F8FAFC",secondary:"#94A3B8",muted:"#64748B",
-  accent:"#22C55E",coral:"#EF4444",teal:"#14B8A6",gold:"#F59E0B",sage:"#22C55E",
+  bg:"#060A12",surface:"#0C1220",elevated:"#111827",
+  border:"#1E2D45",borderBright:"#2A4060",
+  text:"#E2EBF5",secondary:"#7A95B0",muted:"#3D5470",
+  accent:"#00FF88",coral:"#FF3B5C",teal:"#06B6D4",
+  gold:"#FFB830",purple:"#8B5CF6",blue:"#3B82F6",
 };
 
-// ═══════════════════════════════════════════════
-// UTILITY HELPERS
-// ═══════════════════════════════════════════════
+// ═══ UTILITIES ═══
 const fmtPnl = (v) => v != null ? `${v >= 0 ? "+" : ""}${(v * 100).toFixed(2)}%` : "\u2014";
 const fmtTime = (ts) => ts ? new Date(ts).toLocaleTimeString() : "\u2014";
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const agentColors = {strategist:T.purple,analyst:T.cyan,risk_manager:T.gold,backtester:T.muted,researcher:T.blue};
 
-const Skeleton = ({w,h,style}) => <div className="skel" style={{width:w||"100%",height:h||20,...style}} />;
-const EmptyState = ({icon,title,sub}) => (
-  <div style={{textAlign:"center",padding:40,flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-    <div style={{fontSize:28,color:T.muted,opacity:0.15,marginBottom:10}}>{icon||"\u25CB"}</div>
-    <div style={{fontSize:11,color:T.muted}}>{title}</div>
-    {sub && <div style={{fontSize:9,color:T.muted,marginTop:4}}>{sub}</div>}
-  </div>
-);
-
-const SectionHeading = ({children,accent,extra}) => (
-  <div className="flex items-center justify-between shrink-0" style={{marginBottom:10}}>
-    <h2 className="section-heading">{children}</h2>
-    {extra}
-  </div>
-);
-const Accent = ({color=T.gold}) => <div className="card-accent" style={{background:`linear-gradient(90deg,${color},transparent)`}} />;
-const MiniStat = ({label,value,color=T.secondary,small}) => (
-  <div className="mini-stat">
-    <div className="mini-stat-label">{label}</div>
-    <div className="mini-stat-value" style={{fontSize:small?11:13,color}}>{value}</div>
-  </div>
-);
-const ConfBar = ({conf,size=50}) => (
-  <div className="flex items-center gap-6">
-    <div style={{width:size,height:4,background:T.surface,borderRadius:2,overflow:"hidden"}}>
-      <div style={{width:`${clamp(conf*100,0,100)}%`,height:"100%",background:conf>=0.6?T.sage:conf>=0.3?T.gold:T.muted,borderRadius:2,transition:"width .3s"}} />
-    </div>
-    <span className="text-mono" style={{fontSize:9,fontWeight:600,color:conf>=0.6?T.sage:conf>=0.3?T.gold:T.muted}}>{(conf*100).toFixed(0)}%</span>
-  </div>
-);
-
-// ═══════════════════════════════════════════════
-// STATE CONTEXT + PERSISTENCE
-// ═══════════════════════════════════════════════
-const LS_KEY = "cabot_ui_state";
-
-function loadPersistedState() {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch(e) { /* ignore */ }
-  return null;
+// ═══ MOCK DATA GENERATORS ═══
+function generateMockCandles(n = 120) {
+  const candles = []; let price = 45000;
+  const start = Date.now() - n * 3600000;
+  for (let i = 0; i < n; i++) {
+    const change = (Math.random() - 0.48) * price * 0.015;
+    const open = price; const close = price + change;
+    const high = Math.max(open, close) + Math.random() * price * 0.005;
+    const low = Math.min(open, close) - Math.random() * price * 0.005;
+    candles.push({time: start + i * 3600000, open, high, low, close, volume: Math.random() * 100 + 20});
+    price = close;
+  }
+  return candles;
 }
-function persistState(state) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e) { /* ignore */ }
+function generateMockTrades(candles) {
+  const trades = [];
+  for (let i = 10; i < candles.length - 10; i += Math.floor(Math.random() * 15 + 8)) {
+    const exitIdx = Math.min(i + Math.floor(Math.random() * 8 + 2), candles.length - 1);
+    const profit = (Math.random() - 0.4) * 0.06;
+    trades.push({open_date: candles[i].time, close_date: candles[exitIdx].time, open_rate: candles[i].close, close_rate: candles[exitIdx].close, profit_ratio: profit, is_short: false});
+  }
+  return trades;
+}
+
+// ═══ SVG ARC PATH HELPER ═══
+function arcPath(cx, cy, r, startAngle, endAngle) {
+  const s = {x: cx + r * Math.cos(startAngle), y: cy + r * Math.sin(startAngle)};
+  const e = {x: cx + r * Math.cos(endAngle), y: cy + r * Math.sin(endAngle)};
+  const large = endAngle - startAngle > Math.PI ? 1 : 0;
+  return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`;
+}
+
+// ═══ SVG GAUGE: Sharpe ═══
+function SharpeGauge({value}) {
+  const clamped = Math.max(-3, Math.min(3, value || 0));
+  const pct = (clamped + 3) / 6;
+  const color = clamped < 0 ? T.coral : clamped < 0.8 ? T.gold : T.accent;
+  const cx = 100, cy = 100, r = 72;
+  const sA = -Math.PI * 0.8, sW = Math.PI * 1.6;
+  const fillAngle = sA + sW * pct;
+  const labelX = cx;
+  const glow = `0 0 10px ${color}`;
+  return (
+    <svg viewBox="0 0 200 130" style={{width:"100%"}}>
+      <path d={arcPath(cx,cy,r,sA,sA+sW)} stroke={T.border} strokeWidth="8" fill="none" strokeLinecap="butt" />
+      <path d={arcPath(cx,cy,r,sA,fillAngle)} stroke={color} strokeWidth="8" fill="none" strokeLinecap="butt" />
+      {[-1,0,0.8,2].map(tk => {
+        const tp = (tk + 3) / 6;
+        const ta = sA + sW * tp;
+        const tx = cx + (r + 12) * Math.cos(ta);
+        const ty = cy + (r + 12) * Math.sin(ta);
+        return <text key={tk} x={tx} y={ty} textAnchor="middle" dominantBaseline="middle" fill={T.muted} fontFamily="DM Mono" fontSize="7">{tk}</text>;
+      })}
+      <text x={labelX} y={86} textAnchor="middle" fontFamily="DM Mono" fontSize="22" fontWeight="500" fill={color} style={{textShadow:glow}}>
+        {value != null ? value.toFixed(2) : "0.00"}
+      </text>
+      <text x={labelX} y={104} textAnchor="middle" fontFamily="Orbitron" fontSize="7" fill={T.secondary} letterSpacing="3">SHARPE</text>
+    </svg>
+  );
+}
+
+// ═══ SVG GAUGE: Win Rate Donut ═══
+function WinRateDonut({value}) {
+  const wr = Math.max(0, Math.min(1, value || 0));
+  const r = 48, cx = 70, cy = 70;
+  const circ = 2 * Math.PI * r;
+  const fillLen = circ * wr;
+  return (
+    <svg viewBox="0 0 140 120" style={{width:"100%"}}>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={T.border} strokeWidth="10" />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={T.accent} strokeWidth="10" strokeDasharray={`${fillLen} ${circ}`} strokeLinecap="butt" transform={`rotate(-90 ${cx} ${cy})`} style={{transition:"stroke-dashoffset 0.5s"}} />
+      <text x={cx} y={cy+4} textAnchor="middle" fontFamily="DM Mono" fontSize="16" fontWeight="500" fill={T.accent} style={{textShadow:"0 0 8px var(--green)"}}>{(wr*100).toFixed(0)}%</text>
+      <text x={cx} y={100} textAnchor="middle" fontFamily="Orbitron" fontSize="7" fill={T.secondary} letterSpacing="3">WIN RATE</text>
+    </svg>
+  );
+}
+
+// ═══ SVG GAUGE: Max Drawdown Bar ═══
+function DrawdownBar({value}) {
+  const dd = Math.min(1, Math.max(0, Math.abs(value || 0)));
+  const w = 230, h = 28;
+  const fillW = Math.min(w, (dd / 0.5) * w);
+  return (
+    <div style={{margin:"0 6px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+        <span style={{fontFamily:"Orbitron",fontSize:7,color:T.secondary,letterSpacing:2}}>MAX DD</span>
+        <span style={{fontFamily:"DM Mono",fontSize:12,color:T.coral,fontWeight:500,textShadow:"0 0 8px var(--red)"}}>{(dd*100).toFixed(1)}%</span>
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:h}}>
+        <rect x="0" y="0" width={w} height={h} fill={T.coral+"20"} />
+        <rect x="0" y="0" width={fillW} height={h} fill={T.coral} opacity="0.7" />
+        <line x1={w*0.2} y1="0" x2={w*0.2} y2={h} stroke={T.border} strokeWidth="1" strokeDasharray="2 2" />
+        <line x1={w*0.4} y1="0" x2={w*0.4} y2={h} stroke={T.border} strokeWidth="1" strokeDasharray="2 2" />
+        <text x={w*0.2} y={h-3} textAnchor="middle" fill={T.muted} fontFamily="DM Mono" fontSize="6">10%</text>
+        <text x={w*0.4} y={h-3} textAnchor="middle" fill={T.muted} fontFamily="DM Mono" fontSize="6">20%</text>
+      </svg>
+    </div>
+  );
+}
+
+// ═══ SVG GAUGE: Trade Counter ═══
+function TradeCounter({value, prev}) {
+  const count = value ?? 0;
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"8px 0"}}>
+      <span style={{fontFamily:"DM Mono",fontSize:"28px",fontWeight:500,color:T.teal,textShadow:"0 0 10px var(--cyan)",animation:prev !== count ? "countUp 0.6s ease-out" : "none"}}>
+        {count}
+      </span>
+      <span style={{fontFamily:"Orbitron",fontSize:7,color:T.secondary,letterSpacing:3,marginTop:-2}}>TRADES</span>
+    </div>
+  );
+}
+
+// ═══ CIRCUIT BREAKER PILL ═══
+function CircuitBreakerPill({state, onHalt, onClear}) {
+  const halted = state?.halted;
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:halted ? T.coral+"15" : T.accent+"10",border:`1px solid ${halted ? T.coral+"40" : T.accent+"30"}`}}>
+      <div style={{width:8,height:8,background:halted ? T.coral : T.accent,animation:halted ? "pulse 1.5s infinite" : "none",flexShrink:0}} />
+      <span style={{fontFamily:"DM Mono",fontSize:9,fontWeight:600,color:halted ? T.coral : T.accent,flex:1}}>
+        {halted ? "HALTED" : "OPERATIONAL"}
+      </span>
+      <button onClick={onHalt} style={{fontFamily:"Orbitron",fontSize:8,background:"transparent",border:`1px solid ${T.coral}`,color:T.coral,padding:"3px 8px",cursor:"pointer"}}>HALT</button>
+      <button onClick={onClear} style={{fontFamily:"Orbitron",fontSize:8,background:"transparent",border:`1px solid ${T.accent}`,color:T.accent,padding:"3px 8px",cursor:"pointer"}}>CLEAR</button>
+    </div>
+  );
+}
+
+// ═══ CANDLESTICK SVG ═══
+function CandlestickSVG({candles, trades, width=800, height=400}) {
+  if (!candles || candles.length === 0) return null;
+  const pl = 52, pr = 14, pt = 16, pb = 28;
+  const volH = height * 0.18;
+  const chartH = height - pt - pb - volH;
+  const chartW = width - pl - pr;
+  const minP = Math.min(...candles.map(c => c.low));
+  const maxP = Math.max(...candles.map(c => c.high));
+  const pRange = maxP - minP || 1;
+  const maxV = Math.max(...candles.map(c => c.volume), 1);
+  const cw = chartW / candles.length;
+  const toX = (i) => pl + i * cw;
+  const toY = (v) => pt + chartH - ((v - minP) / pRange) * chartH;
+  const toVolY = (v) => pt + chartH + volH - (v / maxV) * volH;
+  const toTradeX = (ts) => pl + ((ts - candles[0].time) / (candles[candles.length-1].time - candles[0].time || 1)) * chartW;
+
+  const gridLines = [];
+  for (let i = 0; i <= 5; i++) {
+    const yVal = minP + (pRange * i) / 5;
+    const yPos = toY(yVal);
+    gridLines.push({y:yPos, label:yVal.toFixed(0)});
+  }
+  const labelInterval = Math.max(1, Math.floor(candles.length / 8));
+  const timeLabels = candles.filter((_,i)=>i%labelInterval===0).map(c=>({x:toX(candles.indexOf(c)), label:new Date(c.time).toLocaleDateString([],{month:"short",day:"numeric"})}));
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} style={{width:"100%",height:"100%",display:"block"}}>
+      {gridLines.map((gl,i)=>(
+        <g key={i}>
+          <line x1={pl} y1={gl.y} x2={pl+chartW} y2={gl.y} stroke={T.border} strokeWidth="1" opacity="0.3" />
+          <text x={pl-4} y={gl.y+2} textAnchor="end" fill={T.muted} fontFamily="DM Mono" fontSize="7">{gl.label}</text>
+        </g>
+      ))}
+      {timeLabels.map((tl,i)=><text key={i} x={tl.x} y={height-4} textAnchor="middle" fill={T.muted} fontFamily="DM Mono" fontSize="7">{tl.label}</text>)}
+      {candles.map((c,i)=>{
+        const volBarW = Math.max(1, cw - 1);
+        return <rect key={i} x={toX(i)} y={toVolY(c.volume)} width={volBarW} height={pt+chartH+volH-toVolY(c.volume)} fill={c.close >= c.open ? T.accent : T.coral} opacity="0.25" />;
+      })}
+      {candles.map((c,i)=>{
+        const x = toX(i) + cw/2;
+        const isUp = c.close >= c.open;
+        const col = isUp ? T.accent : T.coral;
+        const bodyTop = toY(Math.max(c.open,c.close));
+        const bodyBot = toY(Math.min(c.open,c.close));
+        const bodyH = Math.max(1, bodyBot - bodyTop);
+        return (
+          <g key={i}>
+            <line x1={x} y1={toY(c.high)} x2={x} y2={toY(c.low)} stroke={col} strokeWidth="1" opacity="0.8" />
+            <rect x={x - cw/3} y={bodyTop} width={cw*0.66} height={bodyH} fill={col} opacity="0.85" />
+          </g>
+        );
+      })}
+      {trades && trades.map((t,i)=>{
+        const openX = toTradeX(t.open_date);
+        const closeX = toTradeX(t.close_date);
+        const profitCol = t.profit_ratio >= 0 ? T.accent : T.coral;
+        const openY = toY(t.open_rate);
+        const closeY = toY(t.close_rate);
+        const oCandle = candles.reduce((a,c) => Math.abs(c.time - t.open_date) < Math.abs(a.time - t.open_date) ? c : a);
+        const cCandle = candles.reduce((a,c) => Math.abs(c.time - t.close_date) < Math.abs(a.time - t.close_date) ? c : a);
+        const buyY = toY(oCandle.low) + 4;
+        const sellY = toY(cCandle.high) - 4;
+        const [tip,setTip] = React.useState(false);
+        return (
+          <g key={i}>
+            <rect x={openX} y={Math.min(openY,closeY)} width={closeX-openX} height={Math.abs(closeY-openY)} fill={profitCol} opacity="0.06" rx="0" />
+            <line x1={openX} y1={buyY+4} x2={openX} y2={pt} stroke={T.accent} strokeWidth="1" strokeDasharray="2 4" opacity="0.3" pointerEvents="none" />
+            <polygon points={`${openX},${buyY+8} ${openX-4},${buyY} ${openX+4},${buyY}`} fill={T.accent} opacity="0.9" style={{cursor:"pointer"}} onMouseOver={()=>setTip(true)} onMouseOut={()=>setTip(false)} />
+            <polygon points={`${closeX},${sellY-8} ${closeX-4},${sellY} ${closeX+4},${sellY}`} fill={profitCol} opacity="0.9" style={{cursor:"pointer"}} onMouseOver={()=>setTip(true)} onMouseOut={()=>setTip(false)} />
+            {tip && (
+              <g>
+                <rect x={openX+6} y={buyY-20} width={110} height={30} fill={T.elevated} stroke={T.border} strokeWidth="1" />
+                <text x={openX+10} y={buyY-8} fill={T.text} fontFamily="DM Mono" fontSize="7">{t.open_rate.toFixed(2)} &rarr; {t.close_rate.toFixed(2)}</text>
+                <text x={openX+10} y={buyY+2} fill={profitCol} fontFamily="DM Mono" fontSize="7">{(t.profit_ratio*100).toFixed(2)}%</text>
+              </g>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// ═══ STRATEGY CHART WRAPPER ═══
+function StrategyChart({iterationResults, selectedIteration, onSelectIteration, candles}) {
+  const mockCandles = useMemo(() => candles && candles.length > 0 ? candles : generateMockCandles(), [candles]);
+  const mockTrades = useMemo(() => generateMockTrades(mockCandles), [mockCandles]);
+  const idx = selectedIteration ?? iterationResults.length - 1;
+  const latest = iterationResults?.[idx] || iterationResults?.[iterationResults.length-1];
+  const realTrades = latest?.trades || latest?.metrics?.trades || [];
+  const trades = realTrades.length > 0 ? realTrades : mockTrades;
+  return (
+    <div style={{flex:1,minWidth:0,background:T.bg,position:"relative",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div className="scanline" />
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 12px",borderBottom:"1px solid var(--border)",flexShrink:0,zIndex:11}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontFamily:"Orbitron",fontSize:13,color:T.text}}>BTC/USDT</span>
+          {latest?.strategy_type && (
+            <span style={{fontFamily:"DM Mono",fontSize:8,color:T.purple,background:T.purple+"26",padding:"1px 6px"}}>{latest.strategy_type}</span>
+          )}
+          <span style={{fontFamily:"DM Mono",fontSize:10,color:T.muted}}>1h</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          {iterationResults.length > 0 && (
+            <>
+              <button onClick={() => onSelectIteration(Math.max(0,(selectedIteration||0)-1))} style={{background:"transparent",border:"1px solid var(--border)",color:T.secondary,fontSize:9,padding:"2px 6px",cursor:"pointer"}}>&#9664;</button>
+              <span style={{fontFamily:"DM Mono",fontSize:10,color:T.secondary}}>IT {(selectedIteration??iterationResults.length-1)+1} / {iterationResults.length}</span>
+              <button onClick={() => onSelectIteration(Math.min(iterationResults.length-1,(selectedIteration||0)+1))} style={{background:"transparent",border:"1px solid var(--border)",color:T.secondary,fontSize:9,padding:"2px 6px",cursor:"pointer"}}>&#9654;</button>
+            </>
+          )}
+        </div>
+      </div>
+      <div style={{flex:1,minHeight:0,position:"relative",zIndex:11}}>
+        <CandlestickSVG candles={mockCandles} trades={trades} width={800} height={400} />
+      </div>
+    </div>
+  );
+}
+
+// ═══ SHARPE LINE CHART ═══
+function SharpeLineChart({results, selectedIteration, onSelect}) {
+  const [tooltip,setTooltip] = useState(null);
+  if (!results || results.length < 2) {
+    return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:T.muted,fontSize:9,fontFamily:"DM Mono"}}>Not enough data</div>;
+  }
+  const sorted = [...results].sort((a,b)=>(a.iteration||0)-(b.iteration||0));
+  let runningBest = -Infinity;
+  const points = sorted.map((r,i)=>{
+    const iter = r.iteration || i+1;
+    const sharpe = r.sharpe_ratio ?? 0;
+    const isRecord = sharpe > runningBest + 1e-9;
+    if (isRecord) runningBest = sharpe;
+    return {iter, sharpe, isRecord, verdict: r.verdict, strategy: r.strategy_type||r.strategy};
+  });
+  const w = 500, h = 150, pl = 38, pr = 14, pt = 12, pb = 22;
+  const cw = w - pl - pr, ch = h - pt - pb;
+  const yVals = points.map(p=>p.sharpe);
+  const yMin = Math.min(...yVals, 0);
+  const yMax = Math.max(...yVals, 0.01);
+  const yR = yMax - yMin || 0.01;
+  const toX = (i) => pl + ((i)/(points.length-1||1))*cw;
+  const toY = (v) => pt + ch - ((v-yMin)/yR)*ch;
+  const dots = points.map((p,i)=>({...p,x:toX(i),y:toY(p.sharpe)}));
+  const allLine = dots.map(p=>`${p.x},${p.y}`).join(" ");
+  const recDots = dots.filter(p=>p.isRecord);
+  const recLine = recDots.map(p=>`${p.x},${p.y}`).join(" ");
+  return (
+    <div style={{width:"100%",height:"100%",position:"relative"}}>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:"100%",display:"block"}}>
+        <defs><linearGradient id="slg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.gold} stopOpacity="0.10"/><stop offset="100%" stopColor={T.gold} stopOpacity="0.02"/></linearGradient></defs>
+        <line x1={pl} y1={toY(0)} x2={pl+cw} y2={toY(0)} stroke={T.border} strokeWidth="1" strokeDasharray="3 3" opacity="0.4"/>
+        <line x1={pl} y1={toY(0.8)} x2={pl+cw} y2={toY(0.8)} stroke={T.accent} strokeWidth="1" strokeDasharray="3 4" opacity="0.4"/>
+        <text x={pl+cw+2} y={toY(0.8)+2} fill={T.muted} fontFamily="DM Mono" fontSize="6">TARGET</text>
+        {[0.25,0.5,0.75].map(f=>{
+          const y = pt+ch*f;
+          return <line key={f} x1={pl} y1={y} x2={pl+cw} y2={y} stroke={T.border} strokeWidth="1" strokeDasharray="2 3" opacity="0.15"/>;
+        })}
+        {dots.length>0&&<polyline points={allLine} fill="none" stroke={T.muted} strokeWidth="1.5" opacity="0.35" strokeLinejoin="round"/>}
+        {recDots.length>1&&<polygon points={`${recLine} ${pl+cw},${pt+ch} ${pl},${pt+ch}`} fill="url(#slg)"/>}
+        {recDots.length>1&&<polyline points={recLine} fill="none" stroke={T.gold} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" style={{transition:"d 0.3s ease-out"}}/>}
+        {dots.map((p,i)=>{
+          const ptCol = p.verdict==="kept"||p.verdict==="converged" ? T.accent : p.verdict==="discarded" ? T.coral : p.isRecord ? T.gold : T.muted;
+          return <rect key={i} x={p.x-2} y={p.y-2} width={4} height={4} fill={p.isRecord?T.gold:ptCol} opacity={p.isRecord?1:0.5} style={{cursor:"pointer"}} onMouseOver={()=>setTooltip({x:p.x,y:p.y,iter:p.iter,sharpe:p.sharpe,verdict:p.verdict,strategy:p.strategy})} onMouseOut={()=>setTooltip(null)} onClick={()=>onSelect&&onSelect(i)}/>;
+        })}
+        <text x={pl-4} y={pt+4} textAnchor="end" fill={T.muted} fontFamily="DM Mono" fontSize="7">{yMax.toFixed(2)}</text>
+        <text x={pl-4} y={pt+ch} textAnchor="end" fill={T.muted} fontFamily="DM Mono" fontSize="7">{yMin.toFixed(2)}</text>
+        <text x={pl} y={h-2} fill={T.muted} fontFamily="DM Mono" fontSize="7">1</text>
+        <text x={pl+cw} y={h-2} textAnchor="end" fill={T.muted} fontFamily="DM Mono" fontSize="7">{points.length}</text>
+      </svg>
+      {tooltip && (
+        <div style={{position:"absolute",left:Math.min(tooltip.x+10,w-120),top:Math.max(tooltip.y-50,0),background:T.elevated,border:"1px solid var(--border)",padding:"6px 10px",zIndex:20,fontSize:9,fontFamily:"DM Mono",pointerEvents:"none"}}>
+          <div style={{color:T.gold}}>#{tooltip.iter} Sharpe: {tooltip.sharpe.toFixed(2)}</div>
+          <div style={{color:T.secondary}}>{tooltip.strategy||"?"} | {tooltip.verdict||"?"}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══ STRATEGY RADAR ═══
+function StrategyRadar({currentStrategy, regimeSnapshot}) {
+  const axes = [
+    {label:"SHARPE", value:(currentStrategy?.sharpe_ratio||0)/3, max:3},
+    {label:"WIN RATE", value:currentStrategy?.win_rate||0, max:1},
+    {label:"PROFIT FACTOR", value:Math.min((currentStrategy?.profit_factor||0)/3,1), max:3},
+    {label:"MAX DD (INV)", value:1-Math.min(Math.abs(currentStrategy?.max_drawdown||0)/0.5,1), max:0.5},
+    {label:"TRADE FREQ", value:Math.min(Math.log10((currentStrategy?.total_trades||1)+1)/2.3,1), max:100},
+    {label:"REGIME FIT", value:currentStrategy?.regime&&regimeSnapshot?.regime?(currentStrategy.regime===regimeSnapshot.regime?1:0.5):0.5, max:1},
+  ];
+  const cx = 120, cy = 95, r = 70;
+  const angleStep = (2 * Math.PI) / 6;
+  const getPoint = (i, scale) => ({x: cx + r * scale * Math.cos(angleStep * i - Math.PI/2), y: cy + r * scale * Math.sin(angleStep * i - Math.PI/2)});
+  const polyPoints = axes.map((a,i)=>getPoint(i,a.value));
+  const outerHex = Array.from({length:7},(_,i)=>getPoint(i%6,1)).map(p=>`${p.x},${p.y}`).join(" ");
+  const inner33 = Array.from({length:7},(_,i)=>getPoint(i%6,0.33)).map(p=>`${p.x},${p.y}`).join(" ");
+  const inner66 = Array.from({length:7},(_,i)=>getPoint(i%6,0.66)).map(p=>`${p.x},${p.y}`).join(" ");
+  const dataPts = polyPoints.map(p=>`${p.x},${p.y}`).join(" ");
+  return (
+    <svg viewBox="0 0 240 180" style={{width:"100%",height:"100%"}}>
+      <polygon points={outerHex} fill="none" stroke={T.border} strokeWidth="1" />
+      <polygon points={inner66} fill="none" stroke={T.border} strokeWidth="1" opacity="0.2" />
+      <polygon points={inner33} fill="none" stroke={T.border} strokeWidth="1" opacity="0.2" />
+      {Array.from({length:6},(_,i)=>{
+        const p = getPoint(i,1);
+        return <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke={T.border} strokeWidth="1" opacity="0.3"/>;
+      })}
+      <polygon points={dataPts} fill={T.blue+"26"} stroke={T.blue} strokeWidth="1.5" />
+      <circle cx={cx} cy={cy} r="3" fill={T.blue} />
+      {axes.map((a,i)=>{
+        const p = getPoint(i,1.2);
+        return <text key={i} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle" fill={T.secondary} fontFamily="Orbitron" fontSize="7" letterSpacing="1">{a.label}</text>;
+      })}
+    </svg>
+  );
+}
+
+// ═══ ITERATION TABLE ═══
+function IterationTable({results, selected, onSelect}) {
+  if (!results || results.length === 0) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:T.muted,fontSize:9,fontFamily:"DM Mono"}}>No iterations</div>;
+  const sorted = [...results].reverse().slice(0,8);
+  const newestIdx = results.length > 0 ? results.length - 1 : -1;
+  return (
+    <div style={{overflowY:"auto",height:"100%"}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:9}}>
+        <thead>
+          <tr style={{fontFamily:"Orbitron",fontSize:7,color:T.secondary,letterSpacing:1}}>
+            <th style={{padding:"2px 4px",textAlign:"left",borderBottom:"1px solid var(--border)"}}>#</th>
+            <th style={{padding:"2px 4px",textAlign:"right",borderBottom:"1px solid var(--border)"}}>Sharpe</th>
+            <th style={{padding:"2px 4px",textAlign:"right",borderBottom:"1px solid var(--border)"}}>WR</th>
+            <th style={{padding:"2px 4px",textAlign:"right",borderBottom:"1px solid var(--border)"}}>DD</th>
+            <th style={{padding:"2px 4px",textAlign:"right",borderBottom:"1px solid var(--border)"}}>Trades</th>
+            <th style={{padding:"2px 4px",textAlign:"left",borderBottom:"1px solid var(--border)"}}>V</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((r,i)=>{
+            const idx = results.indexOf(r);
+            const isSelected = selected === idx;
+            const kept = r.verdict === "kept" || r.verdict === "converged";
+            const disc = r.verdict === "discarded";
+            const sharpe = r.sharpe_ratio ?? 0;
+            return (
+              <tr key={r.iteration||i} onClick={()=>onSelect(idx)} style={{cursor:"pointer",background:isSelected?T.elevated:idx===newestIdx?T.gold+"12":"transparent",borderLeft:kept?`2px solid ${T.accent}`:disc?`2px solid ${T.coral}`:"2px solid transparent",transition:"background 0.2s",animation:idx===newestIdx?"fadeIn 0.6s ease-out":"none"}} onMouseOver={e=>e.currentTarget.style.background=T.elevated} onMouseOut={e=>{if(!isSelected&&idx!==newestIdx)e.currentTarget.style.background="transparent"}}>
+                <td style={{padding:"2px 4px",color:T.muted,fontFamily:"DM Mono"}}>{r.iteration}</td>
+                <td style={{padding:"2px 4px",textAlign:"right",color:sharpe>=0.8?T.accent:sharpe>=0?T.text:T.coral,fontWeight:600,fontFamily:"DM Mono"}}>{sharpe.toFixed(2)}</td>
+                <td style={{padding:"2px 4px",textAlign:"right",color:T.secondary,fontFamily:"DM Mono"}}>{r.win_rate?`${(r.win_rate*100).toFixed(0)}%`:"-"}</td>
+                <td style={{padding:"2px 4px",textAlign:"right",color:T.secondary,fontFamily:"DM Mono"}}>{r.max_drawdown?`${(Math.abs(r.max_drawdown)*100).toFixed(1)}%`:"-"}</td>
+                <td style={{padding:"2px 4px",textAlign:"right",color:T.muted,fontFamily:"DM Mono"}}>{r.total_trades||0}</td>
+                <td style={{padding:"2px 4px",color:kept?T.accent:disc?T.coral:T.muted,fontWeight:600,fontFamily:"DM Mono"}}>{kept?"K":disc?"D":"-"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ═══ TOPBAR ═══
+function Topbar({status,regime,confidence,goal,tokens,onNewResearch,isRunning,isPaused,starting,stopping,pausing,onStart,onStop,onPause,onResume}) {
+  return (
+    <div style={{height:40,display:"flex",alignItems:"center",justifyContent:"space-between",background:`
+    var(--surface)`,borderBottom:"1px solid var(--border)",padding:"0 16px",flexShrink:0,zIndex:100}}>
+      <div style={{display:"flex",alignItems:"center",gap:14}}>
+        <span style={{fontFamily:"Orbitron",fontSize:14,fontWeight:700,color:T.gold,textShadow:"0 0 12px var(--amber)",letterSpacing:1}}>CAB</span>
+        <div style={{width:1,height:20,background:T.border}} />
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <div style={{width:8,height:8,background:status==="running"?T.accent:T.muted,animation:status==="running"?"pulse 2s infinite":"none",flexShrink:0}} />
+          <span style={{fontFamily:"DM Mono",fontSize:9,color:status==="running"?T.accent:T.muted}}>{status==="running"?"LIVE":"STANDBY"}</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:4,marginLeft:4}}>
+          <button onClick={onStart} disabled={isRunning||starting}
+            style={{fontFamily:"Orbitron",fontSize:8,background:starting?T.elevated:T.accent,color:starting?T.muted:"#000",border:"none",padding:"3px 10px",cursor:isRunning||starting?"default":"pointer",opacity:isRunning||starting?0.5:1,letterSpacing:"0.5px"}}>{starting?"...":"START"}</button>
+          <button onClick={onStop} disabled={!isRunning||stopping}
+            style={{fontFamily:"Orbitron",fontSize:8,background:stopping?T.elevated:T.coral,color:stopping?T.muted:"#fff",border:"none",padding:"3px 10px",cursor:!isRunning||stopping?"default":"pointer",opacity:!isRunning||stopping?0.5:1,letterSpacing:"0.5px"}}>{stopping?"...":"STOP"}</button>
+          <button onClick={isPaused?onResume:onPause} disabled={(!isRunning&&!isPaused)||pausing}
+            style={{fontFamily:"Orbitron",fontSize:8,background:pausing?T.elevated:T.gold,color:pausing?T.muted:"#000",border:"none",padding:"3px 10px",cursor:(!isRunning&&!isPaused)||pausing?"default":"pointer",opacity:(!isRunning&&!isPaused)||pausing?0.5:1,letterSpacing:"0.5px"}}>{pausing?"...":isPaused?"RESUME":"PAUSE"}</button>
+        </div>
+        {regime && (<><div style={{width:1,height:20,background:T.border}} />
+          <span style={{fontFamily:"Orbitron",fontSize:10,color:T.blue}}>{regime.replace(/_/g," ").toUpperCase()}</span>
+          <div style={{width:80,height:3,background:T.border}}>
+            <div style={{height:"100%",width:`${Math.min((confidence||0)*100,100)}%`,background:T.blue,transition:"width 0.5s"}} />
+          </div></>
+        )}
+        <div style={{width:1,height:20,background:T.border}} />
+        <span style={{fontFamily:"Exo 2",fontSize:10,color:T.secondary,fontStyle:"italic",maxWidth:280,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{goal&&goal.length>45?goal.slice(0,42)+"\u2026":goal||"\u2014"}</span>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        <span style={{fontFamily:"DM Mono",fontSize:10,color:T.muted}}>TK {((tokens?.total_tokens)||0).toLocaleString()}</span>
+        <button onClick={onNewResearch} style={{fontFamily:"Orbitron",fontSize:9,background:T.gold,color:"#000",border:"none",padding:"6px 14px",cursor:"pointer",fontWeight:500,letterSpacing:"0.5px"}}>+ NEW RESEARCH</button>
+      </div>
+    </div>
+  );
+}
+
+// ═══ LEFT SIDEBAR: AGENT FEED ═══
+function LeftSidebar({events, hypothesis}) {
+  const listRef = useRef(null);
+  const agentEvents = useMemo(() => events.filter(e=>["hypothesis","iteration_start","iteration_result","task_done","critique"].includes(e.type)).slice(-200).map(e=>{
+    const am = {hypothesis:"researcher",critique:"analyst",iteration_start:"strategist",iteration_result:"backtester",task_done:e.payload?.agent||"system"};
+    let desc = e.type;
+    if (e.type==="iteration_result") desc = `${e.payload?.verdict||"done"} sharpe=${(e.payload?.sharpe_ratio||0).toFixed(2)}`;
+    else if (e.type==="iteration_start") desc = e.payload?.task||"iteration";
+    else if (e.type==="hypothesis") desc = (e.payload?.text||e.payload?.hypothesis||"").slice(0,60);
+    else if (e.type==="task_done") desc = e.payload?.task||"task";
+    return {agent:am[e.type]||"system",event:e.type,desc,time:e.timestamp};
+  }),[events]);
+
+  const hypothesisText = useMemo(() => {
+    if (hypothesis) return hypothesis;
+    const h = [...events].reverse().find(e=>e.type==="hypothesis");
+    return h?.payload?.text || h?.payload?.hypothesis || null;
+  },[hypothesis, events]);
+
+  useEffect(()=>{if(listRef.current)listRef.current.scrollTop=listRef.current.scrollHeight;},[agentEvents.length]);
+
+  return (
+    <div style={{width:220,flexShrink:0,background:T.surface,borderRight:"1px solid var(--border)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px 4px"}}>
+        <span style={{fontFamily:"Orbitron",fontSize:8,color:T.secondary,letterSpacing:3}}>AGENTS</span>
+        <span style={{fontFamily:"DM Mono",fontSize:8,color:T.muted}}>{agentEvents.length}</span>
+      </div>
+      <div ref={listRef} style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:1,padding:"0 6px"}}>
+        {agentEvents.length === 0 ? (
+          <div style={{padding:16,textAlign:"center",color:T.muted,fontSize:9,fontFamily:"DM Mono"}}>Waiting for events...</div>
+        ) : agentEvents.map((e,i)=>(
+          <div key={e.time+e.desc+i} style={{display:"flex",alignItems:"center",gap:6,minHeight:36,padding:"3px 4px",animation:i<10?"slideDown 0.2s ease-out":"none",borderBottom:"1px solid rgba(30,45,69,0.3)"}}>
+            <div style={{width:6,height:6,background:agentColors[e.agent]||T.border,flexShrink:0}} />
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontFamily:"Exo 2",fontSize:10,fontWeight:600,color:T.text}}>{e.agent}</div>
+              <div style={{fontFamily:"DM Mono",fontSize:8,color:T.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.desc}</div>
+            </div>
+            <span style={{fontFamily:"DM Mono",fontSize:7,color:T.muted,flexShrink:0}}>{e.time}</span>
+          </div>
+        ))}
+      </div>
+      {hypothesisText && (
+        <details style={{margin:"4px 6px 8px",padding:"4px 6px",background:T.bg,border:"1px solid var(--border)"}}>
+          <summary style={{fontFamily:"Orbitron",fontSize:7,color:T.secondary,letterSpacing:3,cursor:"pointer"}}>HYPOTHESIS</summary>
+          <p style={{fontFamily:"Exo 2",fontSize:9,color:T.secondary,fontStyle:"italic",marginTop:4,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:5,WebkitBoxOrient:"vertical"}}>{hypothesisText}</p>
+        </details>
+      )}
+    </div>
+  );
+}
+
+// ═══ RIGHT SIDEBAR ═══
+function RightSidebar({iterationResults, circuitBreaker, onHalt, onClear}) {
+  const latest = iterationResults?.[iterationResults.length-1];
+  const prevCount = useRef(0);
+  useEffect(() => { if (latest?.total_trades != null) prevCount.current = latest.total_trades; }, [latest?.total_trades]);
+  return (
+    <div style={{width:260,flexShrink:0,background:T.surface,borderLeft:"1px solid var(--border)",overflowY:"auto",display:"flex",flexDirection:"column",gap:6,padding:"10px 10px"}}>
+      <SharpeGauge value={latest?.sharpe_ratio} />
+      <WinRateDonut value={latest?.win_rate} />
+      <DrawdownBar value={latest?.max_drawdown} />
+      <TradeCounter value={latest?.total_trades} prev={prevCount.current} />
+      <CircuitBreakerPill state={circuitBreaker} onHalt={onHalt} onClear={onClear} />
+    </div>
+  );
+}
+
+// ═══ BOTTOM STRIP ═══
+function BottomStrip({iterationResults, selectedIteration, onSelectIteration, regimeSnapshot}) {
+  const current = iterationResults?.[selectedIteration] || iterationResults?.[iterationResults.length-1];
+  return (
+    <div style={{height:200,flexShrink:0,display:"grid",gridTemplateColumns:"1fr 260px 1fr",borderTop:"1px solid var(--border)",background:T.surface,overflow:"hidden"}}>
+      <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
+        <span style={{fontFamily:"Orbitron",fontSize:7,color:T.secondary,letterSpacing:3,padding:"4px 8px",flexShrink:0}}>SHARPE PROGRESSION</span>
+        <div style={{flex:1,minHeight:0}}>
+          <SharpeLineChart results={iterationResults} selectedIteration={selectedIteration} onSelect={onSelectIteration} />
+        </div>
+      </div>
+      <div style={{borderLeft:"1px solid var(--border)",borderRight:"1px solid var(--border)",display:"flex",flexDirection:"column"}}>
+        <span style={{fontFamily:"Orbitron",fontSize:7,color:T.secondary,letterSpacing:3,padding:"4px 8px",flexShrink:0}}>STRATEGY RADAR</span>
+        <div style={{flex:1,minHeight:0}}>
+          <StrategyRadar currentStrategy={current} regimeSnapshot={regimeSnapshot} />
+        </div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column"}}>
+        <span style={{fontFamily:"Orbitron",fontSize:7,color:T.secondary,letterSpacing:3,padding:"4px 8px",flexShrink:0}}>ITERATIONS</span>
+        <div style={{flex:1,minHeight:0}}>
+          <IterationTable results={iterationResults} selected={selectedIteration} onSelect={onSelectIteration} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══ RESEARCH MODAL ═══
+function ResearchModal({goal:initialGoal, cycles:initialCycles, iters:initialIters, onStart, onClose}) {
+  const [input,setInput] = useState(initialGoal);
+  const [cycles,setCycles] = useState(initialCycles);
+  const [iters,setIters] = useState(initialIters);
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.8)",backdropFilter:"blur(4px)"}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{width:440,maxWidth:"90vw",animation:"slideUp 0.3s ease-out",background:T.surface,border:"1px solid var(--border)",padding:24}}>
+        <div style={{marginBottom:18}}>
+          <span style={{fontFamily:"Orbitron",fontSize:14,fontWeight:700,color:T.text,letterSpacing:"0.5px"}}>New Research Run</span>
+          <p style={{fontSize:10,color:T.muted,marginTop:4,fontFamily:"Exo 2"}}>Configure research experiment parameters</p>
+        </div>
+        <label style={{fontSize:8,color:T.muted,fontWeight:600,display:"block",textTransform:"uppercase",letterSpacing:"2px",fontFamily:"Orbitron",marginBottom:4}}>Goal</label>
+        <textarea rows={3} value={input} onChange={e=>setInput(e.target.value)} placeholder="e.g. Find a momentum strategy with Sharpe > 1 for BTC/USDT" style={{width:"100%",resize:"vertical",fontFamily:"Exo 2",fontSize:12,padding:"8px 12px",background:T.bg,border:"1px solid var(--border)",color:T.text,marginBottom:16,outline:"none"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border} />
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
+          <div>
+            <label style={{fontSize:8,color:T.muted,display:"block",textTransform:"uppercase",letterSpacing:"2px",fontFamily:"Orbitron",marginBottom:4}}>Max Cycles: <span style={{color:T.accent,fontFamily:"DM Mono",fontSize:10}}>{cycles}</span></label>
+            <input type="range" min={1} max={10} value={cycles} onChange={e=>setCycles(Number(e.target.value))} style={{width:"100%",accentColor:T.accent}} />
+            <div style={{display:"flex",justifyContent:"space-between",fontFamily:"DM Mono",fontSize:8,color:T.muted}}><span>1</span><span>10</span></div>
+          </div>
+          <div>
+            <label style={{fontSize:8,color:T.muted,display:"block",textTransform:"uppercase",letterSpacing:"2px",fontFamily:"Orbitron",marginBottom:4}}>Max Iterations: <span style={{color:T.accent,fontFamily:"DM Mono",fontSize:10}}>{iters}</span></label>
+            <input type="range" min={1} max={10} value={iters} onChange={e=>setIters(Number(e.target.value))} style={{width:"100%",accentColor:T.accent}} />
+            <div style={{display:"flex",justifyContent:"space-between",fontFamily:"DM Mono",fontSize:8,color:T.muted}}><span>1</span><span>10</span></div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+          <button onClick={onClose} style={{fontFamily:"Exo 2",fontSize:10,background:"transparent",border:"1px solid var(--border)",color:T.secondary,padding:"7px 16px",cursor:"pointer"}}>Cancel</button>
+          <button onClick={()=>onStart(input, cycles, iters)} style={{fontFamily:"Orbitron",fontSize:9,background:T.gold,color:"#000",border:"none",padding:"7px 20px",cursor:"pointer",fontWeight:500}}>START RUN</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ═══════════════════════════════════════════════
@@ -297,8 +630,6 @@ function useWebSocket(url, handlers) {
       const ws = new WebSocket(`${protocol}//${host}${url}`);
       wsRef.current = ws;
 
-      let initLogged = 0;
-
       ws.onopen = () => {
         if (mountId !== mountCount.current) return;
         if (handlersRef.current.onOpen) handlersRef.current.onOpen();
@@ -307,9 +638,8 @@ function useWebSocket(url, handlers) {
         if (mountId !== mountCount.current) return;
         try {
           const msg = JSON.parse(evt.data);
-          if (initLogged < 5) { initLogged++; }
           if (handlersRef.current.onMessage) handlersRef.current.onMessage(msg);
-        } catch(e) { /* ignore parse errors */ }
+        } catch(e) {}
       };
       ws.onclose = () => {
         if (stopped) return;
@@ -352,657 +682,26 @@ function useApi() {
 }
 
 // ═══════════════════════════════════════════════
-// SKELETON LOADING WRAPPER
+// LOCALSTORAGE PERSISTENCE
 // ═══════════════════════════════════════════════
-function LazyLoad({loading,children,height=60}) {
-  if (loading) return <Skeleton w="100%" h={height} />;
-  return children;
+const LS_KEY = "cabot_ui_state";
+function loadPersistedState() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+function persistState(state) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e) {}
 }
 
 // ═══════════════════════════════════════════════
-// SHARPE HISTORY CHART
-// ═══════════════════════════════════════════════
-function SharpeChart({results}) {
-  if (!results || results.length < 1) {
-    return (
-      <div className="card card-pad">
-        <Accent color={T.gold} />
-        <SectionHeading>Sharpe History</SectionHeading>
-        <div style={{fontSize:10,color:T.muted,textAlign:"center",padding:16}}>
-          No iterations yet
-        </div>
-      </div>
-    );
-  }
-
-  const sorted = [...results].sort((a, b) => (a.iteration||0) - (b.iteration||0));
-  let runningBest = -Infinity;
-  const points = sorted.map((r, idx) => {
-    const iter = (r.iteration != null && r.iteration > 0) ? r.iteration : idx + 1;
-    const sharpe = r.sharpe_ratio ?? r.sharpe ?? 0;
-    const isRecord = sharpe > runningBest + 1e-9;
-    if (isRecord) runningBest = sharpe;
-    return {iter, sharpe, isRecord};
-  });
-
-  const bestGlobal = Math.max(...points.map(p=>p.sharpe));
-  const w=700,h=130,pl=40,pr=14,pt=10,pb=22;
-  const cw=w-pl-pr, ch=h-pt-pb;
-  const xV=points.map(p=>p.iter), yV=points.map(p=>p.sharpe);
-  const xMin=Math.min(...xV), xMax=Math.max(...xV);
-  const yMin=Math.min(...yV,0), yMax=Math.max(...yV,0.01);
-  const xR=xMax-xMin||1, yR=yMax-yMin||0.01;
-  const toX=v=>pl+((v-xMin)/xR)*cw;
-  const toY=v=>pt+ch-((v-yMin)/yR)*ch;
-  const dots=points.map(p=>({...p,x:toX(p.iter),y:toY(p.sharpe)}));
-  const allLine = dots.map(p => `${p.x},${p.y}`).join(" ");
-  const recDots = dots.filter(p => p.isRecord);
-  const recLine = recDots.map(p => `${p.x},${p.y}`).join(" ");
-  const best = dots.find(p => p.sharpe >= bestGlobal - 0.0001);
-  const isBestLast = best === dots[dots.length - 1];
-
-  return (
-    <div className="card card-pad">
-      <Accent color={T.gold} />
-      <SectionHeading>Sharpe History</SectionHeading>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",display:"block"}}>
-        <defs>
-          <linearGradient id="sg-rec" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={T.gold} stopOpacity="0.12" />
-            <stop offset="100%" stopColor={T.gold} stopOpacity="0.02" />
-          </linearGradient>
-        </defs>
-        {[0.25,0.5,0.75].map((f,i)=>(
-          <line key={i} x1={pl} y1={pt+ch*f} x2={pl+cw} y2={pt+ch*f} stroke={T.border} strokeWidth="1" strokeDasharray="3 3" />
-        ))}
-        {yMin<0&&yMax>0&&(
-          <line x1={pl} y1={toY(0)} x2={pl+cw} y2={toY(0)} stroke={T.muted} strokeWidth="1" strokeDasharray="2 4" opacity={0.3} />
-        )}
-        {dots.length > 0 && <polyline points={allLine} fill="none" stroke={T.muted} strokeWidth="1.5" strokeOpacity="0.4" strokeLinejoin="round" strokeLinecap="round" />}
-        {recDots.length>1&&<polygon points={`${recLine} ${pl+cw},${pt+ch} ${pl},${pt+ch}`} fill="url(#sg-rec)" />}
-        {recDots.length>1&&<polyline points={recLine} fill="none" stroke={T.gold} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
-        {dots.map((p,i)=>!p.isRecord&&<circle key={i} cx={p.x} cy={p.y} r="2.5" fill={T.muted} stroke="none" opacity={0.25} />)}
-        {recDots.map((p,i)=><circle key={i} cx={p.x} cy={p.y} r="3" fill={T.gold} stroke={T.card} strokeWidth="1.5" />)}
-        {best&&(<>
-          <circle cx={best.x} cy={best.y} r="7" fill="none" stroke={isBestLast?T.sage:T.gold} strokeWidth="2" opacity={0.5} />
-          <circle cx={best.x} cy={best.y} r="4" fill={isBestLast?T.sage:T.gold} stroke={T.card} strokeWidth="1.5" />
-        </>)}
-        <text x={pl-4} y={pt+4} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{yMax.toFixed(2)}</text>
-        <text x={pl-4} y={pt+ch+4} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{yMin.toFixed(2)}</text>
-        <text x={pl} y={h-2} fill={T.muted} fontSize="8" fontFamily="DM Mono">{xMin}</text>
-        <text x={w-pr} y={h-2} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{xMax}</text>
-      </svg>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════
-// LOG PANEL
-// ═══════════════════════════════════════════════
-function EventLogPanel({events}) {
-  const [collapsed,setCollapsed] = useState(true);
-  const scrollRef = useRef(null);
-  useEffect(()=>{if(scrollRef.current)scrollRef.current.scrollTop=scrollRef.current.scrollHeight},[events]);
-
-  return (
-    <div className="card" style={{display:"flex",flexDirection:"column",overflow:"hidden",transition:"max-height .3s",maxHeight:collapsed?32:300}}>
-      <div className="flex items-center justify-between shrink-0" style={{padding:"6px 16px",cursor:"pointer"}} onClick={()=>setCollapsed(!collapsed)}>
-        <h2 className="section-heading" style={{marginBottom:0,fontSize:9}}>Event Log</h2>
-        <div className="flex items-center gap-6">
-          <span style={{fontSize:9,color:T.muted,fontFamily:"'DM Mono',monospace"}}>{events.length}</span>
-          <span style={{color:T.muted,fontSize:10}}>{collapsed?"\u25BC":"\u25B2"}</span>
-        </div>
-      </div>
-      {!collapsed&&(
-        <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:"2px 16px 8px",fontSize:11,fontFamily:"'DM Mono',monospace",lineHeight:1.9,color:T.secondary}}>
-          {events.length===0?(<span style={{color:T.muted}}>Waiting for events...</span>):events.map(evt=>(
-            <div key={evt.id} className="flex gap-8">
-              <span style={{color:T.muted,flexShrink:0,fontSize:10}}>{evt.timestamp}</span>
-              <span style={{color:evt.type==="anomaly"?T.coral:evt.type==="decay_alert"?T.gold:evt.type==="run_error"?T.coral:T.accent,flexShrink:0,fontSize:10}}>[{evt.type}]</span>
-              <span className="truncate" style={{color:T.text,fontSize:10}}>{(typeof evt.payload==="string"?evt.payload:JSON.stringify(evt.payload)).slice(0,180)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TerminalLogPanel({events}) {
-  const [collapsed,setCollapsed] = useState(true);
-  const scrollRef = useRef(null);
-  useEffect(()=>{if(scrollRef.current)scrollRef.current.scrollTop=scrollRef.current.scrollHeight},[events]);
-
-  return (
-    <div className="card" style={{display:"flex",flexDirection:"column",overflow:"hidden",transition:"max-height .3s",maxHeight:collapsed?32:220}}>
-      <div className="flex items-center justify-between shrink-0" style={{padding:"6px 16px",cursor:"pointer"}} onClick={()=>setCollapsed(!collapsed)}>
-        <h2 className="section-heading" style={{marginBottom:0,fontSize:9}}>Terminal Log</h2>
-        <div className="flex items-center gap-6">
-          <span style={{fontSize:9,color:T.muted,fontFamily:"'DM Mono',monospace"}}>{events.length}</span>
-          <span style={{color:T.muted,fontSize:10}}>{collapsed?"\u25BC":"\u25B2"}</span>
-        </div>
-      </div>
-      {!collapsed&&(
-        <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:"2px 16px 8px",fontSize:11,fontFamily:"'DM Mono',monospace",lineHeight:1.7,color:T.secondary}}>
-          {events.length===0?(<span style={{color:T.muted}}>Waiting for log output...</span>):events.map((evt,i)=>(
-            <div key={i} className="flex gap-8">
-              <span style={{color:T.muted,flexShrink:0,fontSize:9}}>{evt.timestamp}</span>
-              <span style={{color:evt.level==="error"?T.coral:evt.level==="warning"?T.gold:evt.level==="debug"?T.muted:T.accent,flexShrink:0,fontSize:9}}>[{evt.level?evt.level.toUpperCase():"INFO"}]</span>
-              <span style={{color:T.text,whiteSpace:"pre-wrap",wordBreak:"break-word",fontSize:10}}>{evt.message||JSON.stringify(evt).slice(0,300)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════
-// HEADER / NAVIGATION
-// ═══════════════════════════════════════════════
-const NAV_ITEMS = [
-  {id:"dashboard",label:"Dashboard"},
-  {id:"research",label:"Research"},
-  {id:"strategies",label:"Strategies"},
-  {id:"signals",label:"Signals"},
-];
-
-function Header({activeView,setActiveView,autonomousState,onNewResearch}) {
-  const isRunning = autonomousState?.is_running;
-  return (
-    <header style={{
-      display:"flex",alignItems:"center",justifyContent:"space-between",
-      padding:"0 20px",borderBottom:`1px solid ${T.border}`,
-      background:T.card,flexShrink:0,minHeight:52,
-    }}>
-      {/* Left: Brand + Nav */}
-      <div className="flex items-center" style={{gap:28}}>
-        <div className="flex items-center" style={{gap:10}}>
-          <span style={{fontFamily:"'Orbitron',sans-serif",fontSize:14,fontWeight:700,color:T.accent,letterSpacing:"1.5px",textTransform:"uppercase"}}>
-            CAB
-          </span>
-          <div className="flex items-center gap-2" style={{padding:"2px 8px",background:T.surface,borderRadius:"0 4px 0 4px",border:`1px solid ${T.border}`}}>
-            <div className="status-dot" style={{background:isRunning?T.accent:T.muted,animation:isRunning?"pulse 1.5s ease-in-out infinite":"none"}} />
-            <span className="text-mono" style={{fontSize:8,fontWeight:500,color:isRunning?T.accent:T.muted,textTransform:"uppercase",letterSpacing:"0.8px"}}>
-              {isRunning?"Live":"Standby"}
-            </span>
-          </div>
-        </div>
-        <nav className="flex items-center" style={{gap:4,height:52}}>
-          {NAV_ITEMS.map(item=>(
-            <button key={item.id} onClick={()=>setActiveView(item.id)}
-              style={{
-                position:"relative",
-                padding:"0 14px",
-                height:"100%",
-                background:"transparent",
-                border:"none",
-                color:activeView===item.id?T.text:T.muted,
-                cursor:"pointer",fontSize:11,fontWeight:activeView===item.id?600:400,
-                fontFamily:"'Exo 2',sans-serif",
-                letterSpacing:"0.3px",
-                transition:"color .2s",
-              }}>
-              {item.label}
-              {activeView===item.id && (
-                <div style={{position:"absolute",bottom:0,left:8,right:8,height:2,background:T.accent,borderRadius:"1px 1px 0 0",boxShadow:`0 0 8px ${T.accent}60`}} />
-              )}
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      {/* Right: New Research */}
-      <button onClick={onNewResearch} className="btn btn-primary" style={{padding:"7px 18px",fontSize:10}}>
-        <span style={{fontSize:15,lineHeight:1}}>+</span> New Research
-      </button>
-    </header>
-  );
-}
-
-// ═══════════════════════════════════════════════
-// MODAL — New Research Run
-// ═══════════════════════════════════════════════
-function ResearchModal({goal:initialGoal,cycles:initialCycles,iters:initialIters,onStart,onClose}) {
-  const [input,setInput] = useState(initialGoal);
-  const [cycles,setCycles] = useState(initialCycles);
-  const [iters,setIters] = useState(initialIters);
-
-  return (
-    <div style={{
-      position:"fixed",inset:0,zIndex:1000,
-      display:"flex",alignItems:"center",justifyContent:"center",
-      background:"rgba(0,0,0,0.75)",backdropFilter:"blur(4px)",
-      WebkitBackdropFilter:"blur(4px)",
-    }} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{
-        width:460,maxWidth:"90vw",animation:"stampIn .3s ease-out",
-        background:T.card,borderRadius:"0 14px 0 14px",
-        border:`1px solid ${T.border}`,padding:28,position:"relative",overflow:"hidden",
-      }}>
-        <div style={{position:"absolute",top:0,left:0,width:36,height:36,borderTop:`2px solid ${T.gold}`,borderLeft:`2px solid ${T.gold}`}} />
-        <div style={{position:"absolute",bottom:0,right:0,width:36,height:36,borderBottom:`2px solid ${T.teal}`,borderRight:`2px solid ${T.teal}`}} />
-
-        <div style={{marginBottom:22}}>
-          <div style={{fontFamily:"'Orbitron',sans-serif",fontSize:16,fontWeight:700,color:T.text,letterSpacing:"0.5px"}}>New Research Run</div>
-          <p style={{fontSize:11,color:T.muted,marginTop:6}}>Configure research experiment parameters</p>
-        </div>
-
-        <label style={{fontSize:9,color:T.muted,fontWeight:600,display:"block",textTransform:"uppercase",letterSpacing:"2px",fontFamily:"'Orbitron',sans-serif",marginBottom:6}}>Goal</label>
-        <textarea rows={3} value={input} onChange={e=>setInput(e.target.value)} style={{
-          width:"100%",resize:"vertical",fontFamily:"'Exo 2',sans-serif",fontSize:12,
-          padding:"10px 14px",borderRadius:"var(--radius-sm)",background:T.surface,
-          border:`1px solid ${T.border}`,color:T.text,marginBottom:20,outline:"none",
-          transition:"border-color .2s",
-        }} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border} />
-
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18,marginBottom:24}}>
-          <div>
-            <label style={{fontSize:9,color:T.muted,fontWeight:600,display:"block",textTransform:"uppercase",letterSpacing:"1.5px",fontFamily:"'Orbitron',sans-serif",marginBottom:4}}>
-              Max Cycles: <span style={{color:T.accent,fontFamily:"'DM Mono',monospace",fontSize:11}}>{cycles}</span>
-            </label>
-            <input type="range" min={1} max={10} value={cycles} onChange={e=>setCycles(Number(e.target.value))} style={{width:"100%",margin:"8px 0",accentColor:T.accent}} />
-            <div className="flex justify-between text-mono" style={{fontSize:9,color:T.muted}}><span>1</span><span>10</span></div>
-          </div>
-          <div>
-            <label style={{fontSize:9,color:T.muted,fontWeight:600,display:"block",textTransform:"uppercase",letterSpacing:"1.5px",fontFamily:"'Orbitron',sans-serif",marginBottom:4}}>
-              Max Iterations: <span style={{color:T.accent,fontFamily:"'DM Mono',monospace",fontSize:11}}>{iters}</span>
-            </label>
-            <input type="range" min={1} max={10} value={iters} onChange={e=>setIters(Number(e.target.value))} style={{width:"100%",margin:"8px 0",accentColor:T.accent}} />
-            <div className="flex justify-between text-mono" style={{fontSize:9,color:T.muted}}><span>1</span><span>10</span></div>
-          </div>
-        </div>
-
-        <div className="flex" style={{gap:10,justifyContent:"flex-end"}}>
-          <button onClick={onClose} className="btn btn-ghost">Cancel</button>
-          <button onClick={()=>onStart(input, cycles, iters)} className="btn btn-primary" style={{padding:"8px 22px"}}>Start Run</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════
-// VIEW: DASHBOARD
-// ═══════════════════════════════════════════════
-function DashboardView({autonomousState,circuitBreaker,regimeSnapshot,positions,tokens,iterationSummary,iterationResults,loading,startupStatus,riskPortfolio,dataHealth,startAutonomous,stopAutonomous,pauseAutonomous,resumeAutonomous,autoStarting,autoStopping,autoPausing,haltCircuitBreaker,clearCircuitBreaker,terminalLog,events}) {
-  const isRunning = autonomousState?.is_running;
-  const isPaused = autonomousState?.is_paused;
-
-  // ─── Autonomous Loop Card ───
-  const autoCard = (
-    <div className="card card-pad" style={{display:"flex",flexDirection:"column",gap:10}}>
-      <Accent color={T.gold} />
-      <SectionHeading>Autonomous Loop</SectionHeading>
-      {loading.autonomous ? <Skeleton w="100%" h={60} /> : <>
-        <div className="flex items-center gap-10">
-          <div className="status-dot" style={{width:10,height:10,background:isRunning?(isPaused?T.gold:T.sage):T.muted,animation:isRunning&&!isPaused?"pulse 1.5s ease-in-out infinite":"none"}} />
-          <span className="text-mono" style={{fontSize:14,fontWeight:700,color:isRunning?(isPaused?T.gold:T.sage):T.muted}}>{isRunning?(isPaused?"PAUSED":"RUNNING"):"STOPPED"}</span>
-        </div>
-        {autonomousState?.current_goal&&<div style={{padding:"6px 10px",background:T.surface,borderRadius:4,border:`1px solid ${T.border}`}}>
-          <div className="text-mono" style={{fontSize:8,color:T.muted,marginBottom:2}}>Current Goal</div>
-          <div style={{fontSize:10.5,color:T.text,lineHeight:1.4}}>{autonomousState.current_goal}</div>
-        </div>}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
-          <MiniStat label="Cycles" value={autonomousState?.total_cycles||0} color={T.teal} small />
-          <MiniStat label="Sharpe" value={autonomousState?.current_sharpe?.toFixed(2)||"\u2014"} color={T.gold} small />
-          <MiniStat label="Best" value={autonomousState?.current_best_sharpe?.toFixed(2)||"\u2014"} color={T.sage} small />
-        </div>
-        {autonomousState?.last_error&&<div style={{padding:"4px 8px",background:`${T.coral}10`,borderRadius:4,border:`1px solid ${T.coral}30`}}>
-          <div className="text-mono" style={{fontSize:9,color:T.coral}}>Error: {autonomousState.last_error}</div>
-        </div>}
-      </>}
-      <div className="flex gap-6">
-        {!isRunning?(
-          <button onClick={startAutonomous} disabled={autoStarting} className="btn btn-primary" style={{flex:1}}>
-            {autoStarting?"Starting...":"Start"}
-          </button>
-        ):(
-          <>
-            {!isPaused?(
-              <button onClick={pauseAutonomous} disabled={autoPausing} className="btn" style={{background:T.gold,borderColor:T.gold,color:"#020617",flex:1}}>Pause</button>
-            ):(
-              <button onClick={resumeAutonomous} disabled={autoPausing} className="btn btn-primary" style={{flex:1}}>Resume</button>
-            )}
-            <button onClick={stopAutonomous} disabled={autoStopping} className="btn btn-danger" style={{flex:1}}>Stop</button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-
-  // ─── Circuit Breaker + Regime Card ───
-  const cbCard = (
-    <div className="card card-pad" style={{display:"flex",flexDirection:"column",gap:10}}>
-      <Accent color={T.coral} />
-      <SectionHeading>Circuit Breaker &amp; Regime</SectionHeading>
-
-      {loading.circuit ? <Skeleton w="100%" h={60} /> : <div style={{padding:"8px 12px",borderRadius:6,background:circuitBreaker?.halted?`${T.coral}15`:T.surface,border:`1px solid ${circuitBreaker?.halted?T.coral:T.border}`}}>
-        <div className="flex items-center gap-8">
-          <div className="status-dot" style={{width:8,height:8,background:circuitBreaker?.halted?T.coral:T.sage,animation:circuitBreaker?.halted?"pulse 1.5s ease-in-out infinite":"none"}} />
-          <span className="text-mono" style={{fontSize:12,fontWeight:700,color:circuitBreaker?.halted?T.coral:T.sage}}>{circuitBreaker?.halted?"HALTED":"OPERATIONAL"}</span>
-        </div>
-        {circuitBreaker?.reason&&<div className="text-mono" style={{fontSize:9,color:T.muted,marginTop:4}}>{circuitBreaker.reason}</div>}
-        {circuitBreaker?.triggered_by&&<div className="text-mono" style={{fontSize:8,color:T.muted,marginTop:2}}>Triggered by: {circuitBreaker.triggered_by}</div>}
-        {circuitBreaker?.resume_after&&<div className="text-mono" style={{fontSize:8,color:T.gold,marginTop:2}}>Resume after: {circuitBreaker.resume_after}</div>}
-        <div className="flex gap-6" style={{marginTop:8}}>
-          <button onClick={haltCircuitBreaker} className="btn btn-danger" style={{padding:"5px 14px",fontSize:9}}>Halt</button>
-          <button onClick={clearCircuitBreaker} className="btn" style={{padding:"5px 14px",fontSize:9,color:T.accent,borderColor:T.accent}}>Clear</button>
-        </div>
-      </div>}
-      /* Regime */
-      {loading.regime ? <Skeleton w="100%" h={60} /> : (regimeSnapshot?<>
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-mono" style={{fontSize:13,fontWeight:700,color:T.gold,textTransform:"uppercase"}}>{regimeSnapshot.regime?.replace(/_/g," ")||"\u2014"}</div>
-            {regimeSnapshot.confidence!=null&&<div className="text-mono" style={{fontSize:9,color:T.muted,marginTop:1}}>Confidence: {(regimeSnapshot.confidence*100).toFixed(0)}%</div>}
-          </div>
-          {regimeSnapshot.adx!=null&&<MiniStat label="ADX" value={regimeSnapshot.adx.toFixed(1)} color={regimeSnapshot.adx>25?T.teal:T.muted} small />}
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
-          {regimeSnapshot.atr_pct!=null&&<MiniStat label="ATR%" value={(regimeSnapshot.atr_pct*100).toFixed(1)+"%"} color={T.gold} small />}
-          {regimeSnapshot.sma200_distance!=null&&<MiniStat label="200SMA Dist" value={regimeSnapshot.sma200_distance?.toFixed(2)||"\u2014"} color={T.secondary} small />}
-        </div>
-        {regimeSnapshot.recommended_strategies?.length>0&&<div className="text-mono" style={{fontSize:7,color:T.muted}}>Recommended: {regimeSnapshot.recommended_strategies.join(", ")}</div>}
-        {regimeSnapshot.discouraged_strategies?.length>0&&<div className="text-mono" style={{fontSize:7,color:T.coral}}>Avoid: {regimeSnapshot.discouraged_strategies.join(", ")}</div>}
-      </>:<div style={{fontSize:10,color:T.muted}}>No regime data yet.</div>)}
-    </div>
-  );
-
-  // ─── Research Results Card ───
-  const resultsCard = (
-    <div className="card card-pad" style={{display:"flex",flexDirection:"column",maxHeight:280,overflow:"hidden"}}>
-      <Accent color={T.gold} />
-      <SectionHeading>Research Results</SectionHeading>
-      {loading.iterations ? <Skeleton w="100%" h={180} /> : <>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:10}}>
-          <MiniStat label="Best Sharpe" value={iterationSummary?.best_sharpe?.toFixed(2)||"\u2014"} color={T.gold} small />
-          <MiniStat label="Discarded" value={iterationSummary?.discarded_count||0} color={T.coral} small />
-          <MiniStat label="Kept" value={iterationSummary?.kept_count||0} color={T.sage} small />
-          <MiniStat label="Total It" value={iterationResults.length||0} color={T.teal} small />
-        </div>
-        {iterationResults.length>0&&(
-          <div style={{flex:1,overflowY:"auto"}}>
-            <table className="data-table" style={{fontSize:9}}>
-              <thead><tr><th>It</th><th>Sharpe</th><th>WR</th><th>DD</th><th>Trades</th><th>Verdict</th></tr></thead>
-              <tbody>{iterationResults.slice(-30).reverse().map((r,i)=>(
-                <tr key={i}>
-                  <td style={{padding:"2px 6px",color:T.muted}}>{r.iteration}</td>
-                  <td style={{padding:"2px 6px",color:r.sharpe_ratio>=0.8?T.sage:r.sharpe_ratio>=0?T.text:T.coral}}>{r.sharpe_ratio?.toFixed(2)||"\u2014"}</td>
-                  <td style={{padding:"2px 6px",color:T.text}}>{r.win_rate?`${(r.win_rate*100).toFixed(0)}%`:"\u2014"}</td>
-                  <td style={{padding:"2px 6px",color:T.text}}>{r.max_drawdown?`${(Math.abs(r.max_drawdown)*100).toFixed(1)}%`:"\u2014"}</td>
-                  <td style={{padding:"2px 6px",color:T.text}}>{r.total_trades||0}</td>
-                  <td style={{padding:"2px 6px",color:r.verdict==="kept"||r.verdict==="converged"?T.sage:T.coral,fontWeight:600}}>
-                    {r.verdict==="kept"?"KEPT":r.verdict==="converged"?"KEPT":r.verdict==="discarded"?"DISCARDED":r.verdict||"\u2014"}
-                  </td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        )}
-      </>}
-    </div>
-  );
-
-  // ─── Live Positions Card ───
-  const positionsCard = (
-    <div className="card card-pad" style={{display:"flex",flexDirection:"column",maxHeight:280,overflow:"hidden"}}>
-      <Accent color={T.teal} />
-      <SectionHeading>Live Positions</SectionHeading>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8}}>
-        <MiniStat label="Open Positions" value={riskPortfolio?.total_open_positions??positions.length} color={T.teal} small />
-        <MiniStat label="Daily PnL" value={fmtPnl(riskPortfolio?.daily_pnl_pct)} color={(riskPortfolio?.daily_pnl_pct||0)>=0?T.sage:T.coral} small />
-      </div>
-      {loading.positions ? <Skeleton w="100%" h={60} /> : (
-        positions.length===0?<EmptyState icon={"\u25CB"} title="No open positions" sub="Signals will appear when opportunities are detected" />:
-        <div style={{flex:1,overflowY:"auto"}}>
-          <table className="data-table" style={{fontSize:9.5}}>
-            <thead><tr><th>Pair</th><th>Side</th><th>Size</th><th>Entry</th><th>PnL</th><th>Duration</th></tr></thead>
-            <tbody>{positions.map((p,i)=>(
-              <tr key={i}>
-                <td style={{padding:"4px 6px",color:T.text,fontWeight:600}}>{p.pair||"\u2014"}</td>
-                <td style={{padding:"4px 6px",color:p.side==="buy"||p.side==="long"?T.sage:T.coral,fontWeight:600}}>{(p.side||"\u2014").toUpperCase()}</td>
-                <td style={{padding:"4px 6px",color:T.text}}>{p.size||"\u2014"}</td>
-                <td style={{padding:"4px 6px",color:T.text}}>{p.entry_price?`$${p.entry_price}`:"\u2014"}</td>
-                <td style={{padding:"4px 6px",color:(p.pnl_pct||0)>=0?T.sage:T.coral,fontWeight:600}}>{fmtPnl(p.pnl_pct)}</td>
-                <td style={{padding:"4px 6px",color:T.muted}}>{fmtTime(p.entry_time)}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-
-  // ─── Bottom Row: Portfolio Risk, Startup, Data Health ───
-  const miniCards = (
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-      {/* Portfolio Risk */}
-      <div className="card card-pad">
-        <Accent color={T.gold} />
-        <SectionHeading>Portfolio Risk</SectionHeading>
-        {riskPortfolio?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-          <MiniStat label="Open" value={riskPortfolio.total_open_positions??"\u2014"} color={T.teal} small />
-          <MiniStat label="Daily PnL" value={fmtPnl(riskPortfolio.daily_pnl_pct)} color={(riskPortfolio.daily_pnl_pct||0)>=0?T.sage:T.coral} small />
-          <MiniStat label="Weekly PnL" value={fmtPnl(riskPortfolio.weekly_pnl_pct)} color={(riskPortfolio.weekly_pnl_pct||0)>=0?T.sage:T.coral} small />
-          <MiniStat label="Max DD" value={riskPortfolio.max_drawdown!=null?`${(Math.abs(riskPortfolio.max_drawdown)*100).toFixed(1)}%`:"\u2014"} color={T.coral} small />
-        </div>:<div style={{fontSize:10,color:T.muted}}>Waiting for data...</div>}
-      </div>
-      {/* Startup Status */}
-      <div className="card card-pad">
-        <Accent color={T.accent} />
-        <SectionHeading>Startup Tasks</SectionHeading>
-        {startupStatus?.tasks?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-          {Object.entries(startupStatus.tasks).map(([k,t])=>{
-            const c=t.status==="running"?T.accent:t.status==="failed"?T.coral:t.status==="stopped"?T.muted:T.gold;
-            return (<div key={k} style={{padding:"5px 10px",background:T.surface,borderRadius:"var(--radius-sm)",border:`1px solid ${T.border}`}}>
-              <div className="flex items-center justify-between gap-4">
-                <span style={{fontSize:9,color:T.muted,fontWeight:500}}>{k.replace(/_/g," ")}</span>
-                <span className="text-mono" style={{fontSize:8,color:c,fontWeight:600,flexShrink:0}}>{t.status}</span>
-              </div>
-              {t.error&&<div style={{fontSize:8,color:T.coral,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.error}</div>}
-            </div>);
-          })}
-        </div>:<div style={{fontSize:11,color:T.muted}}>No startup data</div>}
-      </div>
-      {/* Data Health */}
-      <div className="card card-pad">
-        <Accent color={T.teal} />
-        <SectionHeading>Data Sources</SectionHeading>
-        {dataHealth&&Object.keys(dataHealth).length>0?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-          {Object.entries(dataHealth).slice(0,6).map(([name,s])=>{
-            const h=s.is_healthy!==false;
-            return (<div key={name} style={{padding:"5px 10px",background:T.surface,borderRadius:"var(--radius-sm)",border:`1px solid ${T.border}`}}>
-              <div className="flex items-center justify-between">
-                <span style={{fontSize:9,color:T.muted,fontWeight:500}}>{name.replace(/_/g," ")}</span>
-                <span className="text-mono" style={{fontSize:8,color:h?T.accent:T.coral}}>{h?"OK":"DOWN"}</span>
-              </div>
-              {s.last_success&&<div className="text-mono" style={{fontSize:8,color:T.muted,marginTop:1}}>{fmtTime(s.last_success)}</div>}
-            </div>);
-          })}
-        </div>:<div style={{fontSize:11,color:T.muted}}>No source data</div>}
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="dash-grid">
-      {autoCard}
-      {cbCard}
-      {resultsCard}
-      {positionsCard}
-      <div style={{gridColumn:"1/-1"}}><SharpeChart results={iterationResults} /></div>
-      <div style={{gridColumn:"1/-1"}}>{miniCards}</div>
-      <div style={{gridColumn:"1/-1"}}><TerminalLogPanel events={terminalLog} /></div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════
-// VIEW: RESEARCH (iteration detail / explorer)
-// ═══════════════════════════════════════════════
-function ResearchView({iterationSummary,iterationResults,events,terminalLog,autonomousState}) {
-  const results = iterationResults;
-  const hasData = results?.length>0;
-
-  return (
-    <div style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",gap:10,overflow:"hidden"}}>
-      {/* Summary stats */}
-      <div className="card card-pad">
-        <Accent color={T.gold} />
-        <SectionHeading>Research Overview</SectionHeading>
-        {!hasData?<EmptyState icon={"\u25C9"} title="No research data yet" sub="Start an autonomous run or use New Research to begin" />:<>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:6,marginBottom:10}}>
-            <MiniStat label="Best Sharpe" value={iterationSummary?.best_sharpe?.toFixed(2)||"\u2014"} color={T.gold} />
-            <MiniStat label="Kept" value={iterationSummary?.kept_count||0} color={T.sage} />
-            <MiniStat label="Discarded" value={iterationSummary?.discarded_count||0} color={T.coral} />
-            <MiniStat label="Total Iterations" value={results.length} color={T.teal} />
-            <MiniStat label="Total Cycles" value={autonomousState?.total_cycles||0} color={T.secondary} />
-            <MiniStat label="Current Sharpe" value={autonomousState?.current_sharpe?.toFixed(2)||"\u2014"} color={T.gold} />
-          </div>
-        </>}
-      </div>
-
-      {/* Full results table */}
-      <div className="card card-pad" style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        <Accent color={T.teal} />
-        <SectionHeading>Iteration History ({results?.length||0})</SectionHeading>
-        {!hasData?<EmptyState icon={"\u25B4"} title="No iterations yet" sub="Run autonomous research to populate" />:
-        <div style={{flex:1,overflowY:"auto"}}>
-          <table className="data-table">
-            <thead><tr><th>It</th><th>Sharpe</th><th>Win Rate</th><th>Max DD</th><th>Trades</th><th>Profit</th><th>Verdict</th><th>Strategy</th></tr></thead>
-            <tbody>{[...results].reverse().map((r,i)=>(
-              <tr key={i}>
-                <td style={{padding:"4px 8px",color:T.muted,fontWeight:600}}>{r.iteration}</td>
-                <td style={{padding:"4px 8px",color:r.sharpe_ratio>=0.8?T.sage:r.sharpe_ratio>=0?T.text:T.coral,fontWeight:700}}>{r.sharpe_ratio?.toFixed(2)||"\u2014"}</td>
-                <td style={{padding:"4px 8px",color:T.text}}>{r.win_rate?`${(r.win_rate*100).toFixed(0)}%`:"\u2014"}</td>
-                <td style={{padding:"4px 8px",color:Math.abs(r.max_drawdown||0)<0.05?T.sage:Math.abs(r.max_drawdown||0)<0.1?T.gold:T.coral}}>{r.max_drawdown?`${(Math.abs(r.max_drawdown)*100).toFixed(1)}%`:"\u2014"}</td>
-                <td style={{padding:"4px 8px",color:T.text}}>{r.total_trades||0}</td>
-                <td style={{padding:"4px 8px",color:(r.profit||0)>=0?T.sage:T.coral}}>{r.profit!=null?fmtPnl(r.profit):"\u2014"}</td>
-                <td style={{padding:"4px 8px",color:r.verdict==="kept"||r.verdict==="converged"?T.sage:T.coral,fontWeight:600}}>
-                  {r.verdict==="kept"?"KEPT":r.verdict==="converged"?"KEPT":r.verdict==="discarded"?"DISCARDED":r.verdict||"\u2014"}
-                </td>
-                <td style={{padding:"4px 8px",color:T.secondary,fontSize:9}}>{r.strategy_name||r.strategy_type||"\u2014"}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>}
-      </div>
-
-      {/* Chart + Logs row */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <SharpeChart results={results} />
-        <EventLogPanel events={events} />
-      </div>
-      <TerminalLogPanel events={terminalLog} />
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════
-// VIEW: STRATEGY LIBRARY
-// ═══════════════════════════════════════════════
-function StrategyLibraryView({strategies}) {
-  const [search,setSearch] = useState("");
-  const [regimeFilter,setRegimeFilter] = useState("all");
-
-  const regimes = useMemo(()=>{
-    const s=new Set(); (strategies||[]).forEach(r=>{if(r.regime)s.add(r.regime)});
-    return ["all",...Array.from(s)];
-  },[strategies]);
-
-  const filtered = useMemo(()=>{
-    let items=strategies||[];
-    if(search.trim()){const q=search.toLowerCase();items=items.filter(s=>(s.strategy_type||s.name||"").toLowerCase().includes(q)||(s.regime||s.metadata?.regime||"").toLowerCase().includes(q))}
-    if(regimeFilter!=="all")items=items.filter(s=>s.regime===regimeFilter);
-    return items;
-  },[strategies,search,regimeFilter]);
-
-  return (
-    <div className="card card-pad" style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <Accent color={T.teal} />
-      <div className="flex items-center justify-between gap-12 shrink-0" style={{marginBottom:10}}>
-        <h2 className="section-heading" style={{marginBottom:0}}>Strategy Library ({filtered.length})</h2>
-        <div className="flex gap-6 items-center">
-          <input type="text" placeholder="Filter strategies..." value={search} onChange={e=>setSearch(e.target.value)} className="input-field" style={{width:140}} />
-          <select value={regimeFilter} onChange={e=>setRegimeFilter(e.target.value)} className="input-field" style={{cursor:"pointer"}}>
-            {regimes.map(r=><option key={r} value={r}>{r==="all"?"All Regimes":r.replace(/_/g," ")}</option>)}
-          </select>
-        </div>
-      </div>
-      {filtered.length===0?<EmptyState icon={"\u25C9"} title={strategies.length===0?"No deployable strategies yet":"No strategies match your filter"} sub="Run autonomous research to discover strategies" />:
-      <div style={{flex:1,overflowY:"auto"}}>
-        <table className="data-table">
-          <thead><tr><th>Name</th><th>Type</th><th>Regime</th><th>Sharpe</th><th>Win Rate</th><th>Max DD</th><th>Status</th></tr></thead>
-          <tbody>{filtered.map((s,i)=>{
-            const sharpe=s.sharpe||s.metadata?.sharpe||0;
-            const wr=s.win_rate||s.metadata?.win_rate||0;
-            const dd=Math.abs(s.max_drawdown||s.metadata?.max_drawdown||0);
-            const name=s.strategy_type||s.name||"Unnamed";
-            const type=s.strategy_type||"\u2014";
-            const regime=s.regime||s.metadata?.regime||"\u2014";
-            const status=dd>0.1?"\u26A0 Decaying":"\u25CF Active";
-            return (<tr key={i}>
-              <td style={{padding:"5px 8px",color:T.text,fontWeight:600,fontSize:10}}>{name}</td>
-              <td style={{padding:"5px 8px",color:T.secondary}}>{type}</td>
-              <td style={{padding:"5px 8px",color:T.gold}}>{regime}</td>
-              <td style={{padding:"5px 8px",color:sharpe>=0.8?T.sage:sharpe>=0?T.text:T.coral,fontWeight:700}}>{typeof sharpe==="number"?sharpe.toFixed(2):"\u2014"}</td>
-              <td style={{padding:"5px 8px",color:T.text}}>{typeof wr==="number"?`${(wr*100).toFixed(0)}%`:"\u2014"}</td>
-              <td style={{padding:"5px 8px",color:dd<0.05?T.sage:dd<0.1?T.gold:T.coral}}>{typeof dd==="number"?`${(dd*100).toFixed(1)}%`:"\u2014"}</td>
-              <td style={{padding:"5px 8px",color:status.includes("Active")?T.sage:T.gold,fontWeight:600}}>{status}</td>
-            </tr>);
-          })}</tbody>
-        </table>
-      </div>}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════
-// VIEW: SIGNAL FEED
-// ═══════════════════════════════════════════════
-function SignalFeedView({signals}) {
-  const data = useMemo(()=>Array.isArray(signals)?[...signals].reverse().slice(0,100):[], [signals]);
-
-  return (
-    <div className="card card-pad" style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <Accent color={T.gold} />
-      <SectionHeading>Signal Feed ({data.length})</SectionHeading>
-      {data.length===0?<EmptyState icon={"\u25CB"} title="No signals evaluated yet" sub="Signals appear here when the scanner detects opportunities" />:
-      <div style={{flex:1,overflowY:"auto"}}>
-        <table className="data-table">
-          <thead><tr><th>Time</th><th>Pair</th><th>Signal</th><th>Strategy</th><th>Confidence</th><th>Regime</th><th>Status</th></tr></thead>
-          <tbody>{data.map((s,i)=>{
-            const sig=s.signal||s;
-            const isBuy=(sig.signal||"").toLowerCase()==="buy";
-            const isSell=(sig.signal||"").toLowerCase()==="sell";
-            const conf=sig.confidence!=null?sig.confidence:0;
-            const time=s.time||(sig.timestamp?fmtTime(sig.timestamp):"\u2014");
-            return (<tr key={s.id||i}>
-              <td className="text-mono" style={{padding:"4px 8px",color:T.muted,fontSize:9}}>{time}</td>
-              <td style={{padding:"4px 8px",color:T.text,fontWeight:600}}>{sig.pair||"\u2014"}</td>
-              <td style={{padding:"4px 8px"}}><span className={isBuy?"badge-buy":isSell?"badge-sell":"badge-hold"}>{sig.signal||"hold"}</span></td>
-              <td style={{padding:"4px 8px",color:T.secondary}}>{sig.strategy_type||"\u2014"}</td>
-              <td style={{padding:"4px 8px"}}><ConfBar conf={conf} /></td>
-              <td className="text-mono" style={{padding:"4px 8px",color:T.gold,fontSize:9}}>{sig.regime||"\u2014"}</td>
-              <td style={{padding:"4px 8px",color:sig.type==="executed"?T.sage:T.muted,fontWeight:600,fontSize:9}}>{sig.type==="executed"?"EXECUTED":"EVALUATED"}</td>
-            </tr>);
-          })}</tbody>
-        </table>
-      </div>}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════
-// APP — Main orchestrator
+// APP COMPONENT
 // ═══════════════════════════════════════════════
 function App() {
-  // ─── View state ───
-  const [activeView,setActiveView] = useState("dashboard");
+  // ─── State ───
   const [showModal,setShowModal] = useState(false);
-
-  // ─── Data state ───
   const [positions,setPositions] = useState([]);
   const [tokens,setTokens] = useState([]);
   const [strategies,setStrategies] = useState([]);
@@ -1017,17 +716,16 @@ function App() {
   const [riskPortfolio,setRiskPortfolio] = useState(null);
   const [startupStatus,setStartupStatus] = useState(null);
   const [dataHealth,setDataHealth] = useState(null);
-
-  // ─── UI state ───
   const [loading,setLoading] = useState({});
   const [autoStarting,setAutoStarting] = useState(false);
   const [autoStopping,setAutoStopping] = useState(false);
   const [autoPausing,setAutoPausing] = useState(false);
-
-  // ─── Modal params ───
   const [goal,setGoal] = useState("Optimize single pair BTCUSDT spot scalping");
   const [cycles,setCycles] = useState(5);
   const [iters,setIters] = useState(1);
+  const [selectedIteration, setSelectedIteration] = useState(null);
+  const [candles, setCandles] = useState(null);
+  const [hypothesis, setHypothesis] = useState(null);
 
   const api = useApi();
 
@@ -1039,7 +737,6 @@ function App() {
       if(saved.circuitBreaker) setCircuitBreaker(saved.circuitBreaker);
       if(saved.regimeSnapshot) setRegimeSnapshot(saved.regimeSnapshot);
       if(saved.autonomousState) setAutonomousState(saved.autonomousState);
-      // Clear stale iterationData format, use new split format
       if(saved.iterationResults) setIterationResults(saved.iterationResults);
       if(saved.iterationSummary) setIterationSummary(saved.iterationSummary);
       if(saved.iterationData?.results) setIterationResults(saved.iterationData.results);
@@ -1085,7 +782,7 @@ function App() {
     fetchInitial();
   }, [api]);
 
-  // ─── WebSocket message handler ───
+  // ─── WebSocket handler ───
   const wsHandlers = useMemo(()=>({
     onMessage(msg) {
       const {type,payload} = msg;
@@ -1133,6 +830,8 @@ function App() {
         case "run_complete":
         case "run_error":
         case "hypothesis":
+          setHypothesis(payload?.text || payload?.hypothesis || JSON.stringify(payload));
+          break;
         case "critique":
         case "iteration_start":
         case "iteration_result":
@@ -1173,11 +872,6 @@ function App() {
   const wsSend = useWebSocket("/ws/autonomous", wsHandlers);
 
   // ─── Actions ───
-  const withLoading = useCallback((key,promise)=>{
-    setLoading(l=>({...l,[key]:true}));
-    return promise.finally(()=>setLoading(l=>({...l,[key]:false})));
-  },[]);
-
   const startAutonomous = useCallback(async()=>{
     setAutoStarting(true);
     try { await api("/autonomous/start",{method:"POST"}); }
@@ -1216,6 +910,25 @@ function App() {
     catch(e){console.error(e)}
   },[api]);
 
+  const fetchIterationDetail = useCallback(async (iterationId) => {
+    try {
+      const [tradesRes, candlesRes] = await Promise.allSettled([
+        api(`/iterations/${iterationId}/trades`),
+        api(`/iterations/${iterationId}/candles`),
+      ]);
+      if (tradesRes.status === "fulfilled" && tradesRes.value?.length > 0) {
+        setIterationResults(prev => prev.map(r =>
+          r.iteration === iterationId ? { ...r, trades: tradesRes.value } : r
+        ));
+      }
+      if (candlesRes.status === "fulfilled" && candlesRes.value?.length > 0) {
+        setCandles(candlesRes.value);
+      }
+    } catch(e) {
+      console.warn("fetchIterationDetail failed, using mock data", e);
+    }
+  },[api]);
+
   const startResearch = useCallback((input, c, i)=>{
     const finalGoal = input||goal;
     setGoal(finalGoal);
@@ -1224,38 +937,44 @@ function App() {
       .catch(e=>console.error(e));
   },[api,goal,cycles,iters]);
 
+  // ─── Effective iteration ───
+  const effectiveIteration = selectedIteration ?? (iterationResults.length - 1);
+
   // ─── Render ───
-  const dashProps = {autonomousState,circuitBreaker,regimeSnapshot,positions,tokens,iterationSummary,iterationResults,loading,startupStatus,riskPortfolio,dataHealth,startAutonomous,stopAutonomous,pauseAutonomous,resumeAutonomous,autoStarting,autoStopping,autoPausing,haltCircuitBreaker,clearCircuitBreaker,terminalLog,events};
-
   return (
-    <div style={{height:"100%",display:"flex",flexDirection:"column",background:T.bg,color:T.text}}>
-      <Header activeView={activeView} setActiveView={setActiveView} autonomousState={autonomousState} onNewResearch={()=>setShowModal(true)} />
-
-      <main style={{flex:1,display:"flex",flexDirection:"column",padding:"12px 16px",minHeight:0,overflow:"hidden"}}>
-        {activeView==="dashboard" && <DashboardView {...dashProps} />}
-        {activeView==="research" && <ResearchView iterationSummary={iterationSummary} iterationResults={iterationResults} events={events} terminalLog={terminalLog} autonomousState={autonomousState} />}
-        {activeView==="strategies" && <StrategyLibraryView strategies={strategies} />}
-        {activeView==="signals" && <SignalFeedView signals={signals} />}
-      </main>
-
-      <footer style={{flexShrink:0,padding:"4px 16px",borderTop:`1px solid ${T.border}`,background:T.card,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <span style={{fontSize:7,color:T.muted,fontFamily:"'DM Mono',monospace"}}>
-          crypto_agent_bot
-        </span>
-        <div className="flex items-center gap-8">
-          <div className="status-dot" style={{width:4,height:4,background:autonomousState?.is_running?T.sage:T.muted}} />
-          <span style={{fontSize:7,color:T.muted,fontFamily:"'DM Mono',monospace"}}>
-            {autonomousState?.current_sharpe!=null?`Sharpe: ${autonomousState.current_sharpe.toFixed(2)}`:"Idle"}
-          </span>
-          <span style={{fontSize:7,color:T.muted,fontFamily:"'DM Mono',monospace"}}>
-            {new Date().toLocaleTimeString()}
-          </span>
-        </div>
-      </footer>
-
+    <div style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar status={autonomousState?.is_running?"running":autonomousState?.is_paused?"paused":"stopped"}
+              regime={regimeSnapshot?.regime}
+              confidence={regimeSnapshot?.confidence}
+              goal={autonomousState?.current_goal}
+              tokens={tokens}
+              onNewResearch={()=>setShowModal(true)}
+              isRunning={autonomousState?.is_running}
+              isPaused={autonomousState?.is_paused}
+              starting={autoStarting}
+              stopping={autoStopping}
+              pausing={autoPausing}
+              onStart={startAutonomous}
+              onStop={stopAutonomous}
+              onPause={pauseAutonomous}
+              onResume={resumeAutonomous} />
+      <div className="main">
+        <LeftSidebar events={events} hypothesis={hypothesis} />
+        <StrategyChart iterationResults={iterationResults}
+                       selectedIteration={selectedIteration}
+                       onSelectIteration={setSelectedIteration}
+                       candles={candles} />
+        <RightSidebar iterationResults={iterationResults}
+                      circuitBreaker={circuitBreaker}
+                      onHalt={haltCircuitBreaker}
+                      onClear={clearCircuitBreaker} />
+      </div>
+      <BottomStrip iterationResults={iterationResults}
+                   selectedIteration={effectiveIteration}
+                   onSelectIteration={setSelectedIteration}
+                   regimeSnapshot={regimeSnapshot} />
       {showModal && (
         <ResearchModal goal={goal} cycles={cycles} iters={iters}
-          setGoal={setGoal} setCycles={setCycles} setIters={setIters}
           onStart={startResearch} onClose={()=>setShowModal(false)} />
       )}
     </div>
