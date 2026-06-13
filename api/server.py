@@ -232,7 +232,7 @@ async def autonomous_start():
                 cb = event_bus.make_callback()
                 orchestrator.event_callback = with_token_tracking(cb)
             vs = VectorStore(); et = ExperimentTracker(); rd = MarketRegimeDetector()
-            loop = AutonomousResearchLoop(orchestrator=orchestrator, regime_detector=rd, experiment_tracker=et, vector_store=vs, interval_minutes=settings.AUTONOMOUS_INTERVAL_MINUTES, event_bus=getattr(app.state, "event_bus", None))
+            loop = AutonomousResearchLoop(orchestrator=orchestrator, regime_detector=rd, experiment_tracker=et, vector_store=vs, interval_minutes=settings.AUTONOMOUS_INTERVAL_MINUTES, event_bus=getattr(app.state, "event_bus", None), iterations_file="./workspace/iteration_results.json")
             _autonomous_loop_ref = loop
             _startup_tasks["autonomous_loop"] = {"status": "running", "error": None}
             asyncio.create_task(loop.run_forever())
@@ -725,7 +725,7 @@ async def startup():
                     cb = event_bus.make_callback()
                     orchestrator.event_callback = with_token_tracking(cb)
                 vs = VectorStore(); et = ExperimentTracker(); rd = MarketRegimeDetector()
-                loop = AutonomousResearchLoop(orchestrator=orchestrator, regime_detector=rd, experiment_tracker=et, vector_store=vs, interval_minutes=settings.AUTONOMOUS_INTERVAL_MINUTES, event_bus=event_bus)
+                loop = AutonomousResearchLoop(orchestrator=orchestrator, regime_detector=rd, experiment_tracker=et, vector_store=vs, interval_minutes=settings.AUTONOMOUS_INTERVAL_MINUTES, event_bus=event_bus, iterations_file="./workspace/iteration_results.json")
                 _autonomous_loop_ref = loop
                 _startup_tasks["autonomous_loop"] = {"status": "running", "error": None}
                 asyncio.create_task(loop.run_forever())

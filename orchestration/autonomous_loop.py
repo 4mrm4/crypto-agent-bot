@@ -66,6 +66,7 @@ class AutonomousResearchLoop:
         vector_store=None,
         interval_minutes: int = 30,
         event_bus=None,
+        iterations_file: Optional[str] = "./workspace/iteration_results.json",
     ):
         self._orchestrator = orchestrator
         self._regime_detector = regime_detector
@@ -73,6 +74,7 @@ class AutonomousResearchLoop:
         self._vector_store = vector_store
         self._interval_seconds = max(interval_minutes * 60, MIN_INTERVAL_SECONDS)
         self._event_bus = event_bus
+        self._iterations_file = Path(iterations_file) if iterations_file else None
 
         # Lazy imports (avoid circular deps at module level)
         self._sentiment_fetcher = None
@@ -81,10 +83,48 @@ class AutonomousResearchLoop:
 
         self._shutdown = False
         self.state = AutonomousLoopState()
+
+        # Restore iteration results from disk (survives server restart)
+        self._load_iterations()
+
         logger.info(
             "AutonomousResearchLoop initialized (interval=%ds)",
             self._interval_seconds,
         )
+
+    # ── Disk persistence helpers (iteration results survive restarts) ──
+
+    def _iterations_file_path(self) -> Optional[Path]:
+        return self._iterations_file
+
+    def _load_iterations(self):
+        """Load iteration_results from JSON file, if it exists."""
+        fpath = self._iterations_file_path()
+        if fpath is None or not fpath.exists():
+            return
+        try:
+            data = json.loads(fpath.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                self.state.iteration_results = data
+                logger.info(
+                    "Restored %d iteration results from %s",
+                    len(data), fpath,
+                )
+        except Exception as exc:
+            logger.warning("Failed to load iteration results: %s", exc)
+
+    def _save_iterations(self):
+        """Write iteration_results to JSON file."""
+        fpath = self._iterations_file_path()
+        if fpath is None:
+            return
+        try:
+            fpath.write_text(
+                json.dumps(self.state.iteration_results, indent=2, default=str),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            logger.warning("Failed to save iteration results: %s", exc)
 
     # ── Public API ──
 
@@ -568,6 +608,9 @@ class AutonomousResearchLoop:
         # Keep only last 100 results
         if len(self.state.iteration_results) > 100:
             self.state.iteration_results = self.state.iteration_results[-100:]
+
+        # Persist to disk (survives server restart)
+        self._save_iterations()
 
         # Store current best metrics for UI
         best_metrics = result.get("best_metrics", {})

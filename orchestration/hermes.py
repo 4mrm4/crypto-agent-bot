@@ -64,6 +64,22 @@ class HermesOrchestrator:
         self._circuit_breaker = circuit_breaker or CircuitBreakerState()
 
     # ------------------------------------------------------------------
+    # Event callback property (bridges `obj.event_callback = X` → `_event_callback`)
+    # ------------------------------------------------------------------
+
+    @property
+    def event_callback(self) -> Optional[Callable[[str, Dict[str, Any]], None]]:
+        return self._event_callback
+
+    @event_callback.setter
+    def event_callback(self, value: Optional[Callable[[str, Dict[str, Any]], None]]):
+        self._event_callback = value
+        logger.info(
+            "HermesOrchestrator.event_callback set (%s)",
+            "provided" if value is not None else "cleared",
+        )
+
+    # ------------------------------------------------------------------
     # Event emission
     # ------------------------------------------------------------------
 

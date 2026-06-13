@@ -160,6 +160,7 @@ def _run_autonomous(ui: bool = False, start_scanner: bool = False, scanner_stand
     if ui:
         event_bus = EventBus()
         orchestrator.event_callback = with_token_tracking(event_bus.make_callback())
+        logger.info("event_callback wired on orchestrator (will be passed to AutonomousResearchLoop)")
 
         # Pipe root logger into EventBus for terminal-log panel
         from api.event_bus import LoggingEventBusHandler

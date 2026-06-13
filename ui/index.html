@@ -325,23 +325,51 @@ function App() {
   const [tab, setTab] = useState("research");
   const [runId, setRunId] = useState(null);
   const [connected, setConnected] = useState(false);
-  const [hypothesis, setHypothesis] = useState("");
-  const [iteration, setIteration] = useState(0);
-  const [maxIter, setMaxIter] = useState(5);
-  const [metrics, setMetrics] = useState({});
-  const [chartData, setChartData] = useState([]);
+  const [hypothesis, setHypothesis] = useState(initialWs.hypothesis || "");
+  const [iteration, setIteration] = useState(initialWs.iteration || 0);
+  const [maxIter, setMaxIter] = useState(initialWs.maxIter || 5);
+  const [metrics, setMetrics] = useState(initialWs.metrics || {});
+  const [chartData, setChartData] = useState(initialWs.chartData || []);
   const [showModal, setShowModal] = useState(false);
   const [goalInput, setGoalInput] = useState("Test SMA crossover for BTC/USDT");
   const [cycleInput, setCycleInput] = useState(3);
   const [iterInput, setIterInput] = useState(5);
   const [running, setRunning] = useState(false);
-  const [timeline, setTimeline] = useState([]);
-  const [log, setLog] = useState([]);
-  const [tokens, setTokens] = useState({ total_tokens: 0 });
-  const [sentiment, setSentiment] = useState(null);
+  const [timeline, setTimeline] = useState(initialWs.timeline || []);
+  const [log, setLog] = useState(initialWs.log || []);
+  const [tokens, setTokens] = useState(initialWs.tokens || { total_tokens: 0 });
+  const [sentiment, setSentiment] = useState(initialWs.sentiment || null);
   const logRef = useRef(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  // ── localStorage persistence (survives page refresh) ──
+  const WS_STORAGE_KEY = 'crypto_bot_ws_state';
+  function loadWsState() {
+    try {
+      const saved = localStorage.getItem(WS_STORAGE_KEY);
+      if (!saved) return {};
+      const parsed = JSON.parse(saved);
+      // Staleness guard: discard if > 1 hour old
+      if (parsed._savedAt && Date.now() - parsed._savedAt > 3600000) return {};
+      return parsed;
+    } catch { return {}; }
+  }
+  const initialWs = loadWsState();
+
+  // ── Debounced save to localStorage (every 1s when state changes) ──
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(WS_STORAGE_KEY, JSON.stringify({
+          hypothesis, iteration, maxIter, metrics, chartData,
+          timeline, log, sentiment, tokens,
+          _savedAt: Date.now(),
+        }));
+      } catch { /* quota exceeded or unavailable */ }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [hypothesis, iteration, maxIter, metrics, chartData, timeline, log, sentiment, tokens]);
 
   // Dashboard state
   const [autonomousState, setAutonomousState] = useState(null);
@@ -419,6 +447,9 @@ function App() {
         setIteration(payload.iteration || 0);
         setMaxIter(payload.max_iterations || 5);
         break;
+      case "iteration_start":
+        setIteration(payload.iteration || 0);
+        break;
       case "critique":
         setHypothesis((prev) => prev + "\n\n\u2550 Critique \u2550\n" + (payload.critique || ""));
         break;
@@ -455,11 +486,6 @@ function App() {
         setHypothesis("");
         setMetrics({});
         setIteration(0);
-        setChartData([]);
-        setTimeline([]);
-        setLog([]);
-        setSentiment(null);
-        setTokens({ total_tokens: 0 });
         break;
       case "token_usage":
         setTokens(payload || { total_tokens: 0 });
@@ -479,9 +505,14 @@ function App() {
       case "autonomous_cycle_complete":
         fetch("/api/autonomous/status").then(r=>r.json()).then(setAutonomousState).catch(()=>{});
         fetch("/api/regime/current").then(r=>r.json()).then(setRegimeSnapshot).catch(()=>{});
+        fetch("/api/autonomous/iterations").then(r=>r.json()).then(setIterationData).catch(()=>{});
         break;
       case "strategy_decay_detected":
         setLog((prev) => [...prev.slice(-99), { type: "decay_alert", payload, time: ts, id: uid() }]);
+        fetch("/api/strategies/deployable").then(r=>r.json()).then(d=>{const a=Array.isArray(d)?d:d.strategies||[];setStrategyTabData(a);}).catch(()=>{});
+        break;
+      case "strategy_retired":
+        fetch("/api/strategies/deployable").then(r=>r.json()).then(d=>{const a=Array.isArray(d)?d:d.strategies||[];setStrategyTabData(a);}).catch(()=>{});
         break;
       case "trade_signal_evaluated":
         setSignalsTabData((prev) => [...prev.slice(-199), { signal: payload, time: ts, id: uid() }]);
@@ -516,11 +547,6 @@ function App() {
     setHypothesis("");
     setMetrics({});
     setIteration(0);
-    setChartData([]);
-    setTimeline([]);
-    setLog([]);
-    setSentiment(null);
-    setTokens({ total_tokens: 0 });
     fetch("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1623,7 +1649,7 @@ const TerminalLogPanel = React.forwardRef(function TerminalLogPanel({ events }, 
   );
 });
 
-const SharpeHistoryChart = React.forwardRef(function SharpeHistoryChart({ results }) {
+const SharpeHistoryChart = React.forwardRef(function SharpeHistoryChart({ results }, ref) {
   if (!results || results.length < 2) {
     return (
       <div style={{
