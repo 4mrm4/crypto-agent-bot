@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>crypto_agent_bot</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;700&family=Sora:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -13,24 +13,26 @@
 /* ─── Reset & Base ─── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body,#root{height:100%;width:100%}
-body{background:#0f0f12;color:#e0ddd5;font-family:'Sora',sans-serif;font-size:12px;line-height:1.5;overflow:hidden}
+body{background:#020617;color:#F8FAFC;font-family:'Exo 2',sans-serif;font-size:13px;line-height:1.6;overflow:hidden}
 /* ─── CSS Variables ─── */
 :root{
-  --bg:#0f0f12;
-  --surface:#1a1a20;
-  --elevated:#22222a;
-  --card:#16161c;
-  --border:#2a2a32;
-  --text:#e0ddd5;
-  --secondary:#a09e98;
-  --muted:#6b6963;
-  --amber:#d4a853;
-  --sage:#8bba7a;
-  --teal:#6bb5a5;
-  --coral:#c4685c;
-  --gold:#c9a13b;
-  --radius:6px;
-  --radius-sm:4px;
+  --bg:#020617;
+  --surface:#0F172A;
+  --elevated:#1E293B;
+  --card:#0A0F1E;
+  --border:rgba(255,255,255,0.06);
+  --border-hover:rgba(255,255,255,0.12);
+  --text:#F8FAFC;
+  --secondary:#94A3B8;
+  --muted:#64748B;
+  --accent:#22C55E;
+  --coral:#EF4444;
+  --teal:#14B8A6;
+  --gold:#F59E0B;
+  --sage:#22C55E;
+  --radius:8px;
+  --radius-sm:6px;
+  --shadow:0 2px 8px rgba(0,0,0,0.3);
 }
 
 /* ─── Scrollbar ─── */
@@ -53,7 +55,7 @@ body{background:#0f0f12;color:#e0ddd5;font-family:'Sora',sans-serif;font-size:12
 .flex-1{flex:1}
 .min-h-0{min-height:0}
 .shrink-0{flex-shrink:0}
-.text-mono{font-family:'DM Mono',monospace}
+.text-mono{font-family:'DM Mono',monospace;font-size:12px}
 
 /* ─── Animations ─── */
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
@@ -65,51 +67,56 @@ body{background:#0f0f12;color:#e0ddd5;font-family:'Sora',sans-serif;font-size:12
 .card{
   background:var(--card);
   border:1px solid var(--border);
-  border-radius:0 8px 0 8px;
+  border-radius:var(--radius);
   position:relative;
   overflow:hidden;
+  box-shadow:var(--shadow);
+  transition:border-color 0.2s;
 }
-.card-accent{position:absolute;top:0;left:0;right:0;height:2px}
-.card-pad{padding:14px}
+.card:hover{border-color:var(--border-hover)}
+.card-accent{position:absolute;top:0;left:0;right:0;height:2px;border-radius:var(--radius) var(--radius) 0 0}
+.card-pad{padding:16px}
 
-/* ─── Dashboard Grid ─── */
+/* ─── Dashboard Grid (bento) ─── */
 .dash-grid{
   display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:10px;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:12px;
   flex:1;min-height:0;
   overflow-y:auto;
-  padding:2px 0;
+  padding:4px 0;
   align-content:start;
 }
-@media(max-width:900px){.dash-grid{grid-template-columns:1fr}}
+@media(max-width:1100px){.dash-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:700px){.dash-grid{grid-template-columns:1fr}}
 
 /* ─── Data tables ─── */
 table.data-table{width:100%;border-collapse:collapse}
 table.data-table th{
-  padding:4px 8px;
-  font-family:'Syne',sans-serif;
-  font-size:7px;
-  font-weight:600;
+  padding:6px 10px;
+  font-family:'Orbitron',sans-serif;
+  font-size:8px;
+  font-weight:500;
   color:var(--muted);
   text-transform:uppercase;
-  letter-spacing:1.5px;
+  letter-spacing:1.8px;
   text-align:left;
   border-bottom:1px solid var(--border);
+  background:rgba(255,255,255,0.02);
 }
-table.data-table td{padding:4px 8px;border-bottom:1px solid var(--border)}
+table.data-table td{padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px}
 table.data-table tr:last-child td{border-bottom:none}
-table.data-table tr:hover td{background:rgba(255,255,255,0.02)}
+table.data-table tr:hover td{background:rgba(255,255,255,0.03)}
 
 /* ─── Section heading ─── */
 .section-heading{
-  font-family:'Syne',sans-serif;
+  font-family:'Orbitron',sans-serif;
   font-size:9px;
   font-weight:600;
   color:var(--muted);
   text-transform:uppercase;
-  letter-spacing:2px;
-  margin-bottom:10px;
+  letter-spacing:2.5px;
+  margin-bottom:12px;
 }
 
 /* ─── Status dot ─── */
@@ -119,18 +126,49 @@ table.data-table tr:hover td{background:rgba(255,255,255,0.02)}
   flex-shrink:0;
 }
 
+/* ─── Buttons ─── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:8px 16px;
+  border-radius:var(--radius-sm);
+  font-family:'Exo 2',sans-serif;
+  font-size:11px;
+  font-weight:600;
+  cursor:pointer;
+  transition:all 0.2s;
+  border:1px solid var(--border);
+  background:transparent;
+  color:var(--text);
+  gap:6px;
+  text-transform:none;
+}
+.btn:hover{opacity:0.85;transform:translateY(-0.5px)}
+.btn:active{transform:translateY(0)}
+.btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+.btn-primary{
+  background:var(--accent);
+  color:#020617;
+  border-color:var(--accent);
+  font-weight:700;
+  box-shadow:0 0 12px rgba(34,197,94,0.15);
+}
+.btn-primary:hover{box-shadow:0 0 20px rgba(34,197,94,0.3);opacity:1}
+.btn-danger{background:var(--coral);color:#fff;border-color:var(--coral)}
+.btn-ghost{background:transparent;color:var(--secondary);border-color:var(--border)}
+
 /* ─── Inputs & Selects ─── */
 .input-field{
-  padding:6px 10px;
-  border-radius:0 4px 0 4px;
+  padding:7px 12px;
+  border-radius:var(--radius-sm);
   background:var(--surface);
   border:1px solid var(--border);
   color:var(--text);
-  font-size:10px;
-  font-family:'DM Mono',monospace;
+  font-size:11px;
+  font-family:'Exo 2',sans-serif;
   outline:none;
+  transition:border-color .2s;
 }
-.input-field:focus{border-color:var(--amber)}
+.input-field:focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 
 /* ─── Mini stat ─── */
 .mini-stat{
@@ -140,16 +178,16 @@ table.data-table tr:hover td{background:rgba(255,255,255,0.02)}
   border:1px solid var(--border);
 }
 .mini-stat-label{
-  font-size:7px;
+  font-size:8px;
   color:var(--muted);
-  font-family:'DM Mono',monospace;
+  font-family:'Orbitron',sans-serif;
   text-transform:uppercase;
-  letter-spacing:0.5px;
-  margin-bottom:1px;
+  letter-spacing:1.2px;
+  margin-bottom:2px;
 }
 .mini-stat-value{
-  font-size:13px;
-  font-weight:700;
+  font-size:14px;
+  font-weight:600;
   font-family:'DM Mono',monospace;
 }
 
@@ -158,17 +196,11 @@ table.data-table tr:hover td{background:rgba(255,255,255,0.02)}
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 
 /* ─── Signal badge ─── */
-.badge-buy{display:inline-block;padding:1px 8px;border-radius:0 4px 0 4px;background:rgba(139,186,122,0.2);color:var(--sage);font-weight:700;font-size:9px;font-family:'DM Mono',monospace;text-transform:uppercase}
-.badge-sell{display:inline-block;padding:1px 8px;border-radius:0 4px 0 4px;background:rgba(196,104,92,0.2);color:var(--coral);font-weight:700;font-size:9px;font-family:'DM Mono',monospace;text-transform:uppercase}
-.badge-hold{display:inline-block;padding:1px 8px;border-radius:0 4px 0 4px;background:rgba(107,105,99,0.15);color:var(--muted);font-weight:700;font-size:9px;font-family:'DM Mono',monospace;text-transform:uppercase}
+.badge-buy{display:inline-block;padding:1px 10px;border-radius:var(--radius-sm);background:rgba(34,197,94,0.15);color:var(--accent);font-weight:600;font-size:9px;font-family:'Exo 2',sans-serif;text-transform:uppercase;letter-spacing:0.5px}
+.badge-sell{display:inline-block;padding:1px 10px;border-radius:var(--radius-sm);background:rgba(239,68,68,0.15);color:var(--coral);font-weight:600;font-size:9px;font-family:'Exo 2',sans-serif;text-transform:uppercase;letter-spacing:0.5px}
+.badge-hold{display:inline-block;padding:1px 10px;border-radius:var(--radius-sm);background:rgba(100,116,139,0.15);color:var(--muted);font-weight:600;font-size:9px;font-family:'Exo 2',sans-serif;text-transform:uppercase;letter-spacing:0.5px}
 
 /* ─── Button ─── */
-.btn{padding:6px 14px;border-radius:0 4px 0 4px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;font-weight:500;transition:all .2s;border:1px solid transparent}
-.btn:disabled{cursor:not-allowed;opacity:0.5}
-.btn-primary{background:var(--amber);color:#000;border-color:var(--amber)}
-.btn-primary:hover:not(:disabled){background:#c49a40}
-.btn-danger{background:transparent;color:var(--coral);border-color:var(--coral)}
-.btn-danger:hover:not(:disabled){background:rgba(196,104,92,0.1)}
 .btn-ghost{background:transparent;color:var(--text);border-color:var(--border)}
 .btn-ghost:hover:not(:disabled){background:var(--surface)}
 </style>
@@ -184,9 +216,9 @@ const {useState,useEffect,useRef,useMemo,useCallback,createContext,useContext} =
 // THEME
 // ═══════════════════════════════════════════════
 const T = {
-  bg:"#0f0f12",surface:"#1a1a20",elevated:"#22222a",card:"#16161c",
-  border:"#2a2a32",text:"#e0ddd5",secondary:"#a09e98",muted:"#6b6963",
-  amber:"#d4a853",sage:"#8bba7a",teal:"#6bb5a5",coral:"#c4685c",gold:"#c9a13b",
+  bg:"#020617",surface:"#0F172A",elevated:"#1E293B",card:"#0A0F1E",
+  border:"#1E293B",text:"#F8FAFC",secondary:"#94A3B8",muted:"#64748B",
+  accent:"#22C55E",coral:"#EF4444",teal:"#14B8A6",gold:"#F59E0B",sage:"#22C55E",
 };
 
 // ═══════════════════════════════════════════════
@@ -211,7 +243,7 @@ const SectionHeading = ({children,accent,extra}) => (
     {extra}
   </div>
 );
-const Accent = ({color=T.amber}) => <div className="card-accent" style={{background:`linear-gradient(90deg,${color},transparent)`}} />;
+const Accent = ({color=T.gold}) => <div className="card-accent" style={{background:`linear-gradient(90deg,${color},transparent)`}} />;
 const MiniStat = ({label,value,color=T.secondary,small}) => (
   <div className="mini-stat">
     <div className="mini-stat-label">{label}</div>
@@ -334,7 +366,7 @@ function SharpeChart({results}) {
   if (!results || results.length < 1) {
     return (
       <div className="card card-pad">
-        <Accent color={T.amber} />
+        <Accent color={T.gold} />
         <SectionHeading>Sharpe History</SectionHeading>
         <div style={{fontSize:10,color:T.muted,textAlign:"center",padding:16}}>
           No iterations yet
@@ -371,13 +403,13 @@ function SharpeChart({results}) {
 
   return (
     <div className="card card-pad">
-      <Accent color={T.amber} />
+      <Accent color={T.gold} />
       <SectionHeading>Sharpe History</SectionHeading>
       <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",display:"block"}}>
         <defs>
           <linearGradient id="sg-rec" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={T.amber} stopOpacity="0.12" />
-            <stop offset="100%" stopColor={T.amber} stopOpacity="0.02" />
+            <stop offset="0%" stopColor={T.gold} stopOpacity="0.12" />
+            <stop offset="100%" stopColor={T.gold} stopOpacity="0.02" />
           </linearGradient>
         </defs>
         {[0.25,0.5,0.75].map((f,i)=>(
@@ -388,12 +420,12 @@ function SharpeChart({results}) {
         )}
         {dots.length > 0 && <polyline points={allLine} fill="none" stroke={T.muted} strokeWidth="1.5" strokeOpacity="0.4" strokeLinejoin="round" strokeLinecap="round" />}
         {recDots.length>1&&<polygon points={`${recLine} ${pl+cw},${pt+ch} ${pl},${pt+ch}`} fill="url(#sg-rec)" />}
-        {recDots.length>1&&<polyline points={recLine} fill="none" stroke={T.amber} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
+        {recDots.length>1&&<polyline points={recLine} fill="none" stroke={T.gold} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
         {dots.map((p,i)=>!p.isRecord&&<circle key={i} cx={p.x} cy={p.y} r="2.5" fill={T.muted} stroke="none" opacity={0.25} />)}
-        {recDots.map((p,i)=><circle key={i} cx={p.x} cy={p.y} r="3" fill={T.amber} stroke={T.card} strokeWidth="1.5" />)}
+        {recDots.map((p,i)=><circle key={i} cx={p.x} cy={p.y} r="3" fill={T.gold} stroke={T.card} strokeWidth="1.5" />)}
         {best&&(<>
-          <circle cx={best.x} cy={best.y} r="7" fill="none" stroke={isBestLast?T.sage:T.amber} strokeWidth="2" opacity={0.5} />
-          <circle cx={best.x} cy={best.y} r="4" fill={isBestLast?T.sage:T.amber} stroke={T.card} strokeWidth="1.5" />
+          <circle cx={best.x} cy={best.y} r="7" fill="none" stroke={isBestLast?T.sage:T.gold} strokeWidth="2" opacity={0.5} />
+          <circle cx={best.x} cy={best.y} r="4" fill={isBestLast?T.sage:T.gold} stroke={T.card} strokeWidth="1.5" />
         </>)}
         <text x={pl-4} y={pt+4} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{yMax.toFixed(2)}</text>
         <text x={pl-4} y={pt+ch+4} fill={T.muted} fontSize="8" textAnchor="end" fontFamily="DM Mono">{yMin.toFixed(2)}</text>
@@ -413,23 +445,21 @@ function EventLogPanel({events}) {
   useEffect(()=>{if(scrollRef.current)scrollRef.current.scrollTop=scrollRef.current.scrollHeight},[events]);
 
   return (
-    <div className="card" style={{display:"flex",flexDirection:"column",overflow:"hidden",transition:"max-height .3s",maxHeight:collapsed?30:260}}>
-      <div className="flex items-center justify-between shrink-0" style={{padding:"4px 14px",cursor:"pointer"}} onClick={()=>setCollapsed(!collapsed)}>
-        <h2 className="section-heading" style={{marginBottom:0,fontSize:8}}>Event Log</h2>
+    <div className="card" style={{display:"flex",flexDirection:"column",overflow:"hidden",transition:"max-height .3s",maxHeight:collapsed?32:300}}>
+      <div className="flex items-center justify-between shrink-0" style={{padding:"6px 16px",cursor:"pointer"}} onClick={()=>setCollapsed(!collapsed)}>
+        <h2 className="section-heading" style={{marginBottom:0,fontSize:9}}>Event Log</h2>
         <div className="flex items-center gap-6">
-          <span style={{fontSize:8,color:T.muted,fontFamily:"'DM Mono',monospace"}}>{events.length}</span>
-          <button style={{background:"transparent",border:`1px solid ${T.border}`,color:T.muted,borderRadius:"0 3px 0 3px",padding:"1px 6px",cursor:"pointer",fontSize:8,lineHeight:1.4}}>
-            {collapsed?"\u25BC":"\u25B2"}
-          </button>
+          <span style={{fontSize:9,color:T.muted,fontFamily:"'DM Mono',monospace"}}>{events.length}</span>
+          <span style={{color:T.muted,fontSize:10}}>{collapsed?"\u25BC":"\u25B2"}</span>
         </div>
       </div>
       {!collapsed&&(
-        <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:"2px 14px 4px",fontSize:10,fontFamily:"'DM Mono',monospace",lineHeight:1.8,color:T.secondary}}>
+        <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:"2px 16px 8px",fontSize:11,fontFamily:"'DM Mono',monospace",lineHeight:1.9,color:T.secondary}}>
           {events.length===0?(<span style={{color:T.muted}}>Waiting for events...</span>):events.map(evt=>(
             <div key={evt.id} className="flex gap-8">
-              <span style={{color:T.muted,flexShrink:0,fontSize:9}}>{evt.timestamp}</span>
-              <span style={{color:evt.type==="anomaly"?T.coral:evt.type==="decay_alert"?T.gold:evt.type==="run_error"?T.coral:T.teal,flexShrink:0,fontSize:9}}>[{evt.type}]</span>
-              <span className="truncate" style={{color:T.text,fontSize:9}}>{(typeof evt.payload==="string"?evt.payload:JSON.stringify(evt.payload)).slice(0,180)}</span>
+              <span style={{color:T.muted,flexShrink:0,fontSize:10}}>{evt.timestamp}</span>
+              <span style={{color:evt.type==="anomaly"?T.coral:evt.type==="decay_alert"?T.gold:evt.type==="run_error"?T.coral:T.accent,flexShrink:0,fontSize:10}}>[{evt.type}]</span>
+              <span className="truncate" style={{color:T.text,fontSize:10}}>{(typeof evt.payload==="string"?evt.payload:JSON.stringify(evt.payload)).slice(0,180)}</span>
             </div>
           ))}
         </div>
@@ -444,23 +474,21 @@ function TerminalLogPanel({events}) {
   useEffect(()=>{if(scrollRef.current)scrollRef.current.scrollTop=scrollRef.current.scrollHeight},[events]);
 
   return (
-    <div className="card" style={{display:"flex",flexDirection:"column",overflow:"hidden",transition:"max-height .3s",maxHeight:collapsed?30:200}}>
-      <div className="flex items-center justify-between shrink-0" style={{padding:"4px 14px",cursor:"pointer"}} onClick={()=>setCollapsed(!collapsed)}>
-        <h2 className="section-heading" style={{marginBottom:0,fontSize:8}}>Terminal Log</h2>
+    <div className="card" style={{display:"flex",flexDirection:"column",overflow:"hidden",transition:"max-height .3s",maxHeight:collapsed?32:220}}>
+      <div className="flex items-center justify-between shrink-0" style={{padding:"6px 16px",cursor:"pointer"}} onClick={()=>setCollapsed(!collapsed)}>
+        <h2 className="section-heading" style={{marginBottom:0,fontSize:9}}>Terminal Log</h2>
         <div className="flex items-center gap-6">
-          <span style={{fontSize:8,color:T.muted,fontFamily:"'DM Mono',monospace"}}>{events.length}</span>
-          <button style={{background:"transparent",border:`1px solid ${T.border}`,color:T.muted,borderRadius:"0 3px 0 3px",padding:"1px 6px",cursor:"pointer",fontSize:8,lineHeight:1.4}}>
-            {collapsed?"\u25BC":"\u25B2"}
-          </button>
+          <span style={{fontSize:9,color:T.muted,fontFamily:"'DM Mono',monospace"}}>{events.length}</span>
+          <span style={{color:T.muted,fontSize:10}}>{collapsed?"\u25BC":"\u25B2"}</span>
         </div>
       </div>
       {!collapsed&&(
-        <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:"2px 14px 4px",fontSize:9.5,fontFamily:"'DM Mono',monospace",lineHeight:1.6,color:T.secondary}}>
+        <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:"2px 16px 8px",fontSize:11,fontFamily:"'DM Mono',monospace",lineHeight:1.7,color:T.secondary}}>
           {events.length===0?(<span style={{color:T.muted}}>Waiting for log output...</span>):events.map((evt,i)=>(
             <div key={i} className="flex gap-8">
-              <span style={{color:T.muted,flexShrink:0,fontSize:8}}>{evt.timestamp}</span>
-              <span style={{color:evt.level==="error"?T.coral:evt.level==="warning"?T.gold:evt.level==="debug"?T.muted:T.teal,flexShrink:0,fontSize:8}}>[{evt.level?evt.level.toUpperCase():"INFO"}]</span>
-              <span style={{color:T.text,whiteSpace:"pre-wrap",wordBreak:"break-word",fontSize:8.5}}>{evt.message||JSON.stringify(evt).slice(0,300)}</span>
+              <span style={{color:T.muted,flexShrink:0,fontSize:9}}>{evt.timestamp}</span>
+              <span style={{color:evt.level==="error"?T.coral:evt.level==="warning"?T.gold:evt.level==="debug"?T.muted:T.accent,flexShrink:0,fontSize:9}}>[{evt.level?evt.level.toUpperCase():"INFO"}]</span>
+              <span style={{color:T.text,whiteSpace:"pre-wrap",wordBreak:"break-word",fontSize:10}}>{evt.message||JSON.stringify(evt).slice(0,300)}</span>
             </div>
           ))}
         </div>
@@ -485,50 +513,49 @@ function Header({activeView,setActiveView,autonomousState,onNewResearch}) {
   return (
     <header style={{
       display:"flex",alignItems:"center",justifyContent:"space-between",
-      padding:"10px 16px",borderBottom:`1px solid ${T.border}`,
-      background:T.card,flexShrink:0,minHeight:48,
+      padding:"0 20px",borderBottom:`1px solid ${T.border}`,
+      background:T.card,flexShrink:0,minHeight:52,
     }}>
-      {/* Left: Brand + Status */}
-      <div className="flex items-center gap-10">
-        <div className="flex items-center gap-6">
-          <span style={{fontFamily:"'Syne',sans-serif",fontSize:13,fontWeight:800,color:T.amber,letterSpacing:"1px",textTransform:"uppercase"}}>
+      {/* Left: Brand + Nav */}
+      <div className="flex items-center" style={{gap:28}}>
+        <div className="flex items-center" style={{gap:10}}>
+          <span style={{fontFamily:"'Orbitron',sans-serif",fontSize:14,fontWeight:700,color:T.accent,letterSpacing:"1.5px",textTransform:"uppercase"}}>
             CAB
           </span>
-          <div className="flex items-center gap-2" style={{padding:"2px 6px",background:T.surface,borderRadius:"0 3px 0 3px",border:`1px solid ${T.border}`}}>
-            <div className="status-dot" style={{background:isRunning?T.sage:T.muted,animation:isRunning?"pulse 1.5s ease-in-out infinite":"none"}} />
-            <span className="text-mono" style={{fontSize:7,fontWeight:600,color:isRunning?T.sage:T.muted,textTransform:"uppercase",letterSpacing:"0.5px"}}>
+          <div className="flex items-center gap-2" style={{padding:"2px 8px",background:T.surface,borderRadius:"0 4px 0 4px",border:`1px solid ${T.border}`}}>
+            <div className="status-dot" style={{background:isRunning?T.accent:T.muted,animation:isRunning?"pulse 1.5s ease-in-out infinite":"none"}} />
+            <span className="text-mono" style={{fontSize:8,fontWeight:500,color:isRunning?T.accent:T.muted,textTransform:"uppercase",letterSpacing:"0.8px"}}>
               {isRunning?"Live":"Standby"}
             </span>
           </div>
         </div>
-        {/* Nav dots */}
-        <div className="flex items-center gap-4" style={{marginLeft:8}}>
-          {LIGHT_DOTS.map(i=>(
-            <div key={i} style={{width:3,height:3,borderRadius:"50%",background:T.muted,opacity:0.3}} />
-          ))}
-        </div>
-        {/* Nav */}
-        <nav className="flex items-center gap-2">
+        <nav className="flex items-center" style={{gap:4,height:52}}>
           {NAV_ITEMS.map(item=>(
             <button key={item.id} onClick={()=>setActiveView(item.id)}
               style={{
-                padding:"4px 10px",borderRadius:"0 4px 0 4px",
-                background:activeView===item.id?`${T.amber}15`:"transparent",
-                border:`1px solid ${activeView===item.id?T.amber:T.border}`,
-                color:activeView===item.id?T.amber:T.secondary,
-                cursor:"pointer",fontSize:9,fontWeight:600,
-                fontFamily:"'Syne',sans-serif",textTransform:"uppercase",
-                letterSpacing:"1px",transition:"all .2s",
+                position:"relative",
+                padding:"0 14px",
+                height:"100%",
+                background:"transparent",
+                border:"none",
+                color:activeView===item.id?T.text:T.muted,
+                cursor:"pointer",fontSize:11,fontWeight:activeView===item.id?600:400,
+                fontFamily:"'Exo 2',sans-serif",
+                letterSpacing:"0.3px",
+                transition:"color .2s",
               }}>
-              {item.icon} {item.label}
+              {item.label}
+              {activeView===item.id && (
+                <div style={{position:"absolute",bottom:0,left:8,right:8,height:2,background:T.accent,borderRadius:"1px 1px 0 0",boxShadow:`0 0 8px ${T.accent}60`}} />
+              )}
             </button>
           ))}
         </nav>
       </div>
 
       {/* Right: New Research */}
-      <button onClick={onNewResearch} className="btn btn-primary" style={{fontSize:9,letterSpacing:"1px",fontWeight:700,fontFamily:"'Syne',sans-serif",textTransform:"uppercase",padding:"5px 12px"}}>
-        + New Research
+      <button onClick={onNewResearch} className="btn btn-primary" style={{padding:"7px 18px",fontSize:10}}>
+        <span style={{fontSize:15,lineHeight:1}}>+</span> New Research
       </button>
     </header>
   );
@@ -554,41 +581,42 @@ function ResearchModal({goal:initialGoal,cycles:initialCycles,iters:initialIters
         background:T.card,borderRadius:"0 14px 0 14px",
         border:`1px solid ${T.border}`,padding:28,position:"relative",overflow:"hidden",
       }}>
-        <div style={{position:"absolute",top:0,left:0,width:36,height:36,borderTop:`2px solid ${T.amber}`,borderLeft:`2px solid ${T.amber}`}} />
+        <div style={{position:"absolute",top:0,left:0,width:36,height:36,borderTop:`2px solid ${T.gold}`,borderLeft:`2px solid ${T.gold}`}} />
         <div style={{position:"absolute",bottom:0,right:0,width:36,height:36,borderBottom:`2px solid ${T.teal}`,borderRight:`2px solid ${T.teal}`}} />
 
         <div style={{marginBottom:22}}>
-          <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:T.text}}>New Research Run</div>
-          <p style={{fontSize:10,color:T.muted,marginTop:4}}>Configure research experiment parameters</p>
+          <div style={{fontFamily:"'Orbitron',sans-serif",fontSize:16,fontWeight:700,color:T.text,letterSpacing:"0.5px"}}>New Research Run</div>
+          <p style={{fontSize:11,color:T.muted,marginTop:6}}>Configure research experiment parameters</p>
         </div>
 
-        <label style={{fontSize:9,color:T.muted,fontWeight:600,display:"block",textTransform:"uppercase",letterSpacing:"1.5px",fontFamily:"'Syne',sans-serif",marginBottom:4}}>Goal</label>
+        <label style={{fontSize:9,color:T.muted,fontWeight:600,display:"block",textTransform:"uppercase",letterSpacing:"2px",fontFamily:"'Orbitron',sans-serif",marginBottom:6}}>Goal</label>
         <textarea rows={3} value={input} onChange={e=>setInput(e.target.value)} style={{
-          width:"100%",resize:"vertical",fontFamily:"'Sora',sans-serif",fontSize:11.5,
-          padding:"10px 14px",borderRadius:"0 6px 0 6px",background:T.surface,
-          border:`1px solid ${T.border}`,color:T.text,marginBottom:18,outline:"none",
-        }} />
+          width:"100%",resize:"vertical",fontFamily:"'Exo 2',sans-serif",fontSize:12,
+          padding:"10px 14px",borderRadius:"var(--radius-sm)",background:T.surface,
+          border:`1px solid ${T.border}`,color:T.text,marginBottom:20,outline:"none",
+          transition:"border-color .2s",
+        }} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border} />
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18,marginBottom:24}}>
           <div>
-            <label style={{fontSize:9,color:T.muted,fontWeight:600,display:"block",textTransform:"uppercase",letterSpacing:"1.5px",fontFamily:"'Syne',sans-serif",marginBottom:2}}>
-              Max Cycles: <span style={{color:T.amber,fontFamily:"'DM Mono',monospace"}}>{cycles}</span>
+            <label style={{fontSize:9,color:T.muted,fontWeight:600,display:"block",textTransform:"uppercase",letterSpacing:"1.5px",fontFamily:"'Orbitron',sans-serif",marginBottom:4}}>
+              Max Cycles: <span style={{color:T.accent,fontFamily:"'DM Mono',monospace",fontSize:11}}>{cycles}</span>
             </label>
-            <input type="range" min={1} max={10} value={cycles} onChange={e=>setCycles(Number(e.target.value))} style={{width:"100%",margin:"8px 0"}} />
-            <div className="flex justify-between text-mono" style={{fontSize:8,color:T.muted}}><span>1</span><span>10</span></div>
+            <input type="range" min={1} max={10} value={cycles} onChange={e=>setCycles(Number(e.target.value))} style={{width:"100%",margin:"8px 0",accentColor:T.accent}} />
+            <div className="flex justify-between text-mono" style={{fontSize:9,color:T.muted}}><span>1</span><span>10</span></div>
           </div>
           <div>
-            <label style={{fontSize:9,color:T.muted,fontWeight:600,display:"block",textTransform:"uppercase",letterSpacing:"1.5px",fontFamily:"'Syne',sans-serif",marginBottom:2}}>
-              Max Iterations: <span style={{color:T.amber,fontFamily:"'DM Mono',monospace"}}>{iters}</span>
+            <label style={{fontSize:9,color:T.muted,fontWeight:600,display:"block",textTransform:"uppercase",letterSpacing:"1.5px",fontFamily:"'Orbitron',sans-serif",marginBottom:4}}>
+              Max Iterations: <span style={{color:T.accent,fontFamily:"'DM Mono',monospace",fontSize:11}}>{iters}</span>
             </label>
-            <input type="range" min={1} max={10} value={iters} onChange={e=>setIters(Number(e.target.value))} style={{width:"100%",margin:"8px 0"}} />
-            <div className="flex justify-between text-mono" style={{fontSize:8,color:T.muted}}><span>1</span><span>10</span></div>
+            <input type="range" min={1} max={10} value={iters} onChange={e=>setIters(Number(e.target.value))} style={{width:"100%",margin:"8px 0",accentColor:T.accent}} />
+            <div className="flex justify-between text-mono" style={{fontSize:9,color:T.muted}}><span>1</span><span>10</span></div>
           </div>
         </div>
 
-        <div className="flex" style={{gap:8,justifyContent:"flex-end"}}>
-          <button onClick={onClose} className="btn btn-ghost" style={{padding:"8px 18px",fontSize:11,fontWeight:600,fontFamily:"'Sora',sans-serif"}}>Cancel</button>
-          <button onClick={()=>onStart(input, cycles, iters)} className="btn btn-primary" style={{padding:"8px 18px",fontSize:11,fontWeight:700,letterSpacing:"1px",fontFamily:"'Syne',sans-serif",textTransform:"uppercase"}}>Start Run</button>
+        <div className="flex" style={{gap:10,justifyContent:"flex-end"}}>
+          <button onClick={onClose} className="btn btn-ghost">Cancel</button>
+          <button onClick={()=>onStart(input, cycles, iters)} className="btn btn-primary" style={{padding:"8px 22px"}}>Start Run</button>
         </div>
       </div>
     </div>
@@ -605,7 +633,7 @@ function DashboardView({autonomousState,circuitBreaker,regimeSnapshot,positions,
   // ─── Autonomous Loop Card ───
   const autoCard = (
     <div className="card card-pad" style={{display:"flex",flexDirection:"column",gap:10}}>
-      <Accent color={T.amber} />
+      <Accent color={T.gold} />
       <SectionHeading>Autonomous Loop</SectionHeading>
       {loading.autonomous ? <Skeleton w="100%" h={60} /> : <>
         <div className="flex items-center gap-10">
@@ -618,7 +646,7 @@ function DashboardView({autonomousState,circuitBreaker,regimeSnapshot,positions,
         </div>}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
           <MiniStat label="Cycles" value={autonomousState?.total_cycles||0} color={T.teal} small />
-          <MiniStat label="Sharpe" value={autonomousState?.current_sharpe?.toFixed(2)||"\u2014"} color={T.amber} small />
+          <MiniStat label="Sharpe" value={autonomousState?.current_sharpe?.toFixed(2)||"\u2014"} color={T.gold} small />
           <MiniStat label="Best" value={autonomousState?.current_best_sharpe?.toFixed(2)||"\u2014"} color={T.sage} small />
         </div>
         {autonomousState?.last_error&&<div style={{padding:"4px 8px",background:`${T.coral}10`,borderRadius:4,border:`1px solid ${T.coral}30`}}>
@@ -627,17 +655,17 @@ function DashboardView({autonomousState,circuitBreaker,regimeSnapshot,positions,
       </>}
       <div className="flex gap-6">
         {!isRunning?(
-          <button onClick={startAutonomous} disabled={autoStarting} className="btn" style={{background:autoStarting?T.gold:T.teal,borderColor:"transparent",color:"#fff"}}>
+          <button onClick={startAutonomous} disabled={autoStarting} className="btn btn-primary" style={{flex:1}}>
             {autoStarting?"Starting...":"Start"}
           </button>
         ):(
           <>
             {!isPaused?(
-              <button onClick={pauseAutonomous} disabled={autoPausing} className="btn" style={{background:T.gold,borderColor:"transparent",color:"#fff"}}>Pause</button>
+              <button onClick={pauseAutonomous} disabled={autoPausing} className="btn" style={{background:T.gold,borderColor:T.gold,color:"#020617",flex:1}}>Pause</button>
             ):(
-              <button onClick={resumeAutonomous} disabled={autoPausing} className="btn" style={{background:T.sage,borderColor:"transparent",color:"#fff"}}>Resume</button>
+              <button onClick={resumeAutonomous} disabled={autoPausing} className="btn btn-primary" style={{flex:1}}>Resume</button>
             )}
-            <button onClick={stopAutonomous} disabled={autoStopping} className="btn" style={{background:T.coral,borderColor:"transparent",color:"#fff"}}>Stop</button>
+            <button onClick={stopAutonomous} disabled={autoStopping} className="btn btn-danger" style={{flex:1}}>Stop</button>
           </>
         )}
       </div>
@@ -659,15 +687,15 @@ function DashboardView({autonomousState,circuitBreaker,regimeSnapshot,positions,
         {circuitBreaker?.triggered_by&&<div className="text-mono" style={{fontSize:8,color:T.muted,marginTop:2}}>Triggered by: {circuitBreaker.triggered_by}</div>}
         {circuitBreaker?.resume_after&&<div className="text-mono" style={{fontSize:8,color:T.gold,marginTop:2}}>Resume after: {circuitBreaker.resume_after}</div>}
         <div className="flex gap-6" style={{marginTop:8}}>
-          <button onClick={haltCircuitBreaker} className="btn" style={{fontSize:8,fontWeight:700,fontFamily:"'Syne',sans-serif",textTransform:"uppercase",letterSpacing:"1px",background:"transparent",color:T.coral,borderColor:T.coral}}>Halt</button>
-          <button onClick={clearCircuitBreaker} className="btn" style={{fontSize:8,fontWeight:700,fontFamily:"'Syne',sans-serif",textTransform:"uppercase",letterSpacing:"1px",background:"transparent",color:T.sage,borderColor:T.sage}}>Clear</button>
+          <button onClick={haltCircuitBreaker} className="btn btn-danger" style={{padding:"5px 14px",fontSize:9}}>Halt</button>
+          <button onClick={clearCircuitBreaker} className="btn" style={{padding:"5px 14px",fontSize:9,color:T.accent,borderColor:T.accent}}>Clear</button>
         </div>
       </div>}
       /* Regime */
       {loading.regime ? <Skeleton w="100%" h={60} /> : (regimeSnapshot?<>
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-mono" style={{fontSize:13,fontWeight:700,color:T.amber,textTransform:"uppercase"}}>{regimeSnapshot.regime?.replace(/_/g," ")||"\u2014"}</div>
+            <div className="text-mono" style={{fontSize:13,fontWeight:700,color:T.gold,textTransform:"uppercase"}}>{regimeSnapshot.regime?.replace(/_/g," ")||"\u2014"}</div>
             {regimeSnapshot.confidence!=null&&<div className="text-mono" style={{fontSize:9,color:T.muted,marginTop:1}}>Confidence: {(regimeSnapshot.confidence*100).toFixed(0)}%</div>}
           </div>
           {regimeSnapshot.adx!=null&&<MiniStat label="ADX" value={regimeSnapshot.adx.toFixed(1)} color={regimeSnapshot.adx>25?T.teal:T.muted} small />}
@@ -689,7 +717,7 @@ function DashboardView({autonomousState,circuitBreaker,regimeSnapshot,positions,
       <SectionHeading>Research Results</SectionHeading>
       {loading.iterations ? <Skeleton w="100%" h={180} /> : <>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:10}}>
-          <MiniStat label="Best Sharpe" value={iterationSummary?.best_sharpe?.toFixed(2)||"\u2014"} color={T.amber} small />
+          <MiniStat label="Best Sharpe" value={iterationSummary?.best_sharpe?.toFixed(2)||"\u2014"} color={T.gold} small />
           <MiniStat label="Discarded" value={iterationSummary?.discarded_count||0} color={T.coral} small />
           <MiniStat label="Kept" value={iterationSummary?.kept_count||0} color={T.sage} small />
           <MiniStat label="Total It" value={iterationResults.length||0} color={T.teal} small />
@@ -763,37 +791,37 @@ function DashboardView({autonomousState,circuitBreaker,regimeSnapshot,positions,
       </div>
       {/* Startup Status */}
       <div className="card card-pad">
-        <Accent color={T.sage} />
+        <Accent color={T.accent} />
         <SectionHeading>Startup Tasks</SectionHeading>
-        {startupStatus?.tasks?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+        {startupStatus?.tasks?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
           {Object.entries(startupStatus.tasks).map(([k,t])=>{
-            const c=t.status==="running"?T.sage:t.status==="failed"?T.coral:t.status==="stopped"?T.muted:T.gold;
-            return (<div key={k} style={{padding:"4px 8px",background:T.surface,borderRadius:4,border:`1px solid ${T.border}`}}>
+            const c=t.status==="running"?T.accent:t.status==="failed"?T.coral:t.status==="stopped"?T.muted:T.gold;
+            return (<div key={k} style={{padding:"5px 10px",background:T.surface,borderRadius:"var(--radius-sm)",border:`1px solid ${T.border}`}}>
               <div className="flex items-center justify-between gap-4">
-                <span className="text-mono" style={{fontSize:7,color:T.muted,textTransform:"uppercase",letterSpacing:"0.5px"}}>{k.replace(/_/g," ")}</span>
-                <span className="text-mono" style={{fontSize:7,color:c,fontWeight:600,flexShrink:0}}>{t.status}</span>
+                <span style={{fontSize:9,color:T.muted,fontWeight:500}}>{k.replace(/_/g," ")}</span>
+                <span className="text-mono" style={{fontSize:8,color:c,fontWeight:600,flexShrink:0}}>{t.status}</span>
               </div>
-              {t.error&&<div style={{fontSize:7,color:T.coral,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.error}</div>}
+              {t.error&&<div style={{fontSize:8,color:T.coral,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.error}</div>}
             </div>);
           })}
-        </div>:<div style={{fontSize:10,color:T.muted}}>No startup data</div>}
+        </div>:<div style={{fontSize:11,color:T.muted}}>No startup data</div>}
       </div>
       {/* Data Health */}
       <div className="card card-pad">
         <Accent color={T.teal} />
         <SectionHeading>Data Sources</SectionHeading>
-        {dataHealth&&Object.keys(dataHealth).length>0?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+        {dataHealth&&Object.keys(dataHealth).length>0?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
           {Object.entries(dataHealth).slice(0,6).map(([name,s])=>{
             const h=s.is_healthy!==false;
-            return (<div key={name} style={{padding:"4px 8px",background:T.surface,borderRadius:4,border:`1px solid ${T.border}`}}>
+            return (<div key={name} style={{padding:"5px 10px",background:T.surface,borderRadius:"var(--radius-sm)",border:`1px solid ${T.border}`}}>
               <div className="flex items-center justify-between">
-                <span className="text-mono" style={{fontSize:7,color:T.muted,textTransform:"uppercase",letterSpacing:"0.5px"}}>{name.replace(/_/g," ")}</span>
-                <span className="text-mono" style={{fontSize:7,color:h?T.sage:T.coral}}>{h?"OK":"DOWN"}</span>
+                <span style={{fontSize:9,color:T.muted,fontWeight:500}}>{name.replace(/_/g," ")}</span>
+                <span className="text-mono" style={{fontSize:8,color:h?T.accent:T.coral}}>{h?"OK":"DOWN"}</span>
               </div>
-              {s.last_success&&<div className="text-mono" style={{fontSize:7,color:T.muted,marginTop:1}}>{fmtTime(s.last_success)}</div>}
+              {s.last_success&&<div className="text-mono" style={{fontSize:8,color:T.muted,marginTop:1}}>{fmtTime(s.last_success)}</div>}
             </div>);
           })}
-        </div>:<div style={{fontSize:10,color:T.muted}}>No source data</div>}
+        </div>:<div style={{fontSize:11,color:T.muted}}>No source data</div>}
       </div>
     </div>
   );
@@ -822,11 +850,11 @@ function ResearchView({iterationSummary,iterationResults,events,terminalLog,auto
     <div style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",gap:10,overflow:"hidden"}}>
       {/* Summary stats */}
       <div className="card card-pad">
-        <Accent color={T.amber} />
+        <Accent color={T.gold} />
         <SectionHeading>Research Overview</SectionHeading>
         {!hasData?<EmptyState icon={"\u25C9"} title="No research data yet" sub="Start an autonomous run or use New Research to begin" />:<>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:6,marginBottom:10}}>
-            <MiniStat label="Best Sharpe" value={iterationSummary?.best_sharpe?.toFixed(2)||"\u2014"} color={T.amber} />
+            <MiniStat label="Best Sharpe" value={iterationSummary?.best_sharpe?.toFixed(2)||"\u2014"} color={T.gold} />
             <MiniStat label="Kept" value={iterationSummary?.kept_count||0} color={T.sage} />
             <MiniStat label="Discarded" value={iterationSummary?.discarded_count||0} color={T.coral} />
             <MiniStat label="Total Iterations" value={results.length} color={T.teal} />
@@ -918,7 +946,7 @@ function StrategyLibraryView({strategies}) {
             return (<tr key={i}>
               <td style={{padding:"5px 8px",color:T.text,fontWeight:600,fontSize:10}}>{name}</td>
               <td style={{padding:"5px 8px",color:T.secondary}}>{type}</td>
-              <td style={{padding:"5px 8px",color:T.amber}}>{regime}</td>
+              <td style={{padding:"5px 8px",color:T.gold}}>{regime}</td>
               <td style={{padding:"5px 8px",color:sharpe>=0.8?T.sage:sharpe>=0?T.text:T.coral,fontWeight:700}}>{typeof sharpe==="number"?sharpe.toFixed(2):"\u2014"}</td>
               <td style={{padding:"5px 8px",color:T.text}}>{typeof wr==="number"?`${(wr*100).toFixed(0)}%`:"\u2014"}</td>
               <td style={{padding:"5px 8px",color:dd<0.05?T.sage:dd<0.1?T.gold:T.coral}}>{typeof dd==="number"?`${(dd*100).toFixed(1)}%`:"\u2014"}</td>
@@ -957,7 +985,7 @@ function SignalFeedView({signals}) {
               <td style={{padding:"4px 8px"}}><span className={isBuy?"badge-buy":isSell?"badge-sell":"badge-hold"}>{sig.signal||"hold"}</span></td>
               <td style={{padding:"4px 8px",color:T.secondary}}>{sig.strategy_type||"\u2014"}</td>
               <td style={{padding:"4px 8px"}}><ConfBar conf={conf} /></td>
-              <td className="text-mono" style={{padding:"4px 8px",color:T.amber,fontSize:9}}>{sig.regime||"\u2014"}</td>
+              <td className="text-mono" style={{padding:"4px 8px",color:T.gold,fontSize:9}}>{sig.regime||"\u2014"}</td>
               <td style={{padding:"4px 8px",color:sig.type==="executed"?T.sage:T.muted,fontWeight:600,fontSize:9}}>{sig.type==="executed"?"EXECUTED":"EVALUATED"}</td>
             </tr>);
           })}</tbody>
