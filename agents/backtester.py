@@ -131,29 +131,13 @@ class BacktesterAgent(BaseAgent):
     @staticmethod
     def _evaluate_metrics(metrics: Dict[str, Any]) -> tuple:
         """Return (verdict, reason) based on metric thresholds.
-        Mirrors IterationRecord.evaluate() without the class."""
-        issues = []
-        sharpe = metrics.get("sharpe_ratio", 0)
-        win_rate = metrics.get("win_rate", 0)
-        drawdown = abs(metrics.get("max_drawdown", 0))
-        profit = metrics.get("profit_ratio", metrics.get("total_profit", 0))
 
-        MIN_SHARPE = 1.0
-        MIN_WIN_RATE = 0.40
-        MAX_DRAWDOWN = 0.05
-
-        if sharpe < MIN_SHARPE:
-            issues.append(f"Sharpe {sharpe:.2f} < {MIN_SHARPE}")
-        if win_rate < MIN_WIN_RATE:
-            issues.append(f"Win rate {win_rate:.0%} < {MIN_WIN_RATE}")
-        if drawdown > MAX_DRAWDOWN:
-            issues.append(f"Drawdown {drawdown:.2%} > {MAX_DRAWDOWN}")
-        if profit <= 0:
-            issues.append(f"Non-positive profit ({profit})")
-
-        if issues:
-            return ("discarded", "; ".join(issues))
-        return ("kept", "All targets met")
+        Delegates to ``orchestration.evaluation.evaluate_strategy_quality``
+        for the canonical threshold values so all agents share a single
+        source of truth.
+        """
+        from orchestration.evaluation import evaluate_strategy_quality
+        return evaluate_strategy_quality(metrics)
 
     # ------------------------------------------------------------------
     # Tool builder

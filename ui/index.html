@@ -269,12 +269,9 @@ function CandlestickSVG({candles, trades, width=800, height=400}) {
 
 // ═══ STRATEGY CHART WRAPPER ═══
 function StrategyChart({iterationResults, selectedIteration, onSelectIteration, candles}) {
-  const mockCandles = useMemo(() => candles && candles.length > 0 ? candles : generateMockCandles(), [candles]);
-  const mockTrades = useMemo(() => generateMockTrades(mockCandles), [mockCandles]);
   const idx = selectedIteration ?? iterationResults.length - 1;
   const latest = iterationResults?.[idx] || iterationResults?.[iterationResults.length-1];
-  const realTrades = latest?.trades || latest?.metrics?.trades || [];
-  const trades = realTrades.length > 0 ? realTrades : mockTrades;
+  const trades = latest?.trades || latest?.metrics?.trades || [];
   return (
     <div style={{flex:1,minWidth:0,background:T.bg,position:"relative",display:"flex",flexDirection:"column",overflow:"hidden"}}>
       <div className="scanline" />

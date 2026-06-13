@@ -104,6 +104,10 @@ class OOSValidator:
         degradation_pct = 0.0
         if research_sharpe > 0:
             degradation_pct = (research_sharpe - oos_sharpe) / research_sharpe
+        elif research_sharpe <= 0:
+            # Negative/flat research Sharpe means research data is unreliable;
+            # mark inconclusive rather than silently passing with 0% degradation.
+            degradation_pct = 1.0
 
         # Pass criteria on NET metrics (costs already baked in)
         passed = (
