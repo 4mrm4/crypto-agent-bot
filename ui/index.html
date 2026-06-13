@@ -501,12 +501,11 @@ function TerminalLogPanel({events}) {
 // HEADER / NAVIGATION
 // ═══════════════════════════════════════════════
 const NAV_ITEMS = [
-  {id:"dashboard",label:"Dashboard",icon:"\u2302"},
-  {id:"research",label:"Research",icon:"\u25C9"},
-  {id:"strategies",label:"Strategies",icon:"\u2246"},
-  {id:"signals",label:"Signals",icon:"\u2606"},
+  {id:"dashboard",label:"Dashboard"},
+  {id:"research",label:"Research"},
+  {id:"strategies",label:"Strategies"},
+  {id:"signals",label:"Signals"},
 ];
-const LIGHT_DOTS = Array.from({length:3}, (_,i)=>i);
 
 function Header({activeView,setActiveView,autonomousState,onNewResearch}) {
   const isRunning = autonomousState?.is_running;
