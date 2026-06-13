@@ -554,6 +554,9 @@ async def scanner_control(body: ScannerControlRequest):
 @app.websocket("/ws/run/{run_id}")
 async def ws_run_events(websocket: WebSocket, run_id: str):
     await websocket.accept()
+    # Debug: log first 5 events sent over this WebSocket
+    _ws_debug_count = 0
+    _WS_DEBUG_LIMIT = 5
     # Wait up to 15 seconds for the bus to be created (POST handler may still be processing)
     bus = None
     for _ in range(30):
@@ -569,6 +572,9 @@ async def ws_run_events(websocket: WebSocket, run_id: str):
     try:
         async for event in bus.subscribe():
             try:
+                if _ws_debug_count < _WS_DEBUG_LIMIT:
+                    print(f"[WS-DEBUG /ws/run/{run_id}] Event #{_ws_debug_count + 1}: {json.dumps(event)}", flush=True)
+                    _ws_debug_count += 1
                 await websocket.send_json(event)
             except Exception:
                 break
@@ -580,6 +586,8 @@ async def ws_run_events(websocket: WebSocket, run_id: str):
 async def ws_autonomous_events(websocket: WebSocket):
     """WebSocket for autonomous loop events (dashboard live updates)."""
     await websocket.accept()
+    _ws_debug_count = 0
+    _WS_DEBUG_LIMIT = 5
     event_bus = getattr(app.state, "event_bus", None)
     if not event_bus:
         await websocket.send_json({"type": "error", "payload": {"message": "No autonomous event bus"}, "timestamp": datetime.utcnow().isoformat()})
@@ -589,6 +597,9 @@ async def ws_autonomous_events(websocket: WebSocket):
     try:
         async for event in event_bus.subscribe():
             try:
+                if _ws_debug_count < _WS_DEBUG_LIMIT:
+                    print(f"[WS-DEBUG /ws/autonomous] Event #{_ws_debug_count + 1}: {json.dumps(event)}", flush=True)
+                    _ws_debug_count += 1
                 await websocket.send_json(event)
             except Exception:
                 break
