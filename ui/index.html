@@ -325,6 +325,23 @@ function App() {
   const [tab, setTab] = useState("research");
   const [runId, setRunId] = useState(null);
   const [connected, setConnected] = useState(false);
+
+  // ── localStorage persistence (survives page refresh) ──
+  // NOTE: initialWs MUST be declared before useState calls that read it,
+  // otherwise Babel's var hoisting makes it undefined.
+  const WS_STORAGE_KEY = 'crypto_bot_ws_state';
+  function loadWsState() {
+    try {
+      const saved = localStorage.getItem(WS_STORAGE_KEY);
+      if (!saved) return {};
+      const parsed = JSON.parse(saved);
+      // Staleness guard: discard if > 1 hour old
+      if (parsed._savedAt && Date.now() - parsed._savedAt > 3600000) return {};
+      return parsed;
+    } catch { return {}; }
+  }
+  const initialWs = loadWsState();
+
   const [hypothesis, setHypothesis] = useState(initialWs.hypothesis || "");
   const [iteration, setIteration] = useState(initialWs.iteration || 0);
   const [maxIter, setMaxIter] = useState(initialWs.maxIter || 5);
@@ -342,20 +359,6 @@ function App() {
   const logRef = useRef(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
-
-  // ── localStorage persistence (survives page refresh) ──
-  const WS_STORAGE_KEY = 'crypto_bot_ws_state';
-  function loadWsState() {
-    try {
-      const saved = localStorage.getItem(WS_STORAGE_KEY);
-      if (!saved) return {};
-      const parsed = JSON.parse(saved);
-      // Staleness guard: discard if > 1 hour old
-      if (parsed._savedAt && Date.now() - parsed._savedAt > 3600000) return {};
-      return parsed;
-    } catch { return {}; }
-  }
-  const initialWs = loadWsState();
 
   // ── Debounced save to localStorage (every 1s when state changes) ──
   useEffect(() => {
