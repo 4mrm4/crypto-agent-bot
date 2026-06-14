@@ -109,9 +109,9 @@ class TestColdStart:
 
     def test_cold_start_returns_one(self):
         """Untrained scorer returns quality=1.0, multiplier=1.0, not blocked."""
-        scorer = TradeQualityScorer(
-            model_path=Path(tempfile.mktemp(suffix=".pkl")),
-        )
+        with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
+            model_path = Path(f.name)
+        scorer = TradeQualityScorer(model_path=model_path)
         # No train() called — stays in cold start
         signal = _make_signal()
         pred = scorer.predict_quality(signal)
@@ -123,9 +123,9 @@ class TestColdStart:
 
     def test_cold_start_accepts_signal_attributes(self):
         """Predict reads strategy_type/regime from signal duck-typing."""
-        scorer = TradeQualityScorer(
-            model_path=Path(tempfile.mktemp(suffix=".pkl")),
-        )
+        with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
+            model_path = Path(f.name)
+        scorer = TradeQualityScorer(model_path=model_path)
         # Should not crash with minimal attributes
         pred = scorer.predict_quality(
             MagicMock(strategy_type="momentum", regime="uptrend",
@@ -136,9 +136,9 @@ class TestColdStart:
 
     def test_cold_start_with_dict_signal(self):
         """Predict handles dict-like signal objects."""
-        scorer = TradeQualityScorer(
-            model_path=Path(tempfile.mktemp(suffix=".pkl")),
-        )
+        with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
+            model_path = Path(f.name)
+        scorer = TradeQualityScorer(model_path=model_path)
         signal_dict = {
             "strategy_type": "momentum",
             "regime": "uptrend",
@@ -163,9 +163,9 @@ class TestTraining:
             mock_db.query_experiments_with_verdict.return_value = rows
             mock_db_cls.return_value = mock_db
 
-            scorer = TradeQualityScorer(
-                model_path=Path(tempfile.mktemp(suffix=".pkl")),
-            )
+            with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
+                model_path = Path(f.name)
+            scorer = TradeQualityScorer(model_path=model_path)
             trained = scorer.train()
             assert trained is True, "Should train with >= MIN_TRAINING_SAMPLES"
             assert scorer.is_trained()
@@ -184,14 +184,15 @@ class TestTraining:
         """Train with < 30 samples returns False, stays cold."""
         rows = _generate_training_rows(10)
 
+        with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
+            model_path = Path(f.name)
+
         with patch("data.database.TradingDatabase") as mock_db_cls:
             mock_db = MagicMock()
             mock_db.query_experiments_with_verdict.return_value = rows
             mock_db_cls.return_value = mock_db
 
-            scorer = TradeQualityScorer(
-                model_path=Path(tempfile.mktemp(suffix=".pkl")),
-            )
+            scorer = TradeQualityScorer(model_path=model_path)
             trained = scorer.train()
             assert trained is False
             assert not scorer.is_trained()
@@ -203,27 +204,28 @@ class TestTraining:
         """force=True overrides MIN_TRAINING_SAMPLES check."""
         rows = _generate_training_rows(5)
 
+        with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
+            model_path = Path(f.name)
+
         with patch("data.database.TradingDatabase") as mock_db_cls:
             mock_db = MagicMock()
             mock_db.query_experiments_with_verdict.return_value = rows
             mock_db_cls.return_value = mock_db
 
-            scorer = TradeQualityScorer(
-                model_path=Path(tempfile.mktemp(suffix=".pkl")),
-            )
+            scorer = TradeQualityScorer(model_path=model_path)
             trained = scorer.train(force=True)
             assert trained is True
 
     def test_training_empty_db(self):
         """Empty database leaves scorer in cold start."""
+        with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
+            model_path = Path(f.name)
         with patch("data.database.TradingDatabase") as mock_db_cls:
             mock_db = MagicMock()
             mock_db.query_experiments_with_verdict.return_value = []
             mock_db_cls.return_value = mock_db
 
-            scorer = TradeQualityScorer(
-                model_path=Path(tempfile.mktemp(suffix=".pkl")),
-            )
+            scorer = TradeQualityScorer(model_path=model_path)
             trained = scorer.train()
             assert trained is False
             pred = scorer.predict_quality(_make_signal())
