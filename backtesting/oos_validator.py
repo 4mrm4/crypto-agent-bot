@@ -58,7 +58,7 @@ class OOSValidator:
         self.OOS_RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
         from config import settings
         from data.database import TradingDatabase
-        self._db = TradingDatabase(legacy_backup=settings.LEGACY_JSONL_BACKUP)
+        self._db = TradingDatabase()
 
     def validate_strategy(
         self,

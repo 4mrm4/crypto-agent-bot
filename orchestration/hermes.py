@@ -440,10 +440,25 @@ class HermesOrchestrator:
                     result=str(task.result)[:500],
                 )
         metrics = self._extract_metrics(output)
+
+        # Fetch OHLCV data for the chart
+        candles = []
+        try:
+            fetcher = MarketDataFetcher()
+            df = fetcher.fetch_ohlcv(settings.SYMBOL, "1h", limit=120)
+            if df is not None and len(df) > 0:
+                df = df.reset_index()
+                df = df.rename(columns={"timestamp": "time"})
+                df["time"] = df["time"].astype("int64") // 10**6  # epoch ms
+                candles = json.loads(df.to_json(orient="records"))
+        except Exception as exc:
+            logger.debug("Could not fetch OHLCV for chart: %s", exc)
+
         self._emit("iteration_result",
             iteration=iteration,
             task_count=len(self.board.get_tasks_by_status("DONE")),
             metrics=metrics,
+            candles=candles,
         )
         if isinstance(output, dict):
             sentiment = output.get("sentiment")

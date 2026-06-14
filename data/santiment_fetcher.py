@@ -5,7 +5,9 @@ dependencies minimal and control async behaviour.
 
 Gracefully degrades: returns None on any error, never raises.
 """
+import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -15,6 +17,10 @@ import httpx
 from config import settings
 from data.cache_client import CacheClient
 from data.database import TradingDatabase
+
+# ── Throttle: max 1 request per 60s to avoid 429 ──
+_last_santiment_call = 0.0
+SANTIMENT_MIN_INTERVAL = 60  # seconds between calls
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +120,15 @@ class SantimentFetcher:
         if variables:
             payload["variables"] = variables
 
+        # Throttle: wait if called too soon after last request
+        global _last_santiment_call
+        now = time.time()
+        wait = SANTIMENT_MIN_INTERVAL - (now - _last_santiment_call)
+        if wait > 0:
+            logger.info("Santiment rate limit: waiting %.1fs", wait)
+            await asyncio.sleep(wait)
+        _last_santiment_call = time.time()
+
         try:
             resp = await client.post(SANTIMENT_GRAPHQL, json=payload)
             resp.raise_for_status()
@@ -134,6 +149,14 @@ class SantimentFetcher:
             if self._health_tracker:
                 self._health_tracker.record_success("santiment")
             return data
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429:
+                logger.warning("Santiment rate limited (429) — throttle enabled, will wait %ss next call", SANTIMENT_MIN_INTERVAL)
+                return None
+            logger.warning("Santiment HTTP error: %s", exc)
+            if self._health_tracker:
+                self._health_tracker.record_failure("santiment", str(exc))
+            return None
         except Exception as exc:
             logger.warning("Santiment API error: %s", exc)
             if self._health_tracker:

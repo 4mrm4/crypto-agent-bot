@@ -4,11 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>crypto_agent_bot</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🤖</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script>
+// Suppress expected dev-mode warnings (Babel standalone per ADR-007, React DevTools)
+const _warn = console.warn;
+console.warn = (msg, ...args) => {
+  if (typeof msg === 'string' && (msg.includes('in-browser Babel transformer') || msg.includes('React DevTools'))) return;
+  _warn(msg, ...args);
+};
+</script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;border-radius:0!important}
 html,body,#root{height:100%;width:100%}
@@ -185,6 +194,7 @@ function CircuitBreakerPill({state, onHalt, onClear}) {
 
 // ═══ CANDLESTICK SVG ═══
 function CandlestickSVG({candles, trades, width=800, height=400}) {
+  const [hoveredTrade, setHoveredTrade] = React.useState(null);
   if (!candles || candles.length === 0) return null;
   const pl = 52, pr = 14, pt = 16, pb = 28;
   const volH = height * 0.18;
@@ -246,18 +256,18 @@ function CandlestickSVG({candles, trades, width=800, height=400}) {
         const cCandle = candles.reduce((a,c) => Math.abs(c.time - t.close_date) < Math.abs(a.time - t.close_date) ? c : a);
         const buyY = toY(oCandle.low) + 4;
         const sellY = toY(cCandle.high) - 4;
-        const [tip,setTip] = React.useState(false);
+        const isHovered = hoveredTrade === i;
         return (
           <g key={i}>
-            <rect x={openX} y={Math.min(openY,closeY)} width={closeX-openX} height={Math.abs(closeY-openY)} fill={profitCol} opacity="0.06" rx="0" />
+            <rect x={openX} y={Math.min(openY,closeY)} width={Math.max(1,closeX-openX)} height={Math.max(1,Math.abs(closeY-openY))} fill={profitCol} opacity="0.06" />
             <line x1={openX} y1={buyY+4} x2={openX} y2={pt} stroke={T.accent} strokeWidth="1" strokeDasharray="2 4" opacity="0.3" pointerEvents="none" />
-            <polygon points={`${openX},${buyY+8} ${openX-4},${buyY} ${openX+4},${buyY}`} fill={T.accent} opacity="0.9" style={{cursor:"pointer"}} onMouseOver={()=>setTip(true)} onMouseOut={()=>setTip(false)} />
-            <polygon points={`${closeX},${sellY-8} ${closeX-4},${sellY} ${closeX+4},${sellY}`} fill={profitCol} opacity="0.9" style={{cursor:"pointer"}} onMouseOver={()=>setTip(true)} onMouseOut={()=>setTip(false)} />
-            {tip && (
+            <polygon points={`${openX},${buyY+8} ${openX-4},${buyY} ${openX+4},${buyY}`} fill={T.accent} opacity="0.9" style={{cursor:"pointer"}} onMouseEnter={()=>setHoveredTrade(i)} onMouseLeave={()=>setHoveredTrade(null)} />
+            <polygon points={`${closeX},${sellY-8} ${closeX-4},${sellY} ${closeX+4},${sellY}`} fill={profitCol} opacity="0.9" style={{cursor:"pointer"}} onMouseEnter={()=>setHoveredTrade(i)} onMouseLeave={()=>setHoveredTrade(null)} />
+            {isHovered && (
               <g>
-                <rect x={openX+6} y={buyY-20} width={110} height={30} fill={T.elevated} stroke={T.border} strokeWidth="1" />
-                <text x={openX+10} y={buyY-8} fill={T.text} fontFamily="DM Mono" fontSize="7">{t.open_rate.toFixed(2)} &rarr; {t.close_rate.toFixed(2)}</text>
-                <text x={openX+10} y={buyY+2} fill={profitCol} fontFamily="DM Mono" fontSize="7">{(t.profit_ratio*100).toFixed(2)}%</text>
+                <rect x={Math.min(openX+6, width-130)} y={Math.max(buyY-30, pt)} width={120} height={32} fill={T.elevated} stroke={T.border} strokeWidth="1" />
+                <text x={Math.min(openX+10, width-126)} y={Math.max(buyY-18, pt+12)} fill={T.text} fontFamily="DM Mono" fontSize="7">{t.open_rate.toFixed(2)} → {t.close_rate.toFixed(2)}</text>
+                <text x={Math.min(openX+10, width-126)} y={Math.max(buyY-6, pt+22)} fill={profitCol} fontFamily="DM Mono" fontSize="7">{(t.profit_ratio*100).toFixed(2)}%</text>
               </g>
             )}
           </g>
@@ -272,12 +282,15 @@ function StrategyChart({iterationResults, selectedIteration, onSelectIteration, 
   const idx = selectedIteration ?? iterationResults.length - 1;
   const latest = iterationResults?.[idx] || iterationResults?.[iterationResults.length-1];
   const trades = latest?.trades || latest?.metrics?.trades || [];
+  const usingMock = !candles || candles.length === 0;
+  const displayCandles = candles && candles.length > 0 ? candles : generateMockCandles(120);
+  const displayTrades = trades && trades.length > 0 ? trades : generateMockTrades(displayCandles);
   return (
     <div style={{flex:1,minWidth:0,background:T.bg,position:"relative",display:"flex",flexDirection:"column",overflow:"hidden"}}>
       <div className="scanline" />
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 12px",borderBottom:"1px solid var(--border)",flexShrink:0,zIndex:11}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontFamily:"Orbitron",fontSize:13,color:T.text}}>BTC/USDT</span>
+          <span style={{fontFamily:"Orbitron",fontSize:13,color:T.text}}>{usingMock ? "BTC/USDT (MOCK)" : (latest?.pair || "BTC/USDT")}</span>
           {latest?.strategy_type && (
             <span style={{fontFamily:"DM Mono",fontSize:8,color:T.purple,background:T.purple+"26",padding:"1px 6px"}}>{latest.strategy_type}</span>
           )}
@@ -294,7 +307,7 @@ function StrategyChart({iterationResults, selectedIteration, onSelectIteration, 
         </div>
       </div>
       <div style={{flex:1,minHeight:0,position:"relative",zIndex:11}}>
-        <CandlestickSVG candles={mockCandles} trades={trades} width={800} height={400} />
+        <CandlestickSVG candles={displayCandles} trades={displayTrades} width={800} height={400} />
       </div>
     </div>
   );
@@ -303,8 +316,18 @@ function StrategyChart({iterationResults, selectedIteration, onSelectIteration, 
 // ═══ SHARPE LINE CHART ═══
 function SharpeLineChart({results, selectedIteration, onSelect}) {
   const [tooltip,setTooltip] = useState(null);
-  if (!results || results.length < 2) {
+  if (!results || results.length < 1) {
     return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:T.muted,fontSize:9,fontFamily:"DM Mono"}}>Not enough data</div>;
+  }
+  if (results.length === 1) {
+    const sharpe = results[0].sharpe_ratio ?? 0;
+    const color = sharpe >= 0.8 ? T.accent : sharpe >= 0 ? T.gold : T.coral;
+    return (
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:4}}>
+        <span style={{fontFamily:"DM Mono",fontSize:18,color,textShadow:`0 0 10px ${color}`}}>{sharpe.toFixed(2)}</span>
+        <span style={{fontFamily:"Orbitron",fontSize:7,color:T.secondary,letterSpacing:2}}>SHARPE — IT 1</span>
+      </div>
+    );
   }
   const sorted = [...results].sort((a,b)=>(a.iteration||0)-(b.iteration||0));
   let runningBest = -Infinity;
@@ -788,10 +811,17 @@ function App() {
         case "autonomous_update":
           setAutonomousState(payload);
           break;
-        case "iteration_complete":
-        case "research_update":
+        case "iteration_result":
+        case "iteration_complete": {
+          if (type === "iteration_result") console.log("ITERATION PAYLOAD KEYS:", Object.keys(payload || {}), payload);
+          const rawResult = type === "iteration_result"
+            ? (payload?.metrics || payload)
+            : payload;
+          const result = {
+            ...rawResult,
+            iteration: rawResult.iteration ?? rawResult.iteration_number ?? rawResult.id ?? rawResult.run_iteration,
+          };
           setIterationResults(prev => {
-            const result = payload;
             const existing = prev.findIndex(r => r.iteration === result.iteration);
             if (existing >= 0) {
               const next = [...prev];
@@ -800,8 +830,16 @@ function App() {
             }
             return [...prev, result];
           });
-          setIterationSummary(payload);
+          setIterationSummary(result);
+          setEvents(prev => [...prev, {
+            id: Date.now() + Math.random(),
+            timestamp: msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : "",
+            type, payload: result,
+          }].slice(-200));
+          if (result.candles?.length > 0) setCandles(result.candles);
+          // fetchIterationDetail(result.iteration); — disabled until backend has the endpoint
           break;
+        }
         case "position_update":
           setPositions(payload?.positions||(Array.isArray(payload)?payload:[]));
           break;
@@ -824,14 +862,24 @@ function App() {
           setStartupStatus(payload);
           break;
         case "run_start":
+          setIterationResults([]);
+          setIterationSummary(null);
+          setCandles(null);
+          setSelectedIteration(null);
+          setAutonomousState(p => p || { is_running: true, current_goal: payload?.goal });
+          setEvents(prev => [...prev, { id: Date.now(), timestamp: new Date().toLocaleTimeString(), type, payload }].slice(-200));
+          break;
         case "run_complete":
+          setAutonomousState(p => ({ ...p, is_running: false }));
+          break;
         case "run_error":
+          setAutonomousState(p => ({ ...p, is_running: false, last_error: payload?.message }));
+          break;
         case "hypothesis":
           setHypothesis(payload?.text || payload?.hypothesis || JSON.stringify(payload));
           break;
         case "critique":
         case "iteration_start":
-        case "iteration_result":
         case "task_done":
           setEvents(prev=>[...prev,{
             id:Date.now()+Math.random(),
@@ -839,23 +887,6 @@ function App() {
             type,
             payload:payload||msg,
           }].slice(-200));
-          if(type==="run_start") {
-            setAutonomousState(p=>p||{is_running:true,current_goal:payload?.goal});
-            setIterationResults([]);
-            setIterationSummary(null);
-          }
-          if(type==="run_complete") setAutonomousState(p=>({...p,is_running:false}));
-          if(type==="run_error") setAutonomousState(p=>({...p,is_running:false,last_error:payload?.message}));
-          if(type==="iteration_result") setIterationResults(prev => {
-            const result = payload?.metrics || payload;
-            const existing = prev.findIndex(r => r.iteration === result.iteration);
-            if (existing >= 0) {
-              const next = [...prev];
-              next[existing] = result;
-              return next;
-            }
-            return [...prev, result];
-          });
           break;
         case "heartbeat":
           break;
@@ -907,23 +938,34 @@ function App() {
     catch(e){console.error(e)}
   },[api]);
 
+  const handleSelectIteration = useCallback((idx) => {
+    setSelectedIteration(idx);
+    const iter = iterationResults[idx];
+    // if (iter?.iteration) fetchIterationDetail(iter.iteration); — disabled until backend has /api/iterations/{id}/trades
+  }, [iterationResults]);  // fetchIterationDetail removed from deps
+
   const fetchIterationDetail = useCallback(async (iterationId) => {
-    try {
-      const [tradesRes, candlesRes] = await Promise.allSettled([
-        api(`/iterations/${iterationId}/trades`),
-        api(`/iterations/${iterationId}/candles`),
-      ]);
-      if (tradesRes.status === "fulfilled" && tradesRes.value?.length > 0) {
-        setIterationResults(prev => prev.map(r =>
-          r.iteration === iterationId ? { ...r, trades: tradesRes.value } : r
-        ));
-      }
-      if (candlesRes.status === "fulfilled" && candlesRes.value?.length > 0) {
-        setCandles(candlesRes.value);
-      }
-    } catch(e) {
-      console.warn("fetchIterationDetail failed, using mock data", e);
+    if (iterationId == null || iterationId === "undefined") {
+      console.warn("fetchIterationDetail called with undefined id, skipping");
+      return;
     }
+    // Endpoint doesn't exist yet — uncomment when backend supports it
+    // try {
+    //   const [tradesRes, candlesRes] = await Promise.allSettled([
+    //     api(`/iterations/${iterationId}/trades`),
+    //     api(`/iterations/${iterationId}/candles`),
+    //   ]);
+    //   if (tradesRes.status === "fulfilled" && tradesRes.value?.length > 0) {
+    //     setIterationResults(prev => prev.map(r =>
+    //       r.iteration === iterationId ? { ...r, trades: tradesRes.value } : r
+    //     ));
+    //   }
+    //   if (candlesRes.status === "fulfilled" && candlesRes.value?.length > 0) {
+    //     setCandles(candlesRes.value);
+    //   }
+    // } catch(e) {
+    //   console.warn("fetchIterationDetail failed, using mock data", e);
+    // }
   },[api]);
 
   const startResearch = useCallback((input, c, i)=>{
@@ -959,7 +1001,7 @@ function App() {
         <LeftSidebar events={events} hypothesis={hypothesis} />
         <StrategyChart iterationResults={iterationResults}
                        selectedIteration={selectedIteration}
-                       onSelectIteration={setSelectedIteration}
+                       onSelectIteration={handleSelectIteration}
                        candles={candles} />
         <RightSidebar iterationResults={iterationResults}
                       circuitBreaker={circuitBreaker}
@@ -968,7 +1010,7 @@ function App() {
       </div>
       <BottomStrip iterationResults={iterationResults}
                    selectedIteration={effectiveIteration}
-                   onSelectIteration={setSelectedIteration}
+                   onSelectIteration={handleSelectIteration}
                    regimeSnapshot={regimeSnapshot} />
       {showModal && (
         <ResearchModal goal={goal} cycles={cycles} iters={iters}

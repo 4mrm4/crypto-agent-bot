@@ -248,6 +248,19 @@ class ResearcherAgent(BaseAgent):
                 return "Error: no URL provided."
 
             try:
+                from urllib.parse import urlparse
+
+                # Blocklist domains that return 403 when scraped directly
+                BLOCKED_DOMAINS = {
+                    "medium.com", "towardsdatascience.com",
+                    "substack.com", "patreon.com",
+                }
+                domain = urlparse(url).netloc.lower().replace("www.", "")
+                parts = domain.split(".")
+                root = ".".join(parts[-2:]) if len(parts) >= 2 else domain
+                if root in BLOCKED_DOMAINS:
+                    return f"Skipped {url} — domain {root} blocks direct scraping"
+
                 import httpx
                 resp = httpx.get(url, timeout=30.0, follow_redirects=True)
                 resp.raise_for_status()

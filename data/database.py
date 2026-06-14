@@ -8,7 +8,6 @@ Design:
 - Uses Python's built-in sqlite3 (no new dependencies)
 - WAL mode enabled: PRAGMA journal_mode=WAL
 - All writes go through a context manager for safe transactions
-- JSONL files kept as backup during transition (controlled by LEGACY_JSONL_BACKUP)
 """
 
 import json
@@ -43,21 +42,20 @@ class TradingDatabase:
         "oos_results", "validation_trades", "api_cache", "_migrations"
     })
 
-    def __new__(cls, db_path=None, legacy_backup=True):
+    def __new__(cls, db_path=None):
         path = Path(db_path) if isinstance(db_path, str) else (db_path or DB_PATH)
         key = str(path)
         with cls._lock:
             if key not in cls._instances:
                 instance = super().__new__(cls)
                 instance.db_path = path
-                instance.legacy_backup = legacy_backup
                 if str(instance.db_path) != ":memory:":
                     instance.db_path.parent.mkdir(parents=True, exist_ok=True)
                 instance._initialized = False
                 cls._instances[key] = instance
             return cls._instances[key]
 
-    def __init__(self, db_path=None, legacy_backup=True) -> None:
+    def __init__(self, db_path=None) -> None:
         if getattr(self, "_initialized", False):
             return
         self._initialized = True

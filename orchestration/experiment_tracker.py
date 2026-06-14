@@ -79,9 +79,8 @@ class ExperimentTracker:
         self._save_path.parent.mkdir(parents=True, exist_ok=True)
         self._load_existing()
         # SQLite mirror
-        from config import settings
         from data.database import TradingDatabase
-        self._db = TradingDatabase(legacy_backup=settings.LEGACY_JSONL_BACKUP)
+        self._db = TradingDatabase()
 
     def _load_existing(self):
         if self._save_path.exists():

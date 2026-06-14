@@ -510,7 +510,6 @@ Regenerate locally: `pip install graphifyy && /graphify .` (requires OpenClaude)
 | `SLIPPAGE_MODEL` | `fixed` | Slippage model type (`fixed` or `volume_scaled`) |
 | `TAVILY_API_KEY` | — | Optional Tavily API key for web search |
 | `TAVILY_ENABLED` | `true` | Enable Tavily search (falls back to DuckDuckGo) |
-| `LEGACY_JSONL_BACKUP` | `true` | Keep JSONL file writes alongside SQLite |
 | `COINCAP_API_KEY` | — | CoinCap v3 API key (backup price feed) |
 | `COINCAP_ENABLED` | `false` | Enable CoinCap price feed |
 | `COINCAP_FALLBACK_ONLY` | `true` | Use CoinCap only as tertiary OHLCV fallback |

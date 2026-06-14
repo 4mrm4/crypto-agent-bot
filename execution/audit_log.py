@@ -51,9 +51,8 @@ class AuditLog:
         self._entries: List[AuditEntry] = []
         self._load()
         # SQLite mirror
-        from config import settings
         from data.database import TradingDatabase
-        self._db = TradingDatabase(legacy_backup=settings.LEGACY_JSONL_BACKUP)
+        self._db = TradingDatabase()
         logger.info("AuditLog loaded: %d entries", len(self._entries))
 
     def _load(self):

@@ -86,7 +86,7 @@ class DeploymentPipeline:
         self._results_path = "./workspace/pipeline_results.jsonl"
         from config import settings
         from data.database import TradingDatabase
-        self._db = TradingDatabase(legacy_backup=settings.LEGACY_JSONL_BACKUP)
+        self._db = TradingDatabase()
 
     def run_full_pipeline(
         self,

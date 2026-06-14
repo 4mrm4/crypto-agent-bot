@@ -56,9 +56,8 @@ class ValidationMode:
     def __init__(self, live_start_date: Optional[datetime] = None):
         self.live_start_date = live_start_date or datetime.utcnow()
         self.VALIDATION_TRADES_PATH.parent.mkdir(parents=True, exist_ok=True)
-        from config import settings
         from data.database import TradingDatabase
-        self._db = TradingDatabase(legacy_backup=settings.LEGACY_JSONL_BACKUP)
+        self._db = TradingDatabase()
 
     @property
     def is_active(self) -> bool:

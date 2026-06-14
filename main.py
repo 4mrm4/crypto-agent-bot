@@ -9,9 +9,7 @@ import asyncio
 import httpx
 import logging
 import signal
-import subprocess
 import sys
-import time
 import webbrowser
 
 import uvicorn
@@ -220,53 +218,68 @@ def _run_autonomous(ui: bool = False, start_scanner: bool = False, scanner_stand
 
 
 def _run_demo():
-    """Start the FastAPI server + UI, then run a demo research goal."""
+    """Start the Web UI server in-process, then run a demo research goal via the API."""
     console.print("[bold cyan]crypto_agent_bot — Demo Mode[/]\n")
     console.print("[yellow]Starting Web UI server...[/]")
 
-    # Start uvicorn in background
-    server = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "api.server:app", "--host", "127.0.0.1", "--port", "8765", "--log-level", "warning"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    # Create EventBus in-process so WebSocket events flow through
+    event_bus = EventBus()
+    fastapi_app.state.event_bus = event_bus
 
-    # Wait for server
-    for _ in range(20):
+    from api.event_bus import LoggingEventBusHandler
+    _log_handler = LoggingEventBusHandler(event_bus)
+    _log_handler.setFormatter(logging.Formatter(
+        "%(asctime)s | %(name)-20s | %(levelname)-5s | %(message)s"
+    ))
+    logging.getLogger().addHandler(_log_handler)
+
+    config = uvicorn.Config(fastapi_app, host="127.0.0.1", port=8765, log_level="info")
+    server = uvicorn.Server(config)
+
+    async def _run():
+        # Start server
+        server_task = asyncio.create_task(server.serve())
+
+        # Wait for server to be ready
+        for _ in range(40):
+            try:
+                r = httpx.get("http://127.0.0.1:8765/api/health", timeout=2)
+                if r.status_code == 200:
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(0.25)
+
+        url = "http://127.0.0.1:8765"
+        console.print(f"[green]UI running at {url}[/]")
+        webbrowser.open(url)
+
+        # Kick off a demo research goal
+        console.print("[yellow]Kicking off demo research goal...[/]")
         try:
-            r = httpx.get("http://127.0.0.1:8765/api/health", timeout=2)
-            if r.status_code == 200:
-                break
-        except Exception:
+            resp = httpx.post(f"{url}/api/run", json={
+                "goal": "Find a momentum strategy with Sharpe > 1 for BTC/USDT",
+                "max_cycles": 3,
+                "max_iterations": 1,
+            }, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                console.print(f"[green]Run started: {data['run_id']}[/]")
+            else:
+                console.print(f"[red]API error: {resp.status_code}[/]")
+        except Exception as exc:
+            console.print(f"[red]Failed to start run: {exc}[/]")
+
+        console.print("\n[green]Demo mode active. Press Ctrl+C to stop.[/]")
+        try:
+            await server_task
+        except (asyncio.CancelledError, KeyboardInterrupt):
             pass
-        time.sleep(0.5)
 
-    url = "http://127.0.0.1:8765"
-    console.print(f"[green]UI running at {url}[/]")
-    webbrowser.open(url)
-
-    # Kick off a demo research goal
-    console.print("[yellow]Kicking off demo research goal...[/]")
     try:
-        resp = httpx.post(f"{url}/api/run", json={
-            "goal": "Find a momentum strategy with Sharpe > 1 for BTC/USDT",
-            "max_cycles": 3,
-            "max_iterations": 1,
-        }, timeout=5)
-        if resp.status_code == 200:
-            data = resp.json()
-            console.print(f"[green]Run started: {data['run_id']}[/]")
-        else:
-            console.print(f"[red]API error: {resp.status_code}[/]")
-    except Exception as exc:
-        console.print(f"[red]Failed to start run: {exc}[/]")
-
-    console.print("\n[green]Demo mode active. Press Ctrl+C to stop.[/]")
-    try:
-        server.wait()
+        asyncio.run(_run())
     except KeyboardInterrupt:
-        server.terminate()
-        server.wait()
+        console.print("\n[green]Demo mode stopped.[/]")
 
 
 def _run_cli_command(cmd_list):
