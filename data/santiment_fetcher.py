@@ -18,8 +18,6 @@ from config import settings
 from data.cache_client import CacheClient
 from data.database import TradingDatabase
 
-# ── Throttle: max 1 request per 60s to avoid 429 ──
-_last_santiment_call = 0.0
 SANTIMENT_MIN_INTERVAL = 60  # seconds between calls
 
 logger = logging.getLogger(__name__)
@@ -88,6 +86,36 @@ class SantimentFetcher:
     Caches get_signal() in SQLite api_cache with 30 min TTL.
     """
 
+    # Class-level throttle state (shared across all instances)
+    _last_call: float = 0.0
+    _throttle_lock: Optional[asyncio.Lock] = None
+    _throttle_lock_loop_id: Optional[int] = None
+
+    @classmethod
+    async def _get_throttle_lock(cls) -> asyncio.Lock:
+        """Get or create the throttle lock, rebinding if the event loop changed.
+
+        asyncio.Lock() binds to whatever event loop is running at creation
+        time.  asyncio.run() creates a fresh loop each invocation, so a lock
+        created at import time (no running loop) will later be unusable and
+        raise ``is bound to a different event loop``.
+
+        We track the loop via its ``id()`` and recreate the lock when the
+        running loop changes.
+        """
+        try:
+            loop_id = id(asyncio.get_running_loop())
+        except RuntimeError:
+            loop_id = None
+
+        if cls._throttle_lock is None or cls._throttle_lock_loop_id != loop_id:
+            if cls._throttle_lock is not None:
+                logger.debug("Santiment throttle lock rebound to new event loop")
+            cls._throttle_lock = asyncio.Lock()
+            cls._throttle_lock_loop_id = loop_id
+
+        return cls._throttle_lock
+
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -120,14 +148,16 @@ class SantimentFetcher:
         if variables:
             payload["variables"] = variables
 
-        # Throttle: wait if called too soon after last request
-        global _last_santiment_call
-        now = time.time()
-        wait = SANTIMENT_MIN_INTERVAL - (now - _last_santiment_call)
-        if wait > 0:
-            logger.info("Santiment rate limit: waiting %.1fs", wait)
-            await asyncio.sleep(wait)
-        _last_santiment_call = time.time()
+        # Throttle: serialise via class-level lock (lazily bound to current event loop).
+        # The lock gates only the *spacing* between calls, not the HTTP request duration.
+        throttle_lock = await SantimentFetcher._get_throttle_lock()
+        async with throttle_lock:
+            now = time.time()
+            wait = SANTIMENT_MIN_INTERVAL - (now - SantimentFetcher._last_call)
+            if wait > 0:
+                logger.info("Santiment rate limit: waiting %.1fs", wait)
+                await asyncio.sleep(wait)
+            SantimentFetcher._last_call = time.time()
 
         try:
             resp = await client.post(SANTIMENT_GRAPHQL, json=payload)
@@ -264,7 +294,6 @@ class SantimentFetcher:
         self, slugs: List[str],
     ) -> Dict[str, SantimentSignal]:
         """Fetch signals for multiple assets concurrently."""
-        import asyncio
         tasks = [self.get_signal(slug) for slug in slugs]
         results = await asyncio.gather(*tasks)
         return {

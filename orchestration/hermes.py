@@ -378,11 +378,15 @@ class HermesOrchestrator:
             except asyncio.TimeoutError:
                 logger.error("LangGraph invoke timed out after %ds", timeout)
                 initial_state["error"] = "Research cycle timed out"
+                # Remove final_output so .get() below falls through to _build_summary
+                initial_state.pop("final_output", None)
                 final_state = initial_state
         finally:
             self._circuit_breaker.research_mode = False
 
         output = final_state.get("final_output", self._build_summary(enriched_goal))
+        if output is None:
+            output = {}  # safety guard: timeout/crash leaves final_output missing
 
         # Store results in memory for future runs
         if curator:

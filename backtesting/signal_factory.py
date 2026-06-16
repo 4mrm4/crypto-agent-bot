@@ -225,6 +225,109 @@ def _signal_multi_timeframe(df: pd.DataFrame, params: dict) -> pd.Series:
     return _build_signal(entry, exit)
 
 
+def _signal_vwap_deviation(df: pd.DataFrame, params: dict) -> pd.Series:
+    """VWAP deviation mean reversion.
+    Enter when price crosses below VWAP by threshold%, exit on return to VWAP.
+    Uses once-per-cross: only the first bar below threshold triggers entry.
+    """
+    idx = df.index
+    vwap_period = params.get("vwap_period", 20)
+    deviation_threshold = params.get("deviation_threshold", 15) / 10.0
+    typical_price = (df["high"] + df["low"] + df["close"]) / 3
+    vwap = (typical_price * df["volume"]).rolling(vwap_period).sum() / df["volume"].rolling(vwap_period).sum()
+    vwap = _s(vwap.values, idx)
+    deviation = (df["close"] - vwap) / vwap * 100
+    # Entry only on the first bar below threshold after being at/above VWAP
+    entry = (deviation < -deviation_threshold) & (df["close"].shift(1) >= vwap.shift(1))
+    exit = (deviation >= 0) | (deviation.shift(1) < 0)
+    return _build_signal(entry, exit)
+
+
+def _signal_ema_ribbon(df: pd.DataFrame, params: dict) -> pd.Series:
+    """EMA ribbon alignment.
+    Enter when all EMAs are strictly aligned bullish (E3 > E6 > E9 > ... > E24),
+    exit when shortest crosses below longest.
+    """
+    idx = df.index
+    ema_min = int(params.get("ema_min", 3))
+    ema_max = int(params.get("ema_max", 24))
+    ema_step = int(params.get("ema_step", 3))
+    ema_periods = list(range(ema_min, ema_max + 1, ema_step))
+    ema_cols = {}
+    for p in ema_periods:
+        ema_cols[p] = _s(ta.EMA(df["close"].values, timeperiod=p), idx)
+
+    # Strict alignment: each EMA > next longer one
+    ema_df = pd.DataFrame({str(p): ema_cols[p] for p in ema_periods})
+    aligned = pd.Series(
+        np.all(np.diff(ema_df.values, axis=1) > 0, axis=1),
+        index=idx,
+    )
+
+    shortest = ema_cols[min(ema_periods)]
+    longest = ema_cols[max(ema_periods)]
+
+    entry = aligned & ~aligned.shift(1).fillna(False)
+    exit = (shortest < longest) & (shortest.shift(1) >= longest.shift(1))
+    return _build_signal(entry, exit)
+
+
+def _signal_stoch_rsi(df: pd.DataFrame, params: dict) -> pd.Series:
+    """Stochastic RSI oscillator.
+    Enter when %K crosses above %D in oversold territory, exit on overbought crossunder.
+    """
+    idx = df.index
+    period = params.get("stoch_rsi_period", 14)
+    smooth_k = params.get("stoch_rsi_k", 3)
+    smooth_d = params.get("stoch_rsi_d", 3)
+    oversold = params.get("oversold", 20)
+    overbought = params.get("overbought", 80)
+
+    rsi = _s(ta.RSI(df["close"].values, timeperiod=period), idx)
+    rsi_min = _s(rsi.rolling(period).min(), idx)
+    rsi_max = _s(rsi.rolling(period).max(), idx)
+    stoch_k_raw = ((rsi - rsi_min) / (rsi_max - rsi_min).replace(0, float("nan"))) * 100
+    stoch_k = _s(stoch_k_raw.rolling(smooth_k).mean(), idx)
+    stoch_d = _s(stoch_k.rolling(smooth_d).mean(), idx)
+
+    entry = (stoch_k < oversold) & (stoch_k > stoch_d) & (stoch_k.shift(1) <= stoch_d.shift(1))
+    exit = (stoch_k > overbought) & (stoch_k < stoch_d) & (stoch_k.shift(1) >= stoch_d.shift(1))
+    return _build_signal(entry, exit)
+
+
+def _signal_adx_filter(df: pd.DataFrame, params: dict) -> pd.Series:
+    """ADX trend strength with direction filter.
+    Enter when ADX > threshold and +DI > -DI, exit when trend weakens or reverses.
+    """
+    idx = df.index
+    adx_period = params.get("adx_period", 14)
+    adx_threshold = params.get("adx_threshold", 25)
+    adx_di_cross = params.get("adx_di_cross", True)
+
+    adx_arr = ta.ADX(
+        df["high"].values, df["low"].values, df["close"].values,
+        timeperiod=adx_period,
+    )
+    plus_di_arr = ta.PLUS_DI(
+        df["high"].values, df["low"].values, df["close"].values,
+        timeperiod=adx_period,
+    )
+    minus_di_arr = ta.MINUS_DI(
+        df["high"].values, df["low"].values, df["close"].values,
+        timeperiod=adx_period,
+    )
+    adx = _s(adx_arr, idx)
+    plus_di = _s(plus_di_arr, idx)
+    minus_di = _s(minus_di_arr, idx)
+
+    trend_strong = adx > adx_threshold
+    direction_bullish = plus_di > minus_di if adx_di_cross else pd.Series(True, index=idx)
+
+    entry = trend_strong & direction_bullish & ~(trend_strong.shift(1).fillna(False) & direction_bullish.shift(1).fillna(False))
+    exit = (adx < 20) | (direction_bullish == False)
+    return _build_signal(entry, exit)
+
+
 # ── Strategy Registry ──
 
 REGISTRY: Dict[str, Any] = {
@@ -239,6 +342,10 @@ REGISTRY: Dict[str, Any] = {
     "volatility_squeeze": _signal_volatility_squeeze,
     "sentiment_driven": _signal_sentiment_driven,
     "multi_timeframe": _signal_multi_timeframe,
+    "vwap_deviation": _signal_vwap_deviation,
+    "ema_ribbon": _signal_ema_ribbon,
+    "stoch_rsi": _signal_stoch_rsi,
+    "adx_filter": _signal_adx_filter,
 }
 
 

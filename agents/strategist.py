@@ -31,12 +31,22 @@ Available strategy types:
 - volatility_squeeze: BB width contraction then expansion
 - sentiment_driven: RSI + SMA (use when fear/greed < 30)
 - multi_timeframe: 1h SMA crossover confirmed by 200 SMA (higher TF proxy) + ADX filter
+- vwap_deviation: VWAP deviation mean reversion (vwap_period, deviation_threshold)
+- ema_ribbon: EMA ribbon alignment (ema_min, ema_max, ema_step)
+- stoch_rsi: Stochastic RSI K/D crossover (stoch_rsi_period, oversold, overbought)
+- adx_filter: ADX trend strength + DI direction filter (adx_period, adx_threshold)
 
 REGIME GUIDANCE:
-- strong_uptrend -> prefer sma_crossover, momentum, combined_sma_rsi
-- ranging -> prefer bollinger_bands, rsi_oversold, mean_reversion
+- strong_uptrend -> prefer sma_crossover, momentum, combined_sma_rsi, ema_ribbon, adx_filter
+- ranging -> prefer bollinger_bands, rsi_oversold, mean_reversion, vwap_deviation, stoch_rsi
 - volatile -> prefer breakout, volatility_squeeze
 - weak_trend -> prefer macd_crossover, combined_sma_rsi
+
+ADX AS MODIFIER:
+ADX filter (adx_filter) can be composed with other types by passing
+adx_period + adx_threshold alongside the base strategy params.
+The BacktestEngine treats adx_filter as a standalone type in Phase 1;
+future versions will support true composition (e.g. "sma_crossover + adx_filter").
 
 WORK ITERATIVELY — one strategy at a time. Do NOT enumerate many variants at once.
 Use this cycle:
@@ -60,6 +70,10 @@ When choosing a strategy, first consider these proven concepts:
 - Multi-TF Trend: short cross + long confirm -> use multi_timeframe
 - Momentum + Volume: ROC + volume spike -> use momentum
 - Mean Reversion: BB + RSI oversold -> use mean_reversion
+- VWAP Deviation: price below VWAP threshold -> use vwap_deviation(vwap_period=20, deviation_threshold=15)
+- EMA Ribbon: multi-EMA bullish alignment -> use ema_ribbon(ema_min=3, ema_max=24, ema_step=3)
+- StochRSI: RSI-based stochastic cross -> use stoch_rsi(stoch_rsi_period=14, oversold=20, overbought=80)
+- ADX Trend: trend strength + direction -> use adx_filter(adx_period=14, adx_threshold=25)
 
 Map the research goal to the most suitable concept, then pick its
 freqtrade_type and suggested_params as your starting point.
@@ -132,7 +146,8 @@ class StrategistAgent(BaseAgent):
 
             Types: sma_crossover, macd_crossover, rsi_oversold, bollinger_bands,
             combined_sma_rsi, momentum, breakout, mean_reversion,
-            volatility_squeeze, sentiment_driven, multi_timeframe
+            volatility_squeeze, sentiment_driven, multi_timeframe,
+            vwap_deviation, ema_ribbon, stoch_rsi, adx_filter
 
             AVOID 'custom' type — use one of the predefined types above.
             Do NOT set timerange — the research window is automatically applied.
@@ -154,7 +169,8 @@ class StrategistAgent(BaseAgent):
                            "bollinger_bands", "combined_sma_rsi", "custom",
                            "momentum", "breakout", "mean_reversion",
                            "volatility_squeeze", "sentiment_driven",
-                           "multi_timeframe"}
+                           "multi_timeframe", "vwap_deviation",
+                           "ema_ribbon", "stoch_rsi", "adx_filter"}
             if strategy_type not in valid_types:
                 return f"Error: unknown strategy_type '{strategy_type}'. Valid: {', '.join(sorted(valid_types))}"
 
@@ -250,10 +266,14 @@ class StrategistAgent(BaseAgent):
                     "- Fear/Greed Contrarian: extreme fear buy -> sentiment_driven(rsi_period=14)\n"
                     "- Multi-TF Trend: short cross + long confirm -> multi_timeframe(fast_ma=20, slow_ma=50)\n"
                     "- Momentum + Volume: ROC + volume spike -> momentum(roc_period=10)\n"
-                    "- Mean Reversion: BB + RSI oversold -> mean_reversion(bb_period=20, rsi_period=14)\n\n"
+                    "- Mean Reversion: BB + RSI oversold -> mean_reversion(bb_period=20, rsi_period=14)\n"
+                    "- VWAP Deviation: price below VWAP threshold -> vwap_deviation(vwap_period=20, deviation_threshold=15)\n"
+                    "- EMA Ribbon: multi-EMA bullish alignment -> ema_ribbon(ema_min=3, ema_max=24, ema_step=3)\n"
+                    "- StochRSI: RSI stochastic crossover -> stoch_rsi(stoch_rsi_period=14, oversold=20, overbought=80)\n"
+                    "- ADX Trend: trend strength + direction -> adx_filter(adx_period=14, adx_threshold=25)\n\n"
                     "REGIME GUIDANCE:\n"
-                    "- strong_uptrend -> sma_crossover, momentum, combined_sma_rsi\n"
-                    "- ranging -> bollinger_bands, rsi_oversold, mean_reversion\n"
+                    "- strong_uptrend -> sma_crossover, momentum, combined_sma_rsi, ema_ribbon, adx_filter\n"
+                    "- ranging -> bollinger_bands, rsi_oversold, mean_reversion, vwap_deviation, stoch_rsi\n"
                     "- volatile -> breakout, volatility_squeeze\n"
                     "- weak_trend -> macd_crossover, combined_sma_rsi")
 

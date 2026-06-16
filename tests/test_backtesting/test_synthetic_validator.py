@@ -46,7 +46,6 @@ class TestSyntheticGeneration:
 
 
 class TestSyntheticValidation:
-    @pytest.mark.xfail(reason="Needs full freqtrade environment with data files")
     def test_validate_strategy_no_runs(self):
         """When all runs fail, should return fails_sanity."""
         sv = SyntheticValidator()
@@ -56,7 +55,6 @@ class TestSyntheticValidation:
         )
         assert result.verdict in ("passes_sanity", "fails_sanity")
 
-    @pytest.mark.xfail(reason="Needs full freqtrade environment with data files")
     def test_validate_strategy_returns_result(self):
         sv = SyntheticValidator()
         result = sv.validate_strategy(
@@ -68,7 +66,6 @@ class TestSyntheticValidation:
         assert result.n_runs > 0
         assert result.verdict in ("passes_sanity", "fails_sanity")
 
-    @pytest.mark.xfail(reason="Needs full freqtrade environment with data files")
     def test_permutation_test_returns_result(self):
         sv = SyntheticValidator()
         result = sv.run_permutation_test(

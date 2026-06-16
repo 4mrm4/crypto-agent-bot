@@ -426,16 +426,15 @@ class TestCPCVValidatorKnownGood:
             f"{result.sharpe_distribution}"
         )
 
-    def test_index_mismatch_bug_documented(self):
-        """Document the SignalFactory index-handling bug.
+    def test_index_mismatch_bug_fixed(self):
+        """Verify the SignalFactory index-handling bug is fixed.
 
         When df.iloc[test_idx] produces a DataFrame with non-zero-based index
-        (e.g., [750..1499]), SignalFactory._s() creates Series with default
-        integer index [0..n). FastMetrics then calls df.loc[0, 'close'] which
-        raises KeyError because 0 is not in the test_df index.
+        (e.g., [750..1499]), SignalFactory._s() must pass df.index so the
+        returned Series shares the same index. FastMetrics then correctly
+        resolves df.loc[...] for any subset.
 
-        This test verifies the mismatch exists and produces the expected symptom:
-        paths 1+ get silently skipped (exception caught in validator).
+        All CPCV folds should produce valid results (no KeyError).
         """
         df = make_ohlcv(n=3000, drift=0.08)
         from backtesting.cpcv_validator import CPCVSplitter
@@ -448,26 +447,21 @@ class TestCPCVValidatorKnownGood:
             signals = SignalFactory.generate(
                 test_df, "sma_crossover", {"fast_ma": 2, "slow_ma": 3}
             )
-            entries = int((signals == 1).sum())
-            exits = int((signals == -1).sum())
-            signalled = int((signals != 0).sum())
             try:
                 metrics = FastMetrics.compute(test_df, signals)
                 trades = metrics.get("total_trades", 0)
-                path_results.append(("OK", entries, exits, trades))
+                path_results.append(("OK", int((signals == 1).sum()), int((signals == -1).sum()), trades))
             except KeyError as e:
                 path_results.append(
-                    ("KeyError", entries, exits, str(e))
+                    ("KeyError", int((signals == 1).sum()), int((signals == -1).sum()), str(e))
                 )
 
-        # First fold (starting at 0) works
-        assert path_results[0][0] == "OK"
-        assert path_results[0][3] >= 5
-
-        # Subsequent folds crash with KeyError (index 0 not in test_df index)
-        for i in range(1, len(path_results)):
-            assert path_results[i][0] == "KeyError", \
-                f"Path {i} should raise KeyError but got {path_results[i]}"
+        # All folds should produce valid results (bug is fixed)
+        for i in range(len(path_results)):
+            assert path_results[i][0] == "OK", \
+                f"Path {i} raised {path_results[i][0]}: {path_results[i]}"
+            assert path_results[i][3] >= 5, \
+                f"Path {i} has {path_results[i][3]} trades, expected >= 5"
 
 
 

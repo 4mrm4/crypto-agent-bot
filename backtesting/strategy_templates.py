@@ -360,4 +360,103 @@ STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
 """,
         "default_params": {"fast_ma": 10, "slow_ma": 30, "adx_period": 14, "adx_threshold": 20, "rsi_period": 14, "rsi_oversold": 40, "rsi_overbought": 70, "higher_tf_fast": 80, "higher_tf_slow": 200, "startup_candle_count": 205},
     },
+
+    "vwap_deviation": {
+        "indicator_code": """
+        typical_price = (dataframe['high'] + dataframe['low'] + dataframe['close']) / 3
+        dataframe['vwap'] = (typical_price * dataframe['volume']).rolling(self.vwap_period.value).sum() / dataframe['volume'].rolling(self.vwap_period.value).sum()
+        dataframe['vwap_deviation'] = (dataframe['close'] - dataframe['vwap']) / dataframe['vwap'] * 100
+    """,
+        "entry_condition": """
+        (dataframe['vwap_deviation'] < -self.deviation_threshold.value) &
+        (dataframe['vwap_deviation'].shift(1) >= -self.deviation_threshold.value)
+    """,
+        "exit_condition": """
+        (dataframe['vwap_deviation'] >= 0) |
+        (dataframe['vwap_deviation'].shift(1) < 0)
+    """,
+        "indicator_params_block": """
+    vwap_period = IntParameter(10, 30, default=$vwap_period, space="buy")
+    deviation_threshold = IntParameter(5, 30, default=$deviation_threshold, space="buy")
+""",
+        "default_params": {"vwap_period": 20, "deviation_threshold": 15, "startup_candle_count": 25},
+    },
+
+    "ema_ribbon": {
+        "indicator_code": """
+        # Generate EMA list from ribbon params (e.g. 3,6,9,12,18,24)
+        ema_periods = list(range(self.ema_min.value, int(self.ema_max.value) + 1, int(self.ema_step.value)))
+        for p in ema_periods:
+            dataframe[f'ema_{p}'] = ta.EMA(dataframe, timeperiod=p)
+        # Store the list for entry/exit conditions
+        dataframe['_ema_shortest'] = dataframe[f'ema_{ema_periods[0]}']
+        dataframe['_ema_longest'] = dataframe[f'ema_{ema_periods[-1]}']
+    """,
+        "entry_condition": """
+        # All EMAs strictly aligned bullish (shortest > longest, each above next)
+        (dataframe['_ema_shortest'] > dataframe['_ema_longest']) &
+        (dataframe['_ema_shortest'].shift(1) <= dataframe['_ema_longest'].shift(1))
+    """,
+        "exit_condition": """
+        (dataframe['_ema_shortest'] < dataframe['_ema_longest']) &
+        (dataframe['_ema_shortest'].shift(1) >= dataframe['_ema_longest'].shift(1))
+    """,
+        "indicator_params_block": """
+    ema_min = IntParameter(2, 10, default=$ema_min, space="buy")
+    ema_max = IntParameter(15, 50, default=$ema_max, space="buy")
+    ema_step = IntParameter(2, 10, default=$ema_step, space="buy")
+""",
+        "default_params": {"ema_min": 3, "ema_max": 24, "ema_step": 3, "startup_candle_count": 30},
+    },
+
+    "stoch_rsi": {
+        "indicator_code": """
+        rsi = ta.RSI(dataframe, timeperiod=self.stoch_rsi_period.value)
+        rsi_min = rsi.rolling(self.stoch_rsi_period.value).min()
+        rsi_max = rsi.rolling(self.stoch_rsi_period.value).max()
+        stoch_rsi_raw = ((rsi - rsi_min) / (rsi_max - rsi_min).replace(0, float('nan'))) * 100
+        dataframe['stoch_rsi_k'] = stoch_rsi_raw.rolling(self.stoch_rsi_k.value).mean()
+        dataframe['stoch_rsi_d'] = dataframe['stoch_rsi_k'].rolling(self.stoch_rsi_d.value).mean()
+    """,
+        "entry_condition": """
+        (dataframe['stoch_rsi_k'] < self.oversold.value) &
+        (dataframe['stoch_rsi_k'] > dataframe['stoch_rsi_d']) &
+        (dataframe['stoch_rsi_k'].shift(1) <= dataframe['stoch_rsi_d'].shift(1))
+    """,
+        "exit_condition": """
+        (dataframe['stoch_rsi_k'] > self.overbought.value) &
+        (dataframe['stoch_rsi_k'] < dataframe['stoch_rsi_d']) &
+        (dataframe['stoch_rsi_k'].shift(1) >= dataframe['stoch_rsi_d'].shift(1))
+    """,
+        "indicator_params_block": """
+    stoch_rsi_period = IntParameter(7, 21, default=$stoch_rsi_period, space="buy")
+    stoch_rsi_k = IntParameter(2, 5, default=$stoch_rsi_k, space="buy")
+    stoch_rsi_d = IntParameter(2, 5, default=$stoch_rsi_d, space="buy")
+    oversold = IntParameter(10, 30, default=$oversold, space="buy")
+    overbought = IntParameter(70, 90, default=$overbought, space="sell")
+""",
+        "default_params": {"stoch_rsi_period": 14, "stoch_rsi_k": 3, "stoch_rsi_d": 3, "oversold": 20, "overbought": 80, "startup_candle_count": 20},
+    },
+
+    "adx_filter": {
+        "indicator_code": """
+        adx_data = ta.ADX(dataframe, timeperiod=self.adx_period.value)
+        dataframe['adx'] = adx_data['adx'].astype(float)
+        dataframe['plus_di'] = adx_data['plus_di'].astype(float)
+        dataframe['minus_di'] = adx_data['minus_di'].astype(float)
+    """,
+        "entry_condition": """
+        (dataframe['adx'] > self.adx_threshold.value) &
+        (dataframe['plus_di'] > dataframe['minus_di'])
+    """,
+        "exit_condition": """
+        (dataframe['adx'] < 20) |
+        (dataframe['plus_di'] < dataframe['minus_di'])
+    """,
+        "indicator_params_block": """
+    adx_period = IntParameter(7, 21, default=$adx_period, space="buy")
+    adx_threshold = IntParameter(15, 40, default=$adx_threshold, space="buy")
+""",
+        "default_params": {"adx_period": 14, "adx_threshold": 25, "startup_candle_count": 25},
+    },
 }

@@ -50,6 +50,7 @@ class AutonomousLoopState:
     iteration_results: List[Dict[str, Any]] = field(default_factory=list)
     current_sharpe: float = 0.0
     current_best_sharpe: float = 0.0
+    failed_cycles: int = 0
 
 
 class AutonomousResearchLoop:
@@ -584,10 +585,23 @@ class AutonomousResearchLoop:
             ),
         )
 
+        if result is None:
+            logger.warning("Research cycle returned None (timeout/crash) — recording as failed")
+            result = {
+                "converged": False,
+                "total_iterations": 0,
+                "iterations": [],
+                "best_metrics": {},
+                "error": "research_cycle_timeout",
+            }
+            self.state.last_error = "Cycle timed out"
+            self.state.failed_cycles += 1
+
         logger.info(
-            "Research cycle complete: converged=%s, iterations=%d",
+            "Research cycle complete: converged=%s, iterations=%d, failed_cycles=%d",
             result.get("converged", False),
             result.get("total_iterations", 0),
+            self.state.failed_cycles,
         )
 
         # Capture iteration results for UI

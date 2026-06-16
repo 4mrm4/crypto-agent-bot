@@ -119,9 +119,9 @@ async def test_get_signal_returns_none_when_disabled():
 async def test_get_trending_assets_returns_list(fetcher):
     mock_response = {
         "data": {
-            "getTrendingAssets": [
-                {"slug": "bitcoin", "score": 100},
-                {"slug": "ethereum", "score": 85},
+            "allProjects": [
+                {"slug": "bitcoin", "social_volume": 100},
+                {"slug": "ethereum", "social_volume": 85},
             ]
         }
     }

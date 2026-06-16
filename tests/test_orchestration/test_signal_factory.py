@@ -104,7 +104,7 @@ class TestHelpers:
 class TestSignalFactory:
     def test_supported_types(self):
         types = SignalFactory.supported_types()
-        assert len(types) == 11
+        assert len(types) == 15
         assert "sma_crossover" in types
 
     def test_unknown_type_raises(self):
@@ -477,4 +477,4 @@ class TestRegistry:
         assert supported == registered
 
     def test_registry_has_exactly_11_entries(self):
-        assert len(REGISTRY) == 11
+        assert len(REGISTRY) == 15
