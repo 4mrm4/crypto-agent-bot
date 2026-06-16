@@ -11,6 +11,21 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# ── JSON encoder that handles numpy scalars ──
+class _NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        try:
+            import numpy as np
+            if isinstance(obj, (np.integer,)):
+                return int(obj)
+            if isinstance(obj, (np.floating,)):
+                return float(obj)
+            if isinstance(obj, (np.bool_,)):
+                return bool(obj)
+        except ImportError:
+            pass
+        return super().default(obj)
+
 logger = logging.getLogger(__name__)
 
 
@@ -69,7 +84,7 @@ class AuditLog:
         """Append an entry to the log (memory + disk + SQLite)."""
         self._entries.append(entry)
         with open(self._save_path, "a") as f:
-            f.write(json.dumps(entry.to_dict()) + "\n")
+            f.write(json.dumps(entry.to_dict(), cls=_NumpyEncoder) + "\n")
         # Mirror to SQLite
         try:
             self._db.insert_trade({

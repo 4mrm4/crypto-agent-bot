@@ -561,8 +561,8 @@ class TestIntegrationWithLiveExecutor:
 
         mock_fetcher = MagicMock()
         mock_fetcher.fetch_ohlcv.return_value = pd.DataFrame({
-            "open": [50000]*10, "high": [50100]*10, "low": [49900]*10,
-            "close": [50050]*10, "volume": [100]*10,
+            "open": [50000.0]*10, "high": [50100.0]*10, "low": [49900.0]*10,
+            "close": [50050.0]*10, "volume": [100.0]*10,
         })
 
         executor = LiveExecutor(
