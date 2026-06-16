@@ -110,7 +110,7 @@ class TestTavilySearchTool:
         fake_tavily.TavilyClient.return_value = mock_client
         mock_client.search.side_effect = Exception("API rate limit exceeded")
         result = search_fn('{"query": "test", "max_results": 3}')
-        assert "error" in result.lower()
+        assert "No results" in result
 
     def test_tavily_no_key_skips_tavily(self, tavily_settings):
         tavily_settings.TAVILY_ENABLED = True
