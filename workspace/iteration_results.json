@@ -1,0 +1,402 @@
+[
+  {
+    "cycle": 1,
+    "iteration": 1,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -9.5966,
+    "win_rate": 0.2941,
+    "max_drawdown": 0.1204,
+    "total_trades": 17
+  },
+  {
+    "cycle": 1,
+    "iteration": 2,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -9.5966,
+    "win_rate": 0.2941,
+    "max_drawdown": 0.1204,
+    "total_trades": 17
+  },
+  {
+    "cycle": 1,
+    "iteration": 3,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -9.5966,
+    "win_rate": 0.2941,
+    "max_drawdown": 0.1204,
+    "total_trades": 17
+  },
+  {
+    "cycle": 1,
+    "iteration": 4,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -1.3560210497607628,
+    "win_rate": 0.5191768007483629,
+    "max_drawdown": 0.028050526696391246,
+    "total_trades": 1069
+  },
+  {
+    "cycle": 1,
+    "iteration": 5,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -9.5966,
+    "win_rate": 0.2941,
+    "max_drawdown": 0.1204,
+    "total_trades": 17
+  },
+  {
+    "cycle": 1,
+    "iteration": 6,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -9.5966,
+    "win_rate": 0.2941,
+    "max_drawdown": 0.1204,
+    "total_trades": 17
+  },
+  {
+    "cycle": 1,
+    "iteration": 7,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": 2.0992,
+    "win_rate": 0.25,
+    "max_drawdown": 0.0101,
+    "total_trades": 4
+  },
+  {
+    "cycle": 1,
+    "iteration": 8,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": 2.0992,
+    "win_rate": 0.25,
+    "max_drawdown": 0.0101,
+    "total_trades": 4
+  },
+  {
+    "cycle": 1,
+    "iteration": 9,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -9.5966,
+    "win_rate": 0.2941,
+    "max_drawdown": 0.1204,
+    "total_trades": 17
+  },
+  {
+    "cycle": 1,
+    "iteration": 10,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -9.5966,
+    "win_rate": 0.2941,
+    "max_drawdown": 0.1204,
+    "total_trades": 17
+  },
+  {
+    "cycle": 1,
+    "iteration": 1,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -9.5966,
+    "win_rate": 0.2941,
+    "max_drawdown": 0.1204,
+    "total_trades": 17
+  },
+  {
+    "cycle": 1,
+    "iteration": 2,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -10.3201,
+    "win_rate": 0.3333,
+    "max_drawdown": 0.1625,
+    "total_trades": 3
+  },
+  {
+    "cycle": 1,
+    "iteration": 3,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -9.5966,
+    "win_rate": 0.2941,
+    "max_drawdown": 0.1204,
+    "total_trades": 17
+  },
+  {
+    "cycle": 1,
+    "iteration": 4,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -9.5966,
+    "win_rate": 0.2941,
+    "max_drawdown": 0.1204,
+    "total_trades": 17
+  },
+  {
+    "cycle": 1,
+    "iteration": 5,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -12.0769,
+    "win_rate": 0.1892,
+    "max_drawdown": 0.225,
+    "total_trades": 37
+  },
+  {
+    "cycle": 1,
+    "iteration": 6,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -1.2946945677080874,
+    "win_rate": 0.5174180327868853,
+    "max_drawdown": 0.025916298989573563,
+    "total_trades": 976
+  },
+  {
+    "cycle": 1,
+    "iteration": 7,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -1.2946945677080874,
+    "win_rate": 0.5174180327868853,
+    "max_drawdown": 0.025916298989573563,
+    "total_trades": 976
+  },
+  {
+    "cycle": 1,
+    "iteration": 8,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -1.2946945677080874,
+    "win_rate": 0.5174180327868853,
+    "max_drawdown": 0.025916298989573563,
+    "total_trades": 976
+  },
+  {
+    "cycle": 1,
+    "iteration": 9,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -1.2946945677080874,
+    "win_rate": 0.5174180327868853,
+    "max_drawdown": 0.025916298989573563,
+    "total_trades": 976
+  },
+  {
+    "cycle": 1,
+    "iteration": 10,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -1.2946945677080874,
+    "win_rate": 0.5174180327868853,
+    "max_drawdown": 0.025916298989573563,
+    "total_trades": 976
+  },
+  {
+    "cycle": 2,
+    "iteration": 1,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -8.0257,
+    "win_rate": 0.1765,
+    "max_drawdown": 0.0803,
+    "total_trades": 17
+  },
+  {
+    "cycle": 2,
+    "iteration": 2,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -9.0005,
+    "win_rate": 0.5,
+    "max_drawdown": 0.0038,
+    "total_trades": 2
+  },
+  {
+    "cycle": 2,
+    "iteration": 3,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -1.3560210497607628,
+    "win_rate": 0.5191768007483629,
+    "max_drawdown": 0.028050526696391246,
+    "total_trades": 1069
+  },
+  {
+    "cycle": 2,
+    "iteration": 4,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -8.0257,
+    "win_rate": 0.1765,
+    "max_drawdown": 0.0803,
+    "total_trades": 17
+  },
+  {
+    "cycle": 2,
+    "iteration": 5,
+    "verdict": "discarded",
+    "strategy_id": "fed0fbfd",
+    "sharpe_ratio": -8.0257,
+    "win_rate": 0.1765,
+    "max_drawdown": 0.0803,
+    "total_trades": 17
+  },
+  {
+    "cycle": 2,
+    "iteration": 6,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -8.0257,
+    "win_rate": 0.1765,
+    "max_drawdown": 0.0803,
+    "total_trades": 17
+  },
+  {
+    "cycle": 2,
+    "iteration": 7,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -8.0257,
+    "win_rate": 0.1765,
+    "max_drawdown": 0.0803,
+    "total_trades": 17
+  },
+  {
+    "cycle": 2,
+    "iteration": 8,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -9.0005,
+    "win_rate": 0.5,
+    "max_drawdown": 0.0038,
+    "total_trades": 2
+  },
+  {
+    "cycle": 2,
+    "iteration": 9,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -1.3560210497607628,
+    "win_rate": 0.5191768007483629,
+    "max_drawdown": 0.028050526696391246,
+    "total_trades": 1069
+  },
+  {
+    "cycle": 2,
+    "iteration": 10,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": -1.3462032905910095,
+    "win_rate": 0.5191768007483629,
+    "max_drawdown": 0.027911577809266012,
+    "total_trades": 1069
+  },
+  {
+    "cycle": 1,
+    "iteration": 1,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": 0,
+    "win_rate": 0,
+    "max_drawdown": 0,
+    "total_trades": 0
+  },
+  {
+    "cycle": 1,
+    "iteration": 2,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": 0,
+    "win_rate": 0,
+    "max_drawdown": 0,
+    "total_trades": 0
+  },
+  {
+    "cycle": 1,
+    "iteration": 3,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": 0,
+    "win_rate": 0,
+    "max_drawdown": 0,
+    "total_trades": 0
+  },
+  {
+    "cycle": 1,
+    "iteration": 4,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": 0,
+    "win_rate": 0,
+    "max_drawdown": 0,
+    "total_trades": 0
+  },
+  {
+    "cycle": 1,
+    "iteration": 5,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": 0,
+    "win_rate": 0,
+    "max_drawdown": 0,
+    "total_trades": 0
+  },
+  {
+    "cycle": 1,
+    "iteration": 6,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": 0,
+    "win_rate": 0,
+    "max_drawdown": 0,
+    "total_trades": 0
+  },
+  {
+    "cycle": 1,
+    "iteration": 7,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": 0,
+    "win_rate": 0,
+    "max_drawdown": 0,
+    "total_trades": 0
+  },
+  {
+    "cycle": 1,
+    "iteration": 8,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": 0,
+    "win_rate": 0,
+    "max_drawdown": 0,
+    "total_trades": 0
+  },
+  {
+    "cycle": 1,
+    "iteration": 9,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": 0,
+    "win_rate": 0,
+    "max_drawdown": 0,
+    "total_trades": 0
+  },
+  {
+    "cycle": 1,
+    "iteration": 10,
+    "verdict": "discarded",
+    "strategy_id": "",
+    "sharpe_ratio": 0,
+    "win_rate": 0,
+    "max_drawdown": 0,
+    "total_trades": 0
+  }
+]
