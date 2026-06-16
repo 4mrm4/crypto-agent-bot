@@ -496,8 +496,16 @@ class BacktestEngine:
 
     def _build_config(self, pairs: List[str], timerange: str) -> Dict[str, Any]:
         config_path = self.ft_userdata_dir / "config.json"
-        with open(config_path) as f:
-            config = json.load(f)
+        if config_path.exists():
+            with open(config_path) as f:
+                config = json.load(f)
+        else:
+            # Minimal default config for environments without ft_userdata (e.g. CI)
+            config = {
+                "exchange": {"name": "binance", "pair_whitelist": pairs},
+                "entry_pricing": {"price_side": "same", "use_order_book": False},
+                "exit_pricing": {"price_side": "same", "use_order_book": False},
+            }
 
         config["exchange"]["pair_whitelist"] = pairs
         config["timerange"] = timerange
