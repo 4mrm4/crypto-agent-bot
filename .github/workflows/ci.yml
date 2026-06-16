@@ -36,4 +36,4 @@ jobs:
         run: python -m pytest --tb=short -q
 
       - name: Verify imports
-        run: python -c "from config import settings; print(f'Config OK: {settings.LLM_MODEL}')"
+        run: python -c "from config import settings; print('Config OK: ' + settings.LLM_MODEL)"
