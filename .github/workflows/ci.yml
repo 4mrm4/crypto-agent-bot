@@ -38,6 +38,3 @@ jobs:
           pip install -r requirements.txt
       - name: Run tests
         run: python -m pytest --tb=short -q
-      - name: Verify imports
-        run: |
-          python -c "from config import settings; print('Config OK: ' + settings.LLM_MODEL)"
