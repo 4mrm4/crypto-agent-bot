@@ -20,12 +20,13 @@ Standby Mode (v11):
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
 
 import pandas as pd
 
 from config import settings
+import talib
 from data.fetcher import MarketDataFetcher
 from data.regime import MarketRegimeDetector, RegimeSnapshot
 from execution.live_executor import LiveExecutor
@@ -68,7 +69,7 @@ class RegimeTransitionTracker:
             transition = RegimeTransition(
                 from_regime=self._current_regime,
                 to_regime=regime,
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 confidence=confidence,
             )
             self._history.append(transition)
@@ -86,7 +87,7 @@ class RegimeTransitionTracker:
         if not self._history:
             return False
         last_transition = self._history[-1]
-        elapsed = datetime.utcnow() - last_transition.timestamp
+        elapsed = datetime.now(timezone.utc) - last_transition.timestamp
         return elapsed < self._cooldown
 
     @property
@@ -102,7 +103,7 @@ class RegimeTransitionTracker:
 
     def transition_count(self, window_hours: int = 24) -> int:
         """Count regime transitions in the last N hours. High counts indicate instability."""
-        cutoff = datetime.utcnow() - timedelta(hours=window_hours)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=window_hours)
         return sum(1 for t in self._history if t.timestamp >= cutoff)
 
     def effective_signal_floor(self, base_floor: float = 0.6) -> float:
@@ -126,7 +127,7 @@ class SignalResult:
     pair: str
     strategy_type: str
     regime: str
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class SignalScanner:
@@ -221,7 +222,7 @@ class SignalScanner:
                                     "confidence": signal_result.confidence,
                                     "strategy_type": signal_result.strategy_type,
                                     "regime": signal_result.regime,
-                                    "timestamp": datetime.utcnow().isoformat(),
+                                    "timestamp": datetime.now(timezone.utc).isoformat(),
                                 })
 
                             signal_floor = self._regime_tracker.effective_signal_floor(0.6)
@@ -321,7 +322,7 @@ class SignalScanner:
                         confidence = 0.60
 
             elif strategy_type == "rsi_oversold":
-                import talib
+
                 rsi = talib.RSI(close.values, timeperiod=int(params.get("rsi_period", 14)))
                 indicators["rsi"] = float(rsi[-1]) if len(rsi) > 0 else 50
 
@@ -333,7 +334,7 @@ class SignalScanner:
                     confidence = 0.65
 
             elif strategy_type == "bollinger_bands":
-                import talib
+
                 period = int(params.get("bb_period", 20))
                 upper, middle, lower = talib.BBANDS(close.values.astype(float), timeperiod=period, nbdevup=2, nbdevdn=2)
                 indicators["bb_upper"] = float(upper[-1]) if len(upper) > 0 else 0
@@ -347,7 +348,7 @@ class SignalScanner:
                     confidence = 0.60
 
             elif strategy_type == "mean_reversion":
-                import talib
+
                 rsi = talib.RSI(close.values, timeperiod=14)
                 period = int(params.get("bb_period", 20))
                 upper, middle, lower = talib.BBANDS(close.values.astype(float), timeperiod=period, nbdevup=2, nbdevdn=2)
@@ -359,7 +360,7 @@ class SignalScanner:
                     confidence = 0.75
 
             elif strategy_type == "momentum":
-                import talib
+
                 roc = talib.ROC(close.values, timeperiod=int(params.get("roc_period", 10)))
                 vol_sma = volume.rolling(20).mean()
                 indicators["roc"] = float(roc[-1]) if len(roc) > 0 else 0
@@ -446,7 +447,7 @@ class SignalScanner:
                     continue
             matched.append(s)
 
-        return matched or self._approved_strategies[:1]  # fallback to first
+        return matched  # only return regime-matched strategies
 
     async def _execute_signal(self, signal_result: SignalResult):
         """Convert a SignalResult to a TradeSignal and execute it."""
@@ -521,3 +522,24 @@ class SignalScanner:
     @property
     def standby_interval(self) -> int:
         return self._standby_interval
+
+    @property
+    def cycles_without_trade(self) -> int:
+        return self._cycles_without_trade
+
+    @property
+    def regime_tracker(self):
+        return self._regime_tracker
+
+    @property
+    def signal_count(self) -> int:
+        return len(self._signal_history)
+
+    def enter_standby(self):
+        """Put scanner into standby mode."""
+        self._standby_mode = True
+
+    def set_scan_interval(self, interval: int):
+        """Set the active scan interval in seconds."""
+        if interval > 0:
+            self._scan_interval = interval

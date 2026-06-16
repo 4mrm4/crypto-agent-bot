@@ -380,7 +380,8 @@ class ResearcherAgent(BaseAgent):
                 cd = data.get("community_data", {})
 
                 lines = [f"=== Asset Fundamentals: {asset_slug} ==="]
-                lines.append(f"Price: ${md.get('current_price', {}).get('usd', 'N/A'):,}")
+                price_val = md.get('current_price', {}).get('usd')
+                lines.append(f"Price: ${price_val:,.2f}" if isinstance(price_val, (int, float)) else "Price: N/A")
                 lines.append(f"Market Cap: ${md.get('market_cap', {}).get('usd', 0):,.0f}")
                 lines.append(f"24h Volume: ${md.get('total_volume', {}).get('usd', 0):,.0f}")
                 lines.append(f"24h Change: {md.get('price_change_percentage_24h', 0):.2f}%")

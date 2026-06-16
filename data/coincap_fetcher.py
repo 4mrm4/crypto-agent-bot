@@ -5,7 +5,7 @@ Only enabled when COINCAP_ENABLED=true and COINCAP_API_KEY is set.
 """
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 import httpx
@@ -28,7 +28,7 @@ class CoinCapPrice:
     volume_24h_usd: Optional[float] = None
     change_pct_24h: Optional[float] = None
     supply_circulating: Optional[float] = None
-    fetched_at: datetime = field(default_factory=datetime.utcnow)
+    fetched_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     source: str = "coincap"
 
 

@@ -48,6 +48,8 @@ class AnalystAgent(BaseAgent):
             """Fetch current spot price. Pass a symbol like 'BTC/USDT' or blank for default."""
             s = symbol.strip() or None
             price = self._fetcher.fetch_current_price(s)
+            if price is None:
+                return "Current price: unavailable"
             return f"Current price: ${price:,.2f}"
 
         def sentiment_fn(_dummy: str = "") -> str:

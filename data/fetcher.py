@@ -124,7 +124,7 @@ def symbol_to_coincap_id(symbol: str) -> Optional[str]:
         return SYMBOL_TO_COINCAP.get(symbol)
     except ImportError:
         pass
-    return symbol.replace("/", "").lower().replace("usdt", "")
+    return symbol.split("/")[0].lower() if "/" in symbol else symbol.lower()
 
 
 class MultiExchangeFetcher:

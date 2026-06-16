@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -90,7 +90,7 @@ class RunResponse(BaseModel):
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/api/data/health")
@@ -222,6 +222,15 @@ async def autonomous_start():
     if _autonomous_loop_ref and _autonomous_loop_ref.state.is_running:
         return {"status": "already_running"}
 
+    def _build_autonomous_loop(orchestrator, event_bus):
+        vs = VectorStore(); et = ExperimentTracker(); rd = MarketRegimeDetector()
+        return AutonomousResearchLoop(
+            orchestrator=orchestrator, regime_detector=rd,
+            experiment_tracker=et, vector_store=vs,
+            interval_minutes=settings.AUTONOMOUS_INTERVAL_MINUTES,
+            event_bus=event_bus,
+            iterations_file="./workspace/iteration_results.json")
+
     async def _build_and_start():
         global _autonomous_loop_ref
         try:
@@ -231,12 +240,11 @@ async def autonomous_start():
             if event_bus:
                 cb = event_bus.make_callback()
                 orchestrator.event_callback = with_token_tracking(cb)
-            vs = VectorStore(); et = ExperimentTracker(); rd = MarketRegimeDetector()
-            loop = AutonomousResearchLoop(orchestrator=orchestrator, regime_detector=rd, experiment_tracker=et, vector_store=vs, interval_minutes=settings.AUTONOMOUS_INTERVAL_MINUTES, event_bus=getattr(app.state, "event_bus", None), iterations_file="./workspace/iteration_results.json")
+            loop = _build_autonomous_loop(orchestrator, getattr(app.state, "event_bus", None))
             _autonomous_loop_ref = loop
             _startup_tasks["autonomous_loop"] = {"status": "running", "error": None}
             asyncio.create_task(loop.run_forever())
-            _save_autonomous_state(enabled=True, started_at=datetime.utcnow().isoformat())
+            _save_autonomous_state(enabled=True, started_at=datetime.now(timezone.utc).isoformat())
             logger.info("Autonomous loop started via API")
         except Exception as exc:
             _startup_tasks["autonomous_loop"] = {"status": "failed", "error": str(exc)}
@@ -510,12 +518,12 @@ async def scanner_status():
         "mode": "standby" if scanner.is_standby else "active",
         "active_interval": scanner.active_interval,
         "standby_interval": scanner.standby_interval,
-        "cycles_without_trade": scanner._cycles_without_trade,
-        "current_regime": scanner._regime_tracker.current_regime,
-        "regime_confidence": scanner._regime_tracker.current_confidence,
-        "signals_fired": len(scanner._signal_history),
-        "in_cooldown": scanner._regime_tracker.is_in_cooldown(),
-        "transition_count_24h": scanner._regime_tracker.transition_count(24),
+        "cycles_without_trade": scanner.cycles_without_trade,
+        "current_regime": scanner.regime_tracker.current_regime,
+        "regime_confidence": scanner.regime_tracker.current_confidence,
+        "signals_fired": scanner.signal_count,
+        "in_cooldown": scanner.regime_tracker.is_in_cooldown(),
+        "transition_count_24h": scanner.regime_tracker.transition_count(24),
     }
 
 
@@ -532,11 +540,11 @@ async def scanner_control(body: ScannerControlRequest):
         scanner.wake()
         logger.info("Scanner woken via API")
     elif body.mode == "standby" and not scanner.is_standby:
-        scanner._standby_mode = True
+        scanner.enter_standby()
         logger.info("Scanner set to standby via API")
 
     if body.scan_interval is not None and body.scan_interval > 0:
-        scanner._scan_interval = body.scan_interval
+        scanner.set_scan_interval(body.scan_interval)
         logger.info("Scanner scan interval set to %ds via API", body.scan_interval)
 
     current_mode = "standby" if scanner.is_standby else "active"
@@ -565,7 +573,7 @@ async def ws_run_events(websocket: WebSocket, run_id: str):
             break
         await asyncio.sleep(0.5)
     if not bus:
-        await websocket.send_json({"type": "error", "payload": {"message": "Run not found"}, "timestamp": datetime.utcnow().isoformat()})
+        await websocket.send_json({"type": "error", "payload": {"message": "Run not found"}, "timestamp": datetime.now(timezone.utc).isoformat()})
         await websocket.close()
         return
 
@@ -590,7 +598,7 @@ async def ws_autonomous_events(websocket: WebSocket):
     _WS_DEBUG_LIMIT = 5
     event_bus = getattr(app.state, "event_bus", None)
     if not event_bus:
-        await websocket.send_json({"type": "error", "payload": {"message": "No autonomous event bus"}, "timestamp": datetime.utcnow().isoformat()})
+        await websocket.send_json({"type": "error", "payload": {"message": "No autonomous event bus"}, "timestamp": datetime.now(timezone.utc).isoformat()})
         await websocket.close()
         return
 
@@ -724,8 +732,7 @@ async def startup():
                 if event_bus:
                     cb = event_bus.make_callback()
                     orchestrator.event_callback = with_token_tracking(cb)
-                vs = VectorStore(); et = ExperimentTracker(); rd = MarketRegimeDetector()
-                loop = AutonomousResearchLoop(orchestrator=orchestrator, regime_detector=rd, experiment_tracker=et, vector_store=vs, interval_minutes=settings.AUTONOMOUS_INTERVAL_MINUTES, event_bus=event_bus, iterations_file="./workspace/iteration_results.json")
+                loop = _build_autonomous_loop(orchestrator, event_bus)
                 _autonomous_loop_ref = loop
                 _startup_tasks["autonomous_loop"] = {"status": "running", "error": None}
                 asyncio.create_task(loop.run_forever())

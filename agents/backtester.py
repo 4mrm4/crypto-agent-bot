@@ -70,32 +70,48 @@ class BacktesterAgent(BaseAgent):
             m = re.search(r'strategy_type[=:]\s*(\w+)', stripped)
             if m:
                 strategy_type = m.group(1)
-                params_match = re.search(r'params=(\{.*\})', stripped, re.DOTALL)
+                params_match = re.search(r'params=(\{)', stripped)
                 strat_params: Dict[str, Any] = {}
                 if params_match:
+                    # Extract balanced braces to handle nested JSON correctly
+                    start = params_match.start(1)
+                    depth = 0
+                    param_str = ""
+                    for i in range(start, len(stripped)):
+                        if stripped[i] == '{':
+                            depth += 1
+                        elif stripped[i] == '}':
+                            depth -= 1
+                            if depth == 0:
+                                param_str = stripped[start:i + 1]
+                                break
                     try:
-                        strat_params = json.loads(params_match.group(1))
+                        strat_params = json.loads(param_str)
                     except (json.JSONDecodeError, ValueError):
                         pass
 
                 global_cfg = getattr(self, "_backtest_config", {})
-                timerange = strat_params.pop("timerange",
+                timerange = strat_params.get("timerange",
                                              global_cfg.get("timerange", "20210101-"))
-                pairs = strat_params.pop("pairs", global_cfg.get("pairs", None))
+                pairs = strat_params.get("pairs", global_cfg.get("pairs", None))
                 strat_params.setdefault("timeframe",
                                         global_cfg.get("timeframe", settings.TIMEFRAME))
 
-                try:
-                    result = self._engine.run_backtest(
-                        strat_params,
-                        strategy_type=strategy_type,
-                        timerange=timerange,
-                        pairs=pairs,
-                    )
-                except Exception as exc:
-                    logger.error("Backtest failed: %s", exc)
-                    return {"output": f"Error running backtest: {exc}",
-                            "intermediate_steps": []}
+                for attempt in range(3):
+                    try:
+                        result = self._engine.run_backtest(
+                            strat_params,
+                            strategy_type=strategy_type,
+                            timerange=timerange,
+                            pairs=pairs,
+                        )
+                        break
+                    except Exception as exc:
+                        if attempt == 2:
+                            logger.error("Backtest failed after 3 attempts: %s", exc)
+                            return {"output": f"Error running backtest: {exc}",
+                                    "intermediate_steps": []}
+                        logger.warning("Backtest attempt %d failed: %s, retrying...", attempt + 1, exc)
 
                 # Evaluate and store in iteration history
                 verdict, reason = self._evaluate_metrics(result)

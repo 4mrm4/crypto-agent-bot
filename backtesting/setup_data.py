@@ -2,7 +2,7 @@
 import logging
 import subprocess
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from config import settings
 
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_PAIRS = ["BTC/USDT", "ETH/USDT"]
 DEFAULT_TIMEFRAMES = ["1h", "4h"]
 # 2 years back from today
-DEFAULT_START = (datetime.utcnow() - timedelta(days=730)).strftime("%Y%m%d")
+DEFAULT_START = (datetime.now(timezone.utc) - timedelta(days=730)).strftime("%Y%m%d")
 
 
 def ensure_data_available(
@@ -72,11 +72,11 @@ def ensure_data_available(
     logger.info("Historical data not found or insufficient — downloading...")
     logger.info("Pairs: %s, Timeframes: %s, From: %s", pairs, timeframes, start_date)
 
-    # Find freqtrade
-    candidates = [
-        Path(ft_userdata_dir).parent / "venv" / "Scripts" / "freqtrade.exe",
-        Path(ft_userdata_dir).parent / "venv" / "Scripts" / "freqtrade",
-    ]
+    # Find freqtrade — search in venv and system PATH
+    import sys
+    candidates = [Path(ft_userdata_dir).parent / "venv" / "Scripts" / "freqtrade.exe"]
+    if sys.platform != "win32":
+        candidates.append(Path(ft_userdata_dir).parent / "venv" / "bin" / "freqtrade")
     ft_cmd = "freqtrade"
     for c in candidates:
         if c.exists():

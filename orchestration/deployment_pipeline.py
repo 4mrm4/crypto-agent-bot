@@ -20,7 +20,7 @@ Steps 1-9 are automated. Steps 10-11 require human action.
 import json
 import logging
 from dataclasses import dataclass, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from backtesting.data_split import DATA_SPLIT
@@ -116,7 +116,7 @@ class DeploymentPipeline:
         engine = self._engine or BacktestEngine()
         vs = self._vector_store or VectorStore()
 
-        strategy_id = f"{strategy_type}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        strategy_id = f"{strategy_type}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
 
         # ── Gate 1: Blind search space ──
         logger.info("Gate 1/9: Blind parameter search space generation...")
@@ -130,7 +130,7 @@ class DeploymentPipeline:
                     regime=regime, passed_gates=0, total_gates=11,
                     failed_at=1, failed_at_name=GATE_NAMES[0],
                     reason="No parameter variants generated",
-                    completed_at=datetime.utcnow().isoformat(),
+                    completed_at=datetime.now(timezone.utc).isoformat(),
                 )
         except Exception as exc:
             return PipelineResult(
@@ -138,7 +138,7 @@ class DeploymentPipeline:
                 regime=regime, passed_gates=0, total_gates=11,
                 failed_at=1, failed_at_name=GATE_NAMES[0],
                 reason=f"Gate 1 exception: {exc}",
-                completed_at=datetime.utcnow().isoformat(),
+                completed_at=datetime.now(timezone.utc).isoformat(),
             )
 
         # ── Gate 2: Batch backtest (blind) ──
@@ -153,7 +153,7 @@ class DeploymentPipeline:
                     regime=regime, passed_gates=1, total_gates=11,
                     failed_at=2, failed_at_name=GATE_NAMES[1],
                     reason="All batch backtests failed",
-                    completed_at=datetime.utcnow().isoformat(),
+                    completed_at=datetime.now(timezone.utc).isoformat(),
                 )
         except Exception as exc:
             return PipelineResult(
@@ -161,7 +161,7 @@ class DeploymentPipeline:
                 regime=regime, passed_gates=1, total_gates=11,
                 failed_at=2, failed_at_name=GATE_NAMES[1],
                 reason=f"Gate 2 exception: {exc}",
-                completed_at=datetime.utcnow().isoformat(),
+                completed_at=datetime.now(timezone.utc).isoformat(),
             )
 
         # Select best variant quantitatively (no LLM)
@@ -172,7 +172,7 @@ class DeploymentPipeline:
                 regime=regime, passed_gates=2, total_gates=11,
                 failed_at=3, failed_at_name=GATE_NAMES[1],
                 reason="No viable variant found in batch search",
-                completed_at=datetime.utcnow().isoformat(),
+                completed_at=datetime.now(timezone.utc).isoformat(),
             )
         best_params = best["params"]
         best_metrics = best["metrics"]
@@ -193,7 +193,7 @@ class DeploymentPipeline:
                     regime=regime, passed_gates=2, total_gates=11,
                     failed_at=3, failed_at_name=GATE_NAMES[2],
                     reason=f"Synthetic sanity check failed: {sanity.interpretation}",
-                    completed_at=datetime.utcnow().isoformat(),
+                    completed_at=datetime.now(timezone.utc).isoformat(),
                 )
         except Exception as exc:
             # Synthetic check is not critical — log and continue
@@ -241,7 +241,7 @@ class DeploymentPipeline:
                 regime=regime, passed_gates=2, total_gates=11,
                 failed_at=4, failed_at_name=GATE_NAMES[3],
                 reason=f"Research backtest exception: {exc}",
-                completed_at=datetime.utcnow().isoformat(),
+                completed_at=datetime.now(timezone.utc).isoformat(),
             )
 
         # ── Gate 5: Convergence check ──
@@ -270,7 +270,7 @@ class DeploymentPipeline:
                     f"Sharpe={bt_sharpe:.2f}(need 1.2), WR={bt_win_rate:.2%}(need 48%), "
                     f"DD={bt_dd:.2%}(need <=10%), Trades={bt_trades}(need 30)"
                 ),
-                completed_at=datetime.utcnow().isoformat(),
+                completed_at=datetime.now(timezone.utc).isoformat(),
             )
 
         # ── Gate 6: CPCV (Combinatorial Purged Cross-Validation) ──
@@ -302,7 +302,7 @@ class DeploymentPipeline:
                         regime=regime, passed_gates=5, total_gates=11,
                         failed_at=6, failed_at_name=GATE_NAMES[5],
                         reason=f"CPCV validation failed: {cpcv_result.reason}",
-                        completed_at=datetime.utcnow().isoformat(),
+                        completed_at=datetime.now(timezone.utc).isoformat(),
                     )
                 logger.info(
                     "CPCV passed: median=%.2f Q1=%.2f positive=%.0f%% (%d/%d paths)",
@@ -351,7 +351,7 @@ class DeploymentPipeline:
                     regime=regime, passed_gates=7, total_gates=11,
                     failed_at=8, failed_at_name=GATE_NAMES[7],
                     reason=f"Pre-trade risk: Kelly returned 0 position ({kelly.get('rationale', '')})",
-                    completed_at=datetime.utcnow().isoformat(),
+                    completed_at=datetime.now(timezone.utc).isoformat(),
                 )
         except Exception as exc:
             return PipelineResult(
@@ -359,7 +359,7 @@ class DeploymentPipeline:
                 regime=regime, passed_gates=7, total_gates=11,
                 failed_at=8, failed_at_name=GATE_NAMES[7],
                 reason=f"Risk approval exception: {exc}",
-                completed_at=datetime.utcnow().isoformat(),
+                completed_at=datetime.now(timezone.utc).isoformat(),
             )
 
         # ── Gate 9: Tag as pending_oos ──
@@ -385,7 +385,7 @@ class DeploymentPipeline:
                 regime=regime, passed_gates=8, total_gates=11,
                 failed_at=9, failed_at_name=GATE_NAMES[8],
                 reason=f"ChromaDB tagging exception: {exc}",
-                completed_at=datetime.utcnow().isoformat(),
+                completed_at=datetime.now(timezone.utc).isoformat(),
             )
 
         # All automated gates passed!
@@ -398,7 +398,7 @@ class DeploymentPipeline:
             failed_at=None,
             failed_at_name="",
             reason="All 9 automated gates passed. Awaiting OOS validation.",
-            completed_at=datetime.utcnow().isoformat(),
+            completed_at=datetime.now(timezone.utc).isoformat(),
         )
 
         self._log_result(result)

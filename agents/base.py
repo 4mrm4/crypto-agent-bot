@@ -85,8 +85,6 @@ class BaseAgent:
                     )
                 else:
                     output = str(raw_content)
-                # Sanitise non-ASCII characters for Windows console
-                output = output.encode("ascii", errors="replace").decode("ascii")
                 steps = [
                     {"thought": m.content, "tool": m.name if hasattr(m, "name") else ""}
                     for m in result.get("messages", [])

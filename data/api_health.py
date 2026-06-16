@@ -1,7 +1,7 @@
 """Shared health tracker for all external API integrations."""
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -42,14 +42,14 @@ class APIHealthTracker:
     def record_success(self, source: str):
         """Record a successful API call — resets consecutive failures."""
         health = self._ensure(source)
-        health.last_success = datetime.utcnow()
+        health.last_success = datetime.now(timezone.utc)
         health.consecutive_failures = 0
         logger.debug("APIHealth[%s]: success recorded", source)
 
     def record_failure(self, source: str, error: str):
         """Record an API failure — increments consecutive failures."""
         health = self._ensure(source)
-        health.last_failure = datetime.utcnow()
+        health.last_failure = datetime.now(timezone.utc)
         health.consecutive_failures += 1
         logger.warning(
             "APIHealth[%s]: failure #%d: %s",

@@ -81,6 +81,7 @@ class PaperTrader:
                     t.status = "closed"
                 self.position = None
                 self.entry_price = None
+                self.position_size = 0
 
             self.equity_curve.append({
                 "timestamp": candle.name, "balance": self.balance, "signal": signal,

@@ -7,7 +7,7 @@ hypotheses, and agent outputs with a beautiful console interface.
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -45,7 +45,7 @@ class VibeWorkspace:
         entry = {
             "id": goal_id,
             "description": description,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "status": "running",
             "result": None,
             "strategies": [],

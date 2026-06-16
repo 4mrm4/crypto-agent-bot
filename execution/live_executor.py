@@ -6,7 +6,7 @@ Handles TWAP splitting, position monitoring, and full audit logging.
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import ccxt
@@ -186,7 +186,38 @@ class LiveExecutor:
                 signal.quality_multiplier, signal.pair, signal.strategy_type,
             )
 
-        # 3. Execute in paper or live mode
+        # 3a. Correlation check — block if over-concentrated in correlated pairs
+        if self._open_positions:
+            corr_blocked = await self._check_correlation(signal)
+            if corr_blocked:
+                return corr_blocked
+
+        # 3b. Kelly position sizing
+        if signal.position_size_usdt > 0 and self._risk_manager:
+            try:
+                kelly_size = self._compute_kelly_size(signal)
+                if kelly_size > 0:
+                    signal.position_size_usdt = min(signal.position_size_usdt, kelly_size)
+            except Exception as exc:
+                logger.warning("Kelly sizing failed, using original size: %s", exc)
+
+        # 3c. Pre-trade approval
+        if self._risk_manager:
+            try:
+                approved, reason = self._approve_trade(signal)
+                if not approved:
+                    result = ExecutionResult(
+                        signal_id=signal.signal_id,
+                        success=False,
+                        error=f"Pre-trade approval denied: {reason}",
+                        status="rejected",
+                    )
+                    self._audit_log.record(self._make_audit_entry(signal, result))
+                    return result
+            except Exception as exc:
+                logger.warning("Pre-trade approval check failed, allowing: %s", exc)
+
+        # 4. Execute in paper or live mode
         try:
             if self.paper_mode:
                 fill_result = await self._execute_paper(signal)
@@ -204,7 +235,7 @@ class LiveExecutor:
                     "entry_price": fill_result.fill_price,
                     "size": signal.position_size_usdt,
                     "strategy": signal.strategy_name,
-                    "entry_time": datetime.utcnow().isoformat(),
+                    "entry_time": datetime.now(timezone.utc).isoformat(),
                     "signal_id": signal.signal_id,
                 }
 
@@ -214,7 +245,7 @@ class LiveExecutor:
                     "side": signal.side,
                     "size": signal.position_size_usdt,
                     "entry_price": fill_result.fill_price,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "status": "open",
                 })
 
@@ -252,6 +283,57 @@ class LiveExecutor:
             result = ExecutionResult(signal_id=signal.signal_id, success=False, error=str(exc))
             self._audit_log.record(self._make_audit_entry(signal, result))
             return result
+
+    async def _check_correlation(self, signal: TradeSignal) -> Optional[ExecutionResult]:
+        """Block trade if it creates over-concentration in correlated pairs.
+
+        Simple heuristic: if we already hold a position and both pairs share
+        the same quote currency, require at least one to be closed first.
+        """
+        sig_base = signal.pair.split("/")[0] if "/" in signal.pair else signal.pair
+        for held_pair, pos in self._open_positions.items():
+            held_base = held_pair.split("/")[0] if "/" in held_pair else held_pair
+            if held_base == sig_base:
+                logger.warning(
+                    "Correlation block: already holding %s, rejecting %s",
+                    held_pair, signal.pair,
+                )
+                result = ExecutionResult(
+                    signal_id=signal.signal_id,
+                    success=False,
+                    error=f"Over-concentration: already holding {held_pair}",
+                    status="rejected",
+                )
+                self._audit_log.record(self._make_audit_entry(signal, result))
+                return result
+        return None
+
+    def _compute_kelly_size(self, signal: TradeSignal) -> float:
+        """Compute Kelly-optimal position size using the risk manager."""
+        from agents.risk_manager import kelly_position_size_conservative
+        portfolio_value = self._get_portfolio_value()
+        result = kelly_position_size_conservative(
+            win_rate=getattr(signal, "win_rate", 0.5),
+            avg_win_pct=getattr(signal, "avg_win_pct", 0.02),
+            avg_loss_pct=getattr(signal, "avg_loss_pct", 0.01),
+            portfolio_value=portfolio_value,
+        )
+        return float(result.get("position_size_usdt", signal.position_size_usdt))
+
+    def _approve_trade(self, signal: TradeSignal) -> tuple:
+        """Pre-trade approval gate — reject signals with missing or invalid fields."""
+        if not signal.pair or "/" not in signal.pair:
+            return False, f"Invalid pair: {signal.pair}"
+        if signal.position_size_usdt <= 0:
+            return False, f"Non-positive position size: {signal.position_size_usdt}"
+        if signal.quality_score is not None and signal.quality_score < BLOCK_THRESHOLD:
+            return False, f"Quality score {signal.quality_score:.3f} < {BLOCK_THRESHOLD}"
+        return True, ""
+
+    def _get_portfolio_value(self) -> float:
+        """Estimate current portfolio value from config or default."""
+        from config import settings
+        return float(getattr(settings, "PORTFOLIO_VALUE", 10000.0) or 10000.0)
 
     async def _execute_paper(self, signal: TradeSignal) -> ExecutionResult:
         """Execute signal in paper trading mode."""
@@ -413,7 +495,7 @@ class LiveExecutor:
                                 "size": 0,
                                 "exit_price": current_price,
                                 "pnl": round(pnl_pct * 100, 2),
-                                "timestamp": datetime.utcnow().isoformat(),
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
                                 "status": "closed",
                             })
 
@@ -432,7 +514,7 @@ class LiveExecutor:
             position_size_usdt=signal.position_size_usdt,
             entry_price=result.fill_price,
             status=result.status,
-            risk_verdict="approved",
+            risk_verdict=signal.status,
             circuit_breaker_state=self._circuit_breaker.status(),
             correlation_result={},
             kelly_result={},

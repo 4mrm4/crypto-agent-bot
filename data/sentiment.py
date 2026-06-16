@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
@@ -32,7 +32,7 @@ class CombinedSentiment:
     santiment_dev_activity: Optional[float] = None
     overall_score: float = 0.5  # 0.0–1.0, default neutral
     signal_count: int = 0
-    fetched_at: datetime = field(default_factory=datetime.utcnow)
+    fetched_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class SentimentFetcher:
@@ -156,15 +156,9 @@ class SentimentFetcher:
 
     def _fetch_santiment(self, slug: str = "bitcoin") -> Optional[object]:
         """Fetch Santiment signal synchronously (wraps async)."""
+        from utils.async_utils import run_async_in_sync
         try:
-            loop = asyncio.get_running_loop()
-            future = asyncio.run_coroutine_threadsafe(
-                self._fetch_santiment_async(slug), loop
-            )
-            return future.result(timeout=30)
-        except RuntimeError:
-            # No running loop — use asyncio.run()
-            return asyncio.run(self._fetch_santiment_async(slug))
+            return run_async_in_sync(self._fetch_santiment_async(slug))
         except Exception as exc:
             logger.warning("Santiment fetch failed: %s", exc)
             return None
@@ -251,12 +245,5 @@ class SentimentFetcher:
         self, slug: str = "bitcoin", currency: str = "BTC"
     ) -> CombinedSentiment:
         """Synchronous wrapper for get_combined_sentiment."""
-        try:
-            loop = asyncio.get_running_loop()
-            future = asyncio.run_coroutine_threadsafe(
-                self.get_combined_sentiment(slug, currency), loop
-            )
-            return future.result(timeout=30)
-        except RuntimeError:
-            # No running loop — use asyncio.run()
-            return asyncio.run(self.get_combined_sentiment(slug, currency))
+        from utils.async_utils import run_async_in_sync
+        return run_async_in_sync(self.get_combined_sentiment(slug, currency))

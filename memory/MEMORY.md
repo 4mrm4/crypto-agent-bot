@@ -1,0 +1,2 @@
+- [datetime UTC fix pitfalls](datetime-utcnow-fix-lessons.md) — `from datetime import datetime` breaks `datetime.UTC`; use `from datetime import datetime, timezone` + `timezone.utc` instead
+- [UI blank page Babel issue](ui-babel-standalone-blank-page.md) — Web UI renders empty because Babel standalone auto-transform doesn't fire reliably

@@ -8,7 +8,7 @@ Tests create a fresh instance per test case — no global state leakage.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -40,8 +40,8 @@ class CircuitBreakerState:
     def halt(self, reason: str, duration_minutes: int = 60):
         self._halted = True
         self._halt_reason = reason
-        self._halted_at = datetime.utcnow()
-        self._resume_after = datetime.utcnow() + timedelta(minutes=duration_minutes)
+        self._halted_at = datetime.now(timezone.utc)
+        self._resume_after = datetime.now(timezone.utc) + timedelta(minutes=duration_minutes)
         logger.warning("CIRCUIT BREAKER HALTED: %s (resume after %s)", reason, self._resume_after)
 
     def clear(self):
@@ -52,7 +52,7 @@ class CircuitBreakerState:
         logger.info("Circuit breaker cleared — trading resumed.")
 
     def is_halted(self) -> bool:
-        if self._halted and self._resume_after and datetime.utcnow() > self._resume_after:
+        if self._halted and self._resume_after and datetime.now(timezone.utc) > self._resume_after:
             self.clear()
         return self._halted
 

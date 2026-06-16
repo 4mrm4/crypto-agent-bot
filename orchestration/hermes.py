@@ -11,7 +11,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -166,7 +166,7 @@ class HermesOrchestrator:
                     self._state_broker.set_system_status({
                         "running": True,
                         "mode": self.execution_mode if hasattr(self, 'execution_mode') else "research",
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     })
                 except Exception as exc:
                     logger.warning("StateBroker heartbeat failed: %s", exc)
@@ -524,9 +524,7 @@ class HermesOrchestrator:
         try:
             result = temp_agent.run(prompt)
             hypothesis = result.get("output", "")
-            # Truncate and sanitize
-            safe = "".join(c if ord(c) < 128 else "?" for c in hypothesis)
-            return safe[:800]
+            return hypothesis[:800]
         except Exception as exc:
             logger.warning("Hypothesis generation failed: %s", exc)
             return f"Test {goal} with standard indicators and parameters."
@@ -561,8 +559,7 @@ class HermesOrchestrator:
         try:
             result = temp_agent.run(prompt)
             hypothesis = result.get("output", "")
-            safe = "".join(c if ord(c) < 128 else "?" for c in hypothesis)
-            return safe[:800]
+            return hypothesis[:800]
         except Exception as exc:
             logger.warning("Hypothesis mutation failed: %s", exc)
             return f"Iteration {iter_num}: refine strategy parameters for {goal}."
@@ -593,9 +590,8 @@ class HermesOrchestrator:
             )
             result = analyst.run(prompt)
             critique = result.get("output", "")
-            safe = "".join(c if ord(c) < 128 else "?" for c in critique)
-            self._emit("critique", critique=safe, hypothesis=hypothesis)
-            return safe[:800]
+            self._emit("critique", critique=critique, hypothesis=hypothesis)
+            return critique[:800]
         except Exception as exc:
             logger.warning("Critique failed: %s", exc)
             return f"Critique unavailable: {exc}"
@@ -778,4 +774,4 @@ class HermesOrchestrator:
 
     def run_research_goal(self, goal: str, max_cycles: int = 5) -> Dict[str, Any]:
         """Legacy single-run research (no outer loop)."""
-        return self._run_research_goal(goal, max_cycles=max_cycles)
+        return asyncio.run(self._run_research_goal(goal, max_cycles=max_cycles))

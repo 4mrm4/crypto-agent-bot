@@ -9,7 +9,7 @@ Gracefully degrades: returns None on any error, never raises.
 """
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 import httpx
@@ -35,7 +35,7 @@ class MessariMetrics:
     developer_activity_30d: Optional[float] = None
     token_supply_circulating: Optional[float] = None
     token_supply_total: Optional[float] = None
-    fetched_at: datetime = field(default_factory=datetime.utcnow)
+    fetched_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     source: str = "messari"
 
 

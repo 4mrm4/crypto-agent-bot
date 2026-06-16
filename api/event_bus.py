@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Callable, Dict, Optional
 
 from agents.token_tracker import TokenTracker
@@ -19,7 +19,7 @@ class EventBus:
         event = {
             "type": event_type,
             "payload": payload,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         try:
             self._queue.put_nowait(event)
@@ -39,7 +39,7 @@ class EventBus:
                 yield event
             except asyncio.TimeoutError:
                 # Send heartbeat to keep connection alive
-                yield {"type": "heartbeat", "payload": {}, "timestamp": datetime.utcnow().isoformat()}
+                yield {"type": "heartbeat", "payload": {}, "timestamp": datetime.now(timezone.utc).isoformat()}
 
     def make_callback(self) -> Callable[[str, Dict[str, Any]], None]:
         """Return a synchronous callback for use in orchestrator threads.
@@ -64,7 +64,7 @@ class EventBus:
                     event = {
                         "type": event_type,
                         "payload": payload,
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
                     try:
                         self._queue.put_nowait(event)

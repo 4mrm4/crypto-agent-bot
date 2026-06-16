@@ -12,7 +12,7 @@ Supports:
 
 import logging
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -68,7 +68,7 @@ class PortfolioVaR:
         arr = np.array(prices, dtype=np.float64)
         if len(arr) >= MIN_HISTORICAL_DAYS:
             self._price_cache[symbol] = arr
-            self._cache_timestamps[symbol] = datetime.utcnow()
+            self._cache_timestamps[symbol] = datetime.now(timezone.utc)
 
     def clear_cache(self):
         """Clear all cached price data."""

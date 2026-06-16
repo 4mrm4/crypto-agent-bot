@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🤖</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.23.0/babel.min.js"></script>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script>
@@ -46,7 +46,7 @@ body{background:#060A12;color:#E2EBF5;font-family:'Exo 2',sans-serif;font-size:1
 </head>
 <body>
 <div id="root"></div>
-<script type="text/babel" data-type="script">
+<script type="text/babel">
 const {useState,useEffect,useRef,useMemo,useCallback} = React;
 
 // ═══ THEME ═══
@@ -1021,6 +1021,40 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+<script>
+// Fallback: wait for Babel + React, then manually compile and execute JSX
+(function retryBabel(attempt) {
+  var maxAttempts = 60;
+  var root = document.getElementById("root");
+  if (attempt > maxAttempts) {
+    console.error("Babel fallback exhausted after " + maxAttempts + " attempts — page may be blank");
+    return;
+  }
+  if (root && root.innerHTML.trim() !== "") {
+    return; // already rendered
+  }
+  if (typeof Babel === "undefined" || typeof React === "undefined" || typeof ReactDOM === "undefined") {
+    setTimeout(function() { retryBabel(attempt + 1); }, 500);
+    return;
+  }
+  var scriptEl = document.querySelector('script[type="text/babel"]');
+  if (!scriptEl) {
+    console.error("Babel fallback: no text/babel script found");
+    return;
+  }
+  console.warn("Babel auto-transform didn't run — compiling manually (attempt " + attempt + ")");
+  try {
+    var code = Babel.transform(scriptEl.textContent, { presets: ["react"] }).code;
+    var s = document.createElement("script");
+    s.textContent = code;
+    // Remove text/babel source so auto-transform won't double-execute later
+    scriptEl.parentNode.removeChild(scriptEl);
+    document.body.appendChild(s);
+  } catch(e) {
+    console.error("Babel manual compile failed:", e);
+  }
+})(1);
 </script>
 </body>
 </html>

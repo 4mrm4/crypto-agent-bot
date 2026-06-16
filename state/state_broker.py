@@ -20,6 +20,21 @@ from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+
+class _NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        try:
+            import numpy as np
+            if isinstance(obj, (np.integer,)):
+                return int(obj)
+            if isinstance(obj, (np.floating,)):
+                return float(obj)
+            if isinstance(obj, (np.bool_,)):
+                return bool(obj)
+        except ImportError:
+            pass
+        return super().default(obj)
+
 # ── Key namespaces ──
 KEY_POSITION = "broker:position:{}"
 KEY_SIGNAL = "broker:signal:{}"
@@ -97,12 +112,12 @@ class StateBroker:
         self._store[key] = (value, expiry)
         if self._redis and ttl:
             try:
-                await self._redis.setex(key, ttl, json.dumps(value))
+                await self._redis.setex(key, ttl, json.dumps(value, cls=_NumpyEncoder))
             except Exception:
                 pass
         elif self._redis:
             try:
-                await self._redis.set(key, json.dumps(value))
+                await self._redis.set(key, json.dumps(value, cls=_NumpyEncoder))
             except Exception:
                 pass
 

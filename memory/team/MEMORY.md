@@ -1,0 +1,10 @@
+- [CI environment constraints](ci-environment-constraints.md) — CI lacks exchange APIs, ft_userdata, and live-trading artifacts; source should provide graceful fallbacks
+- [Numpy-safe JSON serialization](numpy-safe-json-serialization.md) — All 8 HIGH numpy-JSON sites fixed; _NumpyEncoder class duplicated across 4 files — extract to shared util
+- [Deprecated datetime.utcnow()](deprecated-datetime-utcnow.md) — Use datetime.now(datetime.UTC) instead of deprecated utcnow(); ~20 sites across 7 files
+- [Code audit completed, HIGH fixed](code-audit-in-progress.md) — 76/76 files reviewed, 89 issues; all 12 HIGH fixed 2026-06-16, 22 MEDIUM + 55 LOW remain
+- [Graph report labels reliable](graph-report-labels-reliable.md) — GRAPH_REPORT.md community labels (Bugs, Critical Bugs, etc.) reliably flag files with real issues
+- [Conflicting regime maps](conflicting-regime-maps.md) — Reconciled: get_best_strategy_types() now delegates to REGIME_STRATEGY_MAP as single source of truth
+- [Kelly code duplication](kelly-code-duplication.md) — Kelly sizing deduplicated via shared _kelly_core(); all four variants now delegate
+- [Audit report location](audit-report-location.md) — Complete audit at project root audit_report.md (89 issues, line numbers, severity, fixes)
+- [Subprocess TimeoutExpired uncaught](subprocess-timeout-uncaught.md) — subprocess.run with timeout must catch TimeoutExpired; 2 unguarded sites in engine.py
+- [risk_manager import order](risk-manager-import-order.md) — PositionSizingTier enum must be defined before _kelly_core() to avoid NameError

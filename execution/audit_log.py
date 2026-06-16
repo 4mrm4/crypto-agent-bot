@@ -7,7 +7,7 @@ Never deleted. Used for strategy decay detection and performance analysis.
 import json
 import logging
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -51,7 +51,7 @@ class AuditEntry:
     pnl_pct: Optional[float] = None
     slippage_pct: Optional[float] = None
     error: Optional[str] = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> dict:
         return {k: (v.isoformat() if isinstance(v, datetime) else v) for k, v in asdict(self).items()}
@@ -77,8 +77,8 @@ class AuditLog:
                     try:
                         data = json.loads(line.strip())
                         self._entries.append(AuditEntry(**data))
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Audit log: skipping corrupt line: %s", exc)
 
     def record(self, entry: AuditEntry):
         """Append an entry to the log (memory + disk + SQLite)."""
@@ -124,7 +124,7 @@ class AuditLog:
         """Compute rolling 30-day performance metrics for a strategy."""
         entries = self.query_by_strategy(strategy_name)
         # Filter to last N days
-        cutoff = datetime.utcnow().timestamp() - days * 86400
+        cutoff = datetime.now(timezone.utc).timestamp() - days * 86400
         recent = [e for e in entries if hasattr(e, 'timestamp') and
                   isinstance(e.timestamp, datetime) and
                   e.timestamp.timestamp() > cutoff]

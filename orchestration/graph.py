@@ -322,17 +322,25 @@ def _extract_child_tasks(parent: "Task", board: TaskBoard):
         m = re.search(r'strategy_type[=:]\s*(\w+)', result_text)
         if m:
             strategy_type = m.group(1)
-            # Try to extract params={...} JSON robustly using ast.literal_eval
-            params_match = re.search(r'params=(\{.*\})', result_text, re.DOTALL)
+            # Extract params={...} with brace balancing (vs greedy regex)
             params_str = ""
-            if params_match:
-                try:
-                    parsed = ast.literal_eval(params_match.group(1))
-                    params_str = f" params={json.dumps(parsed)}"
-                except (ValueError, SyntaxError):
-                    # Fallback: use raw text between braces
-                    raw = params_match.group(1)
-                    params_str = f" params={raw}"
+            pidx = result_text.find("params={")
+            if pidx >= 0:
+                start = pidx + 7  # past "params="
+                depth, js = 0, ""
+                for i in range(start, len(result_text)):
+                    if result_text[i] == '{':
+                        depth += 1; js += '{'
+                    elif result_text[i] == '}':
+                        depth -= 1; js += '}'
+                        if depth == 0:
+                            break
+                if js:
+                    try:
+                        parsed = ast.literal_eval(js)
+                        params_str = f" params={json.dumps(parsed)}"
+                    except (ValueError, SyntaxError):
+                        params_str = f" params={js}"
             desc = f"backtest strategy_type={strategy_type}{params_str}"
             board.add_task(description=desc, parent_id=parent.id,
                            metadata={"auto": True})

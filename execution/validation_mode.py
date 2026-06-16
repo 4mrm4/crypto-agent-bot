@@ -8,11 +8,26 @@ graduates to normal mode. Until then, conservative limits apply.
 import json
 import logging
 from dataclasses import dataclass, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+
+class _NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        try:
+            import numpy as np
+            if isinstance(obj, (np.integer,)):
+                return int(obj)
+            if isinstance(obj, (np.floating,)):
+                return float(obj)
+            if isinstance(obj, (np.bool_,)):
+                return bool(obj)
+        except ImportError:
+            pass
+        return super().default(obj)
 
 
 @dataclass
@@ -54,7 +69,7 @@ class ValidationMode:
     VALIDATION_TRADES_PATH = Path("./workspace/validation_trades.jsonl")
 
     def __init__(self, live_start_date: Optional[datetime] = None):
-        self.live_start_date = live_start_date or datetime.utcnow()
+        self.live_start_date = live_start_date or datetime.now(timezone.utc)
         self.VALIDATION_TRADES_PATH.parent.mkdir(parents=True, exist_ok=True)
         from data.database import TradingDatabase
         self._db = TradingDatabase()
@@ -62,17 +77,17 @@ class ValidationMode:
     @property
     def is_active(self) -> bool:
         """Validation mode is active if we're within the first 90 days."""
-        days_live = (datetime.utcnow() - self.live_start_date).days
+        days_live = (datetime.now(timezone.utc) - self.live_start_date).days
         return days_live < self.VALIDATION_DAYS
 
     @property
     def days_remaining(self) -> int:
-        days_live = (datetime.utcnow() - self.live_start_date).days
+        days_live = (datetime.now(timezone.utc) - self.live_start_date).days
         return max(0, self.VALIDATION_DAYS - days_live)
 
     @property
     def days_live(self) -> int:
-        return (datetime.utcnow() - self.live_start_date).days
+        return (datetime.now(timezone.utc) - self.live_start_date).days
 
     def can_graduate(self, live_metrics: dict) -> GraduationAssessment:
         """Check if the system is ready to leave validation mode.
@@ -153,9 +168,9 @@ class ValidationMode:
 
     def log_validation_trade(self, trade: dict) -> None:
         """Append to validation_trades.jsonl + SQLite."""
-        trade["logged_at"] = datetime.utcnow().isoformat()
+        trade["logged_at"] = datetime.now(timezone.utc).isoformat()
         with open(self.VALIDATION_TRADES_PATH, "a") as f:
-            f.write(json.dumps(trade) + "\n")
+            f.write(json.dumps(trade, cls=_NumpyEncoder) + "\n")
         # Mirror to SQLite
         try:
             self._db.insert_validation_trade({
@@ -163,7 +178,7 @@ class ValidationMode:
                 "pair": trade.get("pair", ""),
                 "pnl": trade.get("pnl", trade.get("pnl_pct", 0)),
                 "position_size": trade.get("position_size", trade.get("position_size_usdt", 0)),
-                "timestamp": int(datetime.utcnow().timestamp()),
+                "timestamp": int(datetime.now(timezone.utc).timestamp()),
                 "metadata": trade,
             })
         except Exception as exc:

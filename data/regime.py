@@ -1,7 +1,7 @@
 """Market regime detection."""
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 import pandas as pd
@@ -38,7 +38,7 @@ class RegimeSnapshot:
     social_dominance_zscore: float = 0.0  # Santiment social dominance z-score
     recommended_strategies: List[str] = field(default_factory=list)
     discouraged_strategies: List[str] = field(default_factory=list)
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class MarketRegimeDetector:
@@ -82,17 +82,9 @@ class MarketRegimeDetector:
 
     def _get_social_signal(self, slug: str = "bitcoin") -> Optional[float]:
         """Fetch Santiment social dominance synchronously (wraps async)."""
+        from utils.async_utils import run_async_in_sync
         try:
-            import asyncio
-            loop = asyncio.get_running_loop()
-            future = asyncio.run_coroutine_threadsafe(
-                self._fetch_social_signal_async(slug), loop
-            )
-            return future.result(timeout=30)
-        except RuntimeError:
-            # No running loop — use asyncio.run()
-            import asyncio
-            return asyncio.run(self._fetch_social_signal_async(slug))
+            return run_async_in_sync(self._fetch_social_signal_async(slug))
         except Exception as exc:
             logger.warning("Social signal fetch failed: %s", exc)
             return None
@@ -221,12 +213,6 @@ class MarketRegimeDetector:
         )
 
     def get_best_strategy_types(self, regime: str) -> List[str]:
-        """Map regime to suitable strategy types."""
-        mapping = {
-            "strong_uptrend":   ["sma_crossover", "combined_sma_rsi", "momentum"],
-            "strong_downtrend": ["rsi_oversold", "mean_reversion"],
-            "ranging":          ["bollinger_bands", "rsi_oversold", "mean_reversion"],
-            "volatile":         ["bollinger_bands", "breakout"],
-            "weak_trend":       ["combined_sma_rsi", "macd_crossover"],
-        }
-        return mapping.get(regime, ["sma_crossover"])
+        """Map regime to suitable strategy types via the canonical REGIME_STRATEGY_MAP."""
+        recommended = REGIME_STRATEGY_MAP.get(regime, {}).get("use", [])
+        return recommended if recommended else ["sma_crossover"]

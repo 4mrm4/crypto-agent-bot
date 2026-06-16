@@ -16,11 +16,35 @@ import sqlite3
 import threading
 import time
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator, Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_json_dumps(obj: Any) -> str:
+    """Serialize to JSON, handling numpy scalars that crash vanilla json.dumps."""
+    try:
+        import numpy as np
+        return json.dumps(obj, cls=_NumpyEncoder)
+    except ImportError:
+        return json.dumps(obj, default=str)
+
+
+class _NumpyEncoder(json.JSONEncoder):
+    def default(self, o: Any) -> Any:
+        try:
+            import numpy as np
+            if isinstance(o, (np.integer,)):
+                return int(o)
+            if isinstance(o, (np.floating,)):
+                return float(o)
+            if isinstance(o, (np.bool_,)):
+                return bool(o)
+        except ImportError:
+            pass
+        return str(o)
 
 DB_PATH = Path("./workspace/trading.db")
 
@@ -243,7 +267,7 @@ class TradingDatabase:
                     trade.get("regime", ""),
                     int(trade.get("timestamp_open", 0)),
                     int(trade.get("timestamp_close", 0)) if trade.get("timestamp_close") else None,
-                    json.dumps(trade.get("metadata", {})),
+                    _safe_json_dumps(trade.get("metadata", {})),
                 ),
             )
         return tid
@@ -289,7 +313,7 @@ class TradingDatabase:
                     json.dumps(experiment.get("metrics", {})),
                     experiment.get("regime", ""),
                     experiment.get("research_window_end", ""),
-                    int(datetime.utcnow().timestamp()),
+                    int(datetime.now(timezone.utc).timestamp()),
                     experiment.get("status", "pending"),
                     experiment.get("verdict", "discarded"),
                 ),
@@ -341,7 +365,7 @@ class TradingDatabase:
                     result.get("trade_count", 0),
                     1 if result.get("passed") else 0,
                     result.get("recommendation", ""),
-                    int(datetime.utcnow().timestamp()),
+                    int(datetime.now(timezone.utc).timestamp()),
                 ),
             )
         return rid
@@ -383,7 +407,7 @@ class TradingDatabase:
                     result.get("gate", ""),
                     1 if result.get("passed") else 0,
                     json.dumps(result.get("details", {})),
-                    int(datetime.utcnow().timestamp()),
+                    int(datetime.now(timezone.utc).timestamp()),
                 ),
             )
         return pid
@@ -424,8 +448,8 @@ class TradingDatabase:
                     trade.get("pair", ""),
                     trade.get("pnl"),
                     trade.get("position_size", 0),
-                    int(trade.get("timestamp", datetime.utcnow().timestamp())),
-                    json.dumps(trade.get("metadata", {})),
+                    int(trade.get("timestamp", datetime.now(timezone.utc).timestamp())),
+                    _safe_json_dumps(trade.get("metadata", {})),
                 ),
             )
         return vid
@@ -597,7 +621,7 @@ class TradingDatabase:
                             "timestamp": int(
                                 datetime.fromisoformat(vt["logged_at"]).timestamp()
                                 if isinstance(vt.get("logged_at"), str)
-                                else datetime.utcnow().timestamp()
+                                else datetime.now(timezone.utc).timestamp()
                             ),
                             "metadata": vt,
                         })
@@ -611,7 +635,7 @@ class TradingDatabase:
         with self.transaction() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO _migrations (name, applied_at) VALUES (?, ?)",
-                (migration_name, int(datetime.utcnow().timestamp())),
+                (migration_name, int(datetime.now(timezone.utc).timestamp())),
             )
 
         logger.info("JSONL migration complete: %d records migrated", migrated)

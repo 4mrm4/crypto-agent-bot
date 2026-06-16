@@ -14,7 +14,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -154,7 +154,7 @@ class AutonomousResearchLoop:
                     continue
 
                 self.state.current_goal = goal.motivation
-                self.state.last_goal_generated = datetime.utcnow()
+                self.state.last_goal_generated = datetime.now(timezone.utc)
                 self.state.total_goals_generated += 1
                 self.state.consecutive_failures = 0
 
@@ -678,7 +678,7 @@ class AutonomousResearchLoop:
 
     async def _sleep(self):
         """Sleep for the configured interval, checking for pause/shutdown."""
-        self.state.next_cycle_eta = datetime.utcnow() + timedelta(
+        self.state.next_cycle_eta = datetime.now(timezone.utc) + timedelta(
             seconds=self._interval_seconds
         )
 

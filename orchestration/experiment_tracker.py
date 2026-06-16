@@ -8,6 +8,18 @@ from typing import List, Optional, Dict, Any
 logger = logging.getLogger(__name__)
 
 
+class _NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        import numpy as np
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
+
+
 @dataclass
 class Experiment:
     strategy_type: str
@@ -96,7 +108,7 @@ class ExperimentTracker:
     def record(self, experiment: Experiment):
         self._experiments.append(experiment)
         with open(self._save_path, "a") as f:
-            f.write(json.dumps(experiment.to_dict()) + "\n")
+            f.write(json.dumps(experiment.to_dict(), cls=_NumpyEncoder) + "\n")
         # Mirror to SQLite
         try:
             self._db.insert_experiment({
@@ -135,13 +147,13 @@ class ExperimentTracker:
         tested = set()
         for e in self._experiments:
             if e.strategy_type == strategy_type:
-                tested.add(json.dumps(e.params, sort_keys=True))
+                tested.add(json.dumps(e.params, sort_keys=True, cls=_NumpyEncoder))
 
         import itertools
         keys = list(param_grid.keys())
         for combo in itertools.product(*param_grid.values()):
             candidate = dict(zip(keys, combo))
-            if json.dumps(candidate, sort_keys=True) not in tested:
+            if json.dumps(candidate, sort_keys=True, cls=_NumpyEncoder) not in tested:
                 return candidate
         return None  # all combinations tested
 

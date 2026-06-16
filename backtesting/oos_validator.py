@@ -12,7 +12,7 @@ RULES (must never be violated):
 import json
 import logging
 from dataclasses import dataclass, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -141,7 +141,7 @@ class OOSValidator:
             degradation_pct=round(degradation_pct, 4),
             passed=passed,
             recommendation=recommendation,
-            validated_at=datetime.utcnow().isoformat(),
+            validated_at=datetime.now(timezone.utc).isoformat(),
             holdout_window=DATA_SPLIT.holdout_timerange(),
             oos_trades=oos_trades,
             oos_max_drawdown=round(oos_dd, 4),

@@ -8,7 +8,7 @@ Accounts for expected degradation. Fires alerts when degradation is abnormal.
 
 import logging
 from dataclasses import dataclass, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -157,7 +157,7 @@ class PerformanceMonitor:
             overall_degradation_pct=round(overall_degradation, 4),
             alert_level=alert_level,
             recommendation=recommendation,
-            generated_at=datetime.utcnow().isoformat(),
+            generated_at=datetime.now(timezone.utc).isoformat(),
         )
 
     @staticmethod
@@ -184,16 +184,14 @@ class PerformanceMonitor:
 
         df = pd.DataFrame(trade_history)
         returns = df.get("pnl_pct", df.get("return_pct", df.get("profit_pct", [0])))
-        rolling = returns.rolling(window=window_trades)
-
         rolling_sharpes = []
-        for i in range(len(rolling)):
-            window = rolling.iloc[i]
+        for i in range(len(returns)):
+            window = returns.iloc[max(0, i - window_trades + 1):i + 1]
             if len(window) >= window_trades:
                 mean_r = window.mean()
                 std_r = window.std()
                 if std_r > 0:
-                    rolling_sharpes.append(mean_r / std_r * np.sqrt(365))
+                    rolling_sharpes.append(mean_r / std_r * np.sqrt(252))
                 else:
                     rolling_sharpes.append(0.0)
         return rolling_sharpes

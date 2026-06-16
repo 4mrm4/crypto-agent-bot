@@ -72,13 +72,6 @@ def _normalize(symbol: str) -> str:
     return s
 
 
-# ── Conservative position sizing ──
-
-from config import settings
-
-BACKTEST_OPTIMISM_FACTOR = settings.BACKTEST_OPTIMISM_FACTOR  # Live metrics = X% of backtest
-
-
 class PositionSizingTier(Enum):
     """Progressive position sizing tiers based on live trading maturity."""
     VALIDATION = "validation"      # First 90 days live: max 2% portfolio per trade
@@ -101,6 +94,94 @@ class PositionSizingTier(Enum):
         return 0.10       # 10%
 
 
+def _kelly_core(p: float, b: float, portfolio_value: float,
+                max_kelly_fraction: float, sizing_tier: PositionSizingTier,
+                method: str = "classic", **extra) -> dict:
+    """Shared Kelly formula applied by all four sizing functions.
+
+    All callers pre-adjust `p` and `b` (degradation, Bayesian posterior, etc.)
+    before passing them here. Returns the standardized sizing result dict.
+    """
+    q = 1.0 - p
+    raw_kelly = (p * b - q) / b if b > 0 else 0.0
+    kelly_used = raw_kelly * max_kelly_fraction
+    max_pct = sizing_tier.max_position_pct()
+    max_position = portfolio_value * max_pct
+    kelly_position = portfolio_value * kelly_used
+    final_position = min(max(kelly_position, 0.0), max_position)
+
+    extra_out = {k: v for k, v in extra.items()
+                 if k in ("bayesian_posterior", "observed_wr", "bayesian_used_wr",
+                           "degraded_wr", "oos_degradation_pct", "haircut_applied")}
+
+    if raw_kelly <= 0:
+        return {
+            "kelly_fraction": 0.0, "position_size_usdt": 0.0, "portfolio_pct": 0.0,
+            "full_kelly": round(raw_kelly, 4), "sizing_tier": sizing_tier.value,
+            "method": method, "rationale": f"Negative {method} Kelly: no position.",
+            **extra_out,
+        }
+
+    return {
+        "kelly_fraction": round(kelly_used, 4),
+        "full_kelly": round(raw_kelly, 4),
+        "position_size_usdt": round(final_position, 2),
+        "portfolio_pct": round(final_position / portfolio_value * 100, 2),
+        "max_position_usdt": round(max_position, 2),
+        "sizing_tier": sizing_tier.value,
+        "method": method,
+        "rationale": (
+            f"Raw Kelly={raw_kelly:.2%}, fraction={max_kelly_fraction:.0%}, "
+            f"used={kelly_used:.2%}. Tier={sizing_tier.value} cap={max_pct:.0%}. "
+            f"Position=${final_position:.0f} ({final_position / portfolio_value * 100:.1f}% of portfolio)."
+        ),
+        **extra_out,
+    }
+
+
+def _kelley_coerce_params(params_dict: dict, expected: List[str],
+                          defaults: dict) -> dict:
+    """Shared type coercion for all Kelly functions.
+
+    Handles the LLM-JSON-string-as-first-positional-arg pattern and
+    ensures numeric fields are the correct Python types.
+    """
+    result = {}
+    for key in expected:
+        val = params_dict.get(key, defaults.get(key))
+        if key in ("win_rate", "avg_win_pct", "avg_loss_pct", "portfolio_value",
+                    "max_kelly_fraction", "oos_degradation_pct"):
+            result[key] = float(val) if val is not None else defaults.get(key, 0.0)
+        elif key == "total_trades":
+            result[key] = int(val) if val is not None else defaults.get(key, 50)
+        else:
+            result[key] = val
+    return result
+
+
+def _kelley_parse_args(args: tuple, defaults: dict, expected: List[str]) -> dict:
+    """Parse Kelly function args, handling JSON-string-as-first-arg pattern."""
+    import json as _json
+    win_rate = args[0] if len(args) > 0 else defaults.get("win_rate", 0.5)
+    params = {}
+    if isinstance(win_rate, str) and win_rate.strip().startswith("{"):
+        try:
+            params = _json.loads(win_rate)
+        except (_json.JSONDecodeError, ValueError):
+            params = dict(zip(expected[:len(args)], args)) if len(args) >= len(expected) else {}
+    else:
+        param_names = expected
+        params = dict(zip(param_names, args))
+    return _kelley_coerce_params(params, expected, defaults)
+
+
+# ── Conservative position sizing ──
+
+from config import settings
+
+BACKTEST_OPTIMISM_FACTOR = settings.BACKTEST_OPTIMISM_FACTOR  # Live metrics = X% of backtest
+
+
 def kelly_position_size_conservative(
     win_rate: float = 0.5,
     avg_win_pct: float = 0.02,
@@ -114,117 +195,51 @@ def kelly_position_size_conservative(
 
     Applies a degradation haircut BEFORE Kelly calculation to account for
     the known optimism in backtest metrics.
-
-    Args:
-        win_rate: Historical win rate as decimal (0.0-1.0), e.g. 0.55 = 55%.
-        avg_win_pct: Average winning trade return as decimal, e.g. 0.02 = 2%.
-        avg_loss_pct: Average losing trade loss as decimal, e.g. 0.01 = 1%.
-        portfolio_value: Current portfolio value in USDT, e.g. 10000.0.
-        oos_degradation_pct: Out-of-sample degradation haircut (default 0.40 = 40%).
-        max_kelly_fraction: Fraction of full Kelly to use (default 0.25 = quarter Kelly).
-        sizing_tier: PositionSizingTier enum (validation/cautious/normal).
-
-    Example usage:
-        kelly_position_size_conservative(
-            win_rate=0.55, avg_win_pct=0.02, avg_loss_pct=0.01, portfolio_value=10000.0
-        )
-
-    Adjusted inputs:
-    - adj_win_rate = win_rate * (1 - oos_degradation_pct)
-    - adj_avg_win = avg_win * (1 - oos_degradation_pct)
-
-    Additional caps:
-    - PositionSizingTier.VALIDATION: max 2% of portfolio
-    - PositionSizingTier.CAUTIOUS: max 5%
-    - PositionSizingTier.NORMAL: max 10% (existing cap)
     """
-    # Type coercion: LLM may pass strings via LangChain tools.
-    # Also handle the case where the LLM passes a full JSON object as the first
-    # positional arg (because the tool description says "Args: JSON with ...").
-    if isinstance(win_rate, str) and win_rate.strip().startswith("{"):
-        import json as _json
-        try:
-            _parsed = _json.loads(win_rate)
-            win_rate = float(_parsed.get("win_rate", 0.5))
-            avg_win_pct = float(_parsed.get("avg_win_pct", 0.02))
-            avg_loss_pct = float(_parsed.get("avg_loss_pct", 0.01))
-            portfolio_value = float(_parsed.get("portfolio_value", 10000.0))
-            oos_degradation_pct = float(_parsed.get("oos_degradation_pct", 0.40))
-            max_kelly_fraction = float(_parsed.get("max_kelly_fraction", 0.25))
-            tier_name = _parsed.get("sizing_tier", "cautious")
-            sizing_tier = PositionSizingTier(tier_name) if tier_name in ("validation", "cautious", "normal") else PositionSizingTier.CAUTIOUS
-        except (_json.JSONDecodeError, ValueError):
-            pass
-    else:
-        win_rate = float(win_rate)
-        avg_win_pct = float(avg_win_pct)
-        avg_loss_pct = float(avg_loss_pct)
-        portfolio_value = float(portfolio_value)
-        oos_degradation_pct = float(oos_degradation_pct)
-        max_kelly_fraction = float(max_kelly_fraction)
-    if sizing_tier is None:
-        sizing_tier = PositionSizingTier.CAUTIOUS
+    expected = ["win_rate", "avg_win_pct", "avg_loss_pct", "portfolio_value",
+                 "oos_degradation_pct", "max_kelly_fraction", "sizing_tier"]
+    defaults = {"win_rate": 0.5, "avg_win_pct": 0.02, "avg_loss_pct": 0.01,
+                 "portfolio_value": 10000.0, "oos_degradation_pct": 0.40,
+                 "max_kelly_fraction": 0.25, "sizing_tier": "cautious"}
+    params = _kelley_parse_args((win_rate, avg_win_pct, avg_loss_pct,
+                                  portfolio_value, oos_degradation_pct,
+                                  max_kelly_fraction, sizing_tier),
+                                 defaults, expected)
 
-    if win_rate <= 0 or avg_loss_pct <= 0:
-        return {
-            "kelly_fraction": 0.0,
-            "position_size_usdt": 0.0,
-            "portfolio_pct": 0.0,
-            "rationale": "Invalid inputs: win_rate or avg_loss must be positive",
-            "haircut_applied": "none",
-            "error": True,
-        }
+    wrate = float(params["win_rate"])
+    awin = float(params["avg_win_pct"])
+    aloss = float(params["avg_loss_pct"])
+    pv = float(params["portfolio_value"])
+    oos = float(params["oos_degradation_pct"])
+    kfrac = float(params["max_kelly_fraction"])
+    tier_name = params.get("sizing_tier", "cautious")
 
-    # Apply degradation haircut
-    degradation_factor = max(0.0, 1.0 - oos_degradation_pct)
-    adj_win_rate = win_rate * degradation_factor
-    adj_avg_win = avg_win_pct * degradation_factor
-    adj_avg_loss = avg_loss_pct
+    try:
+        tier = PositionSizingTier(tier_name) if tier_name in (
+            "validation", "cautious", "normal") else PositionSizingTier.CAUTIOUS
+    except (ValueError, TypeError):
+        tier = PositionSizingTier.CAUTIOUS
 
-    # Full Kelly: f* = (p * b - q) / b
+    if wrate <= 0 or aloss <= 0:
+        return {"kelly_fraction": 0.0, "position_size_usdt": 0.0,
+                "portfolio_pct": 0.0, "error": True,
+                "rationale": "Invalid inputs: win_rate or avg_loss must be positive",
+                "haircut_applied": "none"}
+
+    degradation_factor = max(0.0, 1.0 - oos)
+    adj_win_rate = wrate * degradation_factor
+    adj_avg_win = awin * degradation_factor
+    adj_avg_loss = aloss
     b = adj_avg_win / adj_avg_loss if adj_avg_loss > 0 else 0
-    p = adj_win_rate
-    q = 1.0 - p
-    raw_kelly = (p * b - q) / b if b > 0 else 0
 
-    # Fractional Kelly
-    kelly_used = raw_kelly * max_kelly_fraction
-
-    # Apply tier-based portfolio cap
-    max_pct = sizing_tier.max_position_pct()
-    max_position = portfolio_value * max_pct
-    kelly_position = portfolio_value * kelly_used
-    final_position = min(max(kelly_position, 0.0), max_position)
-
-    # Negative edge
-    if raw_kelly <= 0:
-        return {
-            "kelly_fraction": 0.0,
-            "position_size_usdt": 0.0,
-            "portfolio_pct": 0.0,
-            "full_kelly": round(raw_kelly, 4),
-            "rationale": "Negative adjusted Kelly: no position recommended.",
-            "haircut_applied": f"degradation={oos_degradation_pct:.0%}, tier={sizing_tier.value}",
-        }
-
-    return {
-        "kelly_fraction": round(kelly_used, 4),
-        "full_kelly": round(raw_kelly, 4),
-        "position_size_usdt": round(final_position, 2),
-        "portfolio_pct": round(final_position / portfolio_value * 100, 2),
-        "max_position_usdt": round(max_position, 2),
-        "sizing_tier": sizing_tier.value,
-        "haircut_applied": (
-            f"degradation={oos_degradation_pct:.0%}->adjusted WR={adj_win_rate:.2f}, "
-            f"AW={adj_avg_win:.2%}, tier={sizing_tier.value} cap={max_pct:.0%}"
-        ),
-        "rationale": (
-            f"Raw Kelly={raw_kelly:.2%}, fraction={max_kelly_fraction:.0%}, "
-            f"used={kelly_used:.2%}. Degradation haircut={oos_degradation_pct:.0%}. "
-            f"Tier={sizing_tier.value} cap={max_pct:.0%}. "
-            f"Position=${final_position:.0f} ({final_position/portfolio_value*100:.1f}% of portfolio)."
-        ),
-    }
+    return _kelly_core(p=adj_win_rate, b=b, portfolio_value=pv,
+                       max_kelly_fraction=kfrac, sizing_tier=tier,
+                       method="classic_degraded",
+                       haircut_applied=(
+                           f"degradation={oos:.0%}->adjusted WR={adj_win_rate:.2f}, "
+                           f"AW={adj_avg_win:.2%}, tier={tier.value} cap={tier.max_position_pct():.0%}"),
+                       oos_degradation_pct=oos,
+                       observed_wr=round(wrate, 4))
 
 
 # ── Bayesian Kelly Position Sizing ──
@@ -269,77 +284,45 @@ def bayesian_kelly_position_size(
     max_kelly_fraction: float = 0.25,
     sizing_tier: "PositionSizingTier" = None,
 ) -> dict:
-    """Bayesian Kelly position sizing using Beta posterior for win rate.
+    """Bayesian Kelly position sizing using Beta posterior for win rate."""
+    expected = ["win_rate", "avg_win_pct", "avg_loss_pct", "portfolio_value",
+                 "total_trades", "max_kelly_fraction", "sizing_tier"]
+    defaults = {"win_rate": 0.5, "avg_win_pct": 0.02, "avg_loss_pct": 0.01,
+                 "portfolio_value": 10000.0, "total_trades": 50,
+                 "max_kelly_fraction": 0.25, "sizing_tier": "cautious"}
+    params = _kelley_parse_args((win_rate, avg_win_pct, avg_loss_pct,
+                                  portfolio_value, total_trades,
+                                  max_kelly_fraction, sizing_tier),
+                                 defaults, expected)
+    wrate = float(params["win_rate"])
+    awin = float(params["avg_win_pct"])
+    aloss = float(params["avg_loss_pct"])
+    pv = float(params["portfolio_value"])
+    trades = int(params["total_trades"])
+    kfrac = float(params["max_kelly_fraction"])
+    tier_name = params.get("sizing_tier", "cautious")
+    try:
+        tier = PositionSizingTier(tier_name) if tier_name in (
+            "validation", "cautious", "normal") else PositionSizingTier.CAUTIOUS
+    except (ValueError, TypeError):
+        tier = PositionSizingTier.CAUTIOUS
 
-    Args:
-        win_rate: Historical win rate as decimal (0.0-1.0), e.g. 0.55.
-        avg_win_pct: Average winning trade return as decimal, e.g. 0.02.
-        avg_loss_pct: Average losing trade loss as decimal, e.g. 0.01.
-        portfolio_value: Current portfolio value in USDT, e.g. 10000.0.
-        total_trades: Number of trades for Beta posterior (default 50).
-        max_kelly_fraction: Fraction of full Kelly (default 0.25).
-        sizing_tier: PositionSizingTier enum.
-    """
-    # Type coercion: LLM may pass strings via LangChain tools.
-    # Also handle JSON-object string passed as first positional arg.
-    if isinstance(win_rate, str) and win_rate.strip().startswith("{"):
-        import json as _json
-        try:
-            _parsed = _json.loads(win_rate)
-            win_rate = float(_parsed.get("win_rate", 0.5))
-            avg_win_pct = float(_parsed.get("avg_win_pct", 0.02))
-            avg_loss_pct = float(_parsed.get("avg_loss_pct", 0.01))
-            portfolio_value = float(_parsed.get("portfolio_value", 10000.0))
-            total_trades = int(_parsed.get("total_trades", 50))
-            max_kelly_fraction = float(_parsed.get("max_kelly_fraction", 0.25))
-            tier_name = _parsed.get("sizing_tier", "cautious")
-            sizing_tier = PositionSizingTier(tier_name) if tier_name in ("validation", "cautious", "normal") else PositionSizingTier.CAUTIOUS
-        except (_json.JSONDecodeError, ValueError):
-            pass
-    else:
-        win_rate = float(win_rate)
-        avg_win_pct = float(avg_win_pct)
-        avg_loss_pct = float(avg_loss_pct)
-        portfolio_value = float(portfolio_value)
-        total_trades = int(total_trades)
-        max_kelly_fraction = float(max_kelly_fraction)
-    if sizing_tier is None:
-        sizing_tier = PositionSizingTier.CAUTIOUS
-    if win_rate <= 0 or avg_loss_pct <= 0:
-        return {"kelly_fraction": 0.0, "position_size_usdt": 0.0, "portfolio_pct": 0.0,
-                "rationale": "Invalid inputs: win_rate or avg_loss must be positive", "error": True}
-    if sizing_tier is None:
-        sizing_tier = PositionSizingTier.CAUTIOUS
-    wins, losses = _estimate_wins_losses(win_rate, total_trades)
+    if wrate <= 0 or aloss <= 0:
+        return {"kelly_fraction": 0.0, "position_size_usdt": 0.0,
+                "portfolio_pct": 0.0, "error": True,
+                "rationale": "Invalid inputs: win_rate or avg_loss must be positive"}
+
+    wins, losses = _estimate_wins_losses(wrate, trades)
     posterior = _beta_posterior_win_rate(wins, losses)
     bayesian_win_rate = posterior["ci_lower"]
-    b = avg_win_pct / avg_loss_pct if avg_loss_pct > 0 else 0
-    p = bayesian_win_rate
-    q = 1.0 - p
-    raw_kelly = (p * b - q) / b if b > 0 else 0
-    kelly_used = raw_kelly * max_kelly_fraction
-    max_pct = sizing_tier.max_position_pct()
-    max_position = portfolio_value * max_pct
-    kelly_position = portfolio_value * kelly_used
-    final_position = min(max(kelly_position, 0.0), max_position)
-    if raw_kelly <= 0:
-        return {"kelly_fraction": 0.0, "position_size_usdt": 0.0, "portfolio_pct": 0.0,
-                "full_kelly": round(raw_kelly, 4), "bayesian_posterior": posterior,
-                "rationale": "Negative Bayesian Kelly: no position recommended.",
-                "method": "bayesian"}
-    return {
-        "kelly_fraction": round(kelly_used, 4),
-        "full_kelly": round(raw_kelly, 4),
-        "position_size_usdt": round(final_position, 2),
-        "portfolio_pct": round(final_position / portfolio_value * 100, 2),
-        "max_position_usdt": round(max_position, 2),
-        "sizing_tier": sizing_tier.value,
-        "bayesian_posterior": posterior,
-        "bayesian_used_wr": round(bayesian_win_rate, 4),
-        "observed_wr": round(win_rate, 4),
-        "method": "bayesian",
-        "rationale": "Bayesian Kelly used.",
-    }
+    b = awin / aloss if aloss > 0 else 0
+
+    return _kelly_core(p=bayesian_win_rate, b=b, portfolio_value=pv,
+                       max_kelly_fraction=kfrac, sizing_tier=tier,
+                       method="bayesian",
+                       bayesian_posterior=posterior,
+                       bayesian_used_wr=round(bayesian_win_rate, 4),
+                       observed_wr=round(wrate, 4))
 
 
 def bayesian_kelly_position_size_conservative(
@@ -352,75 +335,56 @@ def bayesian_kelly_position_size_conservative(
     max_kelly_fraction: float = 0.25,
     sizing_tier: "PositionSizingTier" = None,
 ) -> dict:
-    # Type coercion: LLM may pass strings via LangChain tools.
-    # Also handle JSON-object string passed as first positional arg.
-    if isinstance(win_rate, str) and win_rate.strip().startswith("{"):
-        import json as _json
-        try:
-            _parsed = _json.loads(win_rate)
-            win_rate = float(_parsed.get("win_rate", 0.5))
-            avg_win_pct = float(_parsed.get("avg_win_pct", 0.02))
-            avg_loss_pct = float(_parsed.get("avg_loss_pct", 0.01))
-            portfolio_value = float(_parsed.get("portfolio_value", 10000.0))
-            total_trades = int(_parsed.get("total_trades", 50))
-            oos_degradation_pct = float(_parsed.get("oos_degradation_pct", 0.40))
-            max_kelly_fraction = float(_parsed.get("max_kelly_fraction", 0.25))
-            tier_name = _parsed.get("sizing_tier", "cautious")
-            sizing_tier = PositionSizingTier(tier_name) if tier_name in ("validation", "cautious", "normal") else PositionSizingTier.CAUTIOUS
-        except (_json.JSONDecodeError, ValueError):
-            pass
-    else:
-        win_rate = float(win_rate)
-        avg_win_pct = float(avg_win_pct)
-        avg_loss_pct = float(avg_loss_pct)
-        portfolio_value = float(portfolio_value)
-        total_trades = int(total_trades)
-        oos_degradation_pct = float(oos_degradation_pct)
-        max_kelly_fraction = float(max_kelly_fraction)
-    if win_rate <= 0 or avg_loss_pct <= 0:
-        return {"kelly_fraction": 0.0, "position_size_usdt": 0.0, "portfolio_pct": 0.0,
-                "rationale": "Invalid inputs: win_rate or avg_loss must be positive", "error": True}
-    if sizing_tier is None:
-        sizing_tier = PositionSizingTier.CAUTIOUS
-    degradation_factor = max(0.0, 1.0 - oos_degradation_pct)
-    adj_win_rate = win_rate * degradation_factor
-    adj_avg_win = avg_win_pct * degradation_factor
-    adj_avg_loss = avg_loss_pct
-    wins, losses = _estimate_wins_losses(adj_win_rate, total_trades)
+    """Bayesian Kelly + degradation haircut for maximum conservatism."""
+    expected = ["win_rate", "avg_win_pct", "avg_loss_pct", "portfolio_value",
+                 "total_trades", "oos_degradation_pct", "max_kelly_fraction",
+                 "sizing_tier"]
+    defaults = {"win_rate": 0.5, "avg_win_pct": 0.02, "avg_loss_pct": 0.01,
+                 "portfolio_value": 10000.0, "total_trades": 50,
+                 "oos_degradation_pct": 0.40, "max_kelly_fraction": 0.25,
+                 "sizing_tier": "cautious"}
+    params = _kelley_parse_args((win_rate, avg_win_pct, avg_loss_pct,
+                                  portfolio_value, total_trades,
+                                  oos_degradation_pct, max_kelly_fraction,
+                                  sizing_tier), defaults, expected)
+    wrate = float(params["win_rate"])
+    awin = float(params["avg_win_pct"])
+    aloss = float(params["avg_loss_pct"])
+    pv = float(params["portfolio_value"])
+    trades = int(params["total_trades"])
+    oos = float(params["oos_degradation_pct"])
+    kfrac = float(params["max_kelly_fraction"])
+    tier_name = params.get("sizing_tier", "cautious")
+    try:
+        tier = PositionSizingTier(tier_name) if tier_name in (
+            "validation", "cautious", "normal") else PositionSizingTier.CAUTIOUS
+    except (ValueError, TypeError):
+        tier = PositionSizingTier.CAUTIOUS
+
+    if wrate <= 0 or aloss <= 0:
+        return {"kelly_fraction": 0.0, "position_size_usdt": 0.0,
+                "portfolio_pct": 0.0, "error": True,
+                "rationale": "Invalid inputs: win_rate or avg_loss must be positive"}
+
+    degradation_factor = max(0.0, 1.0 - oos)
+    adj_win_rate = wrate * degradation_factor
+    adj_avg_win = awin * degradation_factor
+    wins, losses = _estimate_wins_losses(adj_win_rate, trades)
     posterior = _beta_posterior_win_rate(wins, losses)
     bayesian_win_rate = posterior["ci_lower"]
-    b = adj_avg_win / adj_avg_loss if adj_avg_loss > 0 else 0
-    p = bayesian_win_rate
-    q = 1.0 - p
-    raw_kelly = (p * b - q) / b if b > 0 else 0
-    kelly_used = raw_kelly * max_kelly_fraction
-    max_pct = sizing_tier.max_position_pct()
-    max_position = portfolio_value * max_pct
-    kelly_position = portfolio_value * kelly_used
-    final_position = min(max(kelly_position, 0.0), max_position)
-    if raw_kelly <= 0:
-        return {"kelly_fraction": 0.0, "position_size_usdt": 0.0, "portfolio_pct": 0.0,
-                "full_kelly": round(raw_kelly, 4), "bayesian_posterior": posterior,
-                "haircut_applied": "degradation={:.0%}, tier={}".format(oos_degradation_pct, sizing_tier.value),
-                "rationale": "Negative conservative Bayesian Kelly: no position.",
-                "method": "bayesian_conservative"}
-    return {
-        "kelly_fraction": round(kelly_used, 4),
-        "full_kelly": round(raw_kelly, 4),
-        "position_size_usdt": round(final_position, 2),
-        "portfolio_pct": round(final_position / portfolio_value * 100, 2),
-        "max_position_usdt": round(max_position, 2),
-        "sizing_tier": sizing_tier.value,
-        "bayesian_posterior": posterior,
-        "bayesian_used_wr": round(bayesian_win_rate, 4),
-        "degraded_wr": round(adj_win_rate, 4),
-        "observed_wr": round(win_rate, 4),
-        "oos_degradation_pct": oos_degradation_pct,
-        "method": "bayesian_conservative",
-        "haircut_applied": "degradation={:.0%}, tier={}, posterior Beta({:.1f},{:.1f})".format(
-            oos_degradation_pct, sizing_tier.value, posterior["posterior_alpha"], posterior["posterior_beta"]),
-        "rationale": "Conservative Bayesian Kelly used.",
-    }
+    b = adj_avg_win / aloss if aloss > 0 else 0
+
+    return _kelly_core(p=bayesian_win_rate, b=b, portfolio_value=pv,
+                       max_kelly_fraction=kfrac, sizing_tier=tier,
+                       method="bayesian_conservative",
+                       bayesian_posterior=posterior,
+                       bayesian_used_wr=round(bayesian_win_rate, 4),
+                       degraded_wr=round(adj_win_rate, 4),
+                       observed_wr=round(wrate, 4),
+                       oos_degradation_pct=oos,
+                       haircut_applied=(
+                           f"degradation={oos:.0%}, tier={tier.value}, "
+                           f"posterior Beta({posterior['posterior_alpha']:.1f},{posterior['posterior_beta']:.1f})"))
 
 
 
@@ -522,90 +486,20 @@ class RiskManagerAgent(BaseAgent):
         def kelly_position_size(params_json: str = "{}") -> str:
             """Compute optimal position size using fractional Kelly Criterion.
 
-            Args: JSON with:
-              - win_rate: float (0.0-1.0, from backtest)
-              - avg_win_pct: float (e.g. 0.05 for 5% average win)
-              - avg_loss_pct: float (e.g. 0.03 for 3% average loss)
-              - portfolio_value: float (current portfolio USDT value)
-              - max_kelly_fraction: float (default 0.25 = quarter Kelly)
-
-            Returns JSON with kelly_fraction, position_size_usdt, rationale.
-            Never returns more than 10% of portfolio per trade.
+            Thin LLM-tool wrapper around kelly_position_size_conservative.
             """
             try:
                 params = json.loads(params_json) if isinstance(params_json, str) else params_json
             except json.JSONDecodeError:
-                return "Error: invalid JSON"
-
-            win_rate = float(params.get("win_rate", 0.5))
-            avg_win = float(params.get("avg_win_pct", 0.05))
-            avg_loss = float(params.get("avg_loss_pct", 0.03))
-            portfolio_value = float(params.get("portfolio_value", 10000.0))
-            max_kelly_frac = float(params.get("max_kelly_fraction", 0.25))
-            oos_degradation = float(params.get("oos_degradation_pct", 0.40))
-            tier_name = params.get("sizing_tier", "cautious")
-
-            if avg_loss <= 0:
-                return json.dumps({
-                    "kelly_fraction": 0.0,
-                    "position_size_usdt": 0.0,
-                    "rationale": "Avg loss must be positive",
-                    "error": True,
-                })
-
-            # Apply degradation haircut to backtest metrics
-            degradation_factor = max(0.0, 1.0 - oos_degradation)
-            adj_win_rate = win_rate * degradation_factor
-            adj_avg_win = avg_win * degradation_factor
-            adj_avg_loss = avg_loss
-
-            # Full Kelly: f* = (p * b - q) / b, where b = avg_win/avg_loss
-            b = adj_avg_win / adj_avg_loss
-            p = adj_win_rate
-            q = 1.0 - p
-            kelly_full = (p * b - q) / b
-
-            # Apply fractional Kelly (default quarter)
-            kelly_used = kelly_full * max_kelly_frac
-
-            # Tier-based cap
-            try:
-                tier = PositionSizingTier(tier_name)
-            except ValueError:
-                tier = PositionSizingTier.CAUTIOUS
-            max_pct = tier.max_position_pct()
-            max_position = portfolio_value * max_pct
-            kelly_position = portfolio_value * kelly_used
-            final_position = min(max(kelly_position, 0.0), max_position)
-
-            # Handle negative Kelly (edge flipped)
-            if kelly_full <= 0:
-                return json.dumps({
-                    "kelly_fraction": 0.0,
-                    "position_size_usdt": 0.0,
-                    "full_kelly": float(kelly_full),
-                    "oos_degradation_pct": oos_degradation,
-                    "sizing_tier": tier.value,
-                    "rationale": "Negative Kelly after degradation adjustment: no position recommended.",
-                })
-
-            return json.dumps({
-                "kelly_fraction": round(kelly_used, 4),
-                "full_kelly": float(kelly_full),
-                "position_size_usdt": round(final_position, 2),
-                "max_position_usdt": round(max_position, 2),
-                "portfolio_pct": round(final_position / portfolio_value * 100, 2),
-                "oos_degradation_pct": oos_degradation,
-                "sizing_tier": tier.value,
-                "haircut_applied": f"WR={win_rate:.2f}->{adj_win_rate:.2f}, AW={avg_win:.2%}->{adj_avg_win:.2%}",
-                "rationale": (
-                    f"Kelly full={kelly_full:.2%}, fraction={max_kelly_frac:.0%}, "
-                    f"used={kelly_used:.2%}. Degradation haircut={oos_degradation:.0%}. "
-                    f"Tier={tier.value} cap={max_pct:.0%}. "
-                    f"Position=${final_position:.0f} "
-                    f"({final_position/portfolio_value*100:.1f}% of portfolio)."
-                ),
-            })
+                return json.dumps({"error": True, "rationale": "Invalid JSON"})
+            return json.dumps(kelly_position_size_conservative(
+                win_rate=float(params.get("win_rate", 0.5)),
+                avg_win_pct=float(params.get("avg_win_pct", 0.05)),
+                avg_loss_pct=float(params.get("avg_loss_pct", 0.03)),
+                portfolio_value=float(params.get("portfolio_value", 10000.0)),
+                oos_degradation_pct=float(params.get("oos_degradation_pct", 0.40)),
+                max_kelly_fraction=float(params.get("max_kelly_fraction", 0.25)),
+            ))
 
         # ── Tool 2: Correlation gate ──
 

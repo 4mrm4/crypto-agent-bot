@@ -16,7 +16,7 @@ import asyncio
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ ICONS = {
 def _format_alert(anomaly_type: str, severity: str, details: dict) -> str:
     """Format an anomaly alert as a Telegram message string."""
     icon = ICONS.get(severity, "[?]")
-    ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     lines = [
         f"{icon} *{severity.upper()}*: {anomaly_type}",
         f"Time: {ts} UTC",
@@ -59,7 +59,7 @@ def _format_trade_signal(signal: dict) -> str:
     confidence = signal.get("confidence", 0)
     strategy_type = signal.get("strategy_type", "unknown")
     regime = signal.get("regime", "unknown")
-    ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
     return (
         f"{ICONS['trade']} *TRADE SIGNAL*: {direction} {pair}\n"
@@ -79,7 +79,7 @@ def _format_position_escalation(position: dict) -> str:
     pnl = position.get("unrealized_pnl", 0)
     duration = position.get("hours_open", 0)
     reason = position.get("reason", "breached limit")
-    ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
     return (
         f"{ICONS['warning']} *POSITION ESCALATION*: {pair}\n"
@@ -188,8 +188,8 @@ class TelegramAlerter:
         """
         if not self._running or not self._app:
             # Auto-approve if Telegram is not available
-            logger.info("Telegram not active — auto-approving trade signal")
-            return True
+            logger.info("Telegram not active — auto-rejecting trade signal for safety")
+            return False
 
         try:
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -268,7 +268,7 @@ class TelegramAlerter:
 
     async def send_status(self, text: str):
         """Send a status update message."""
-        ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         formatted = f"{ICONS['info']} *Status*: {text}\nTime: {ts} UTC"
         await self.send_message(formatted)
 

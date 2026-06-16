@@ -288,10 +288,13 @@ class BacktestEngine:
         returns = trades_df["profit_ratio"]
         sharpe = 0.0
         if len(returns) > 1 and returns.std() > 0:
-            sharpe = (returns.mean() / returns.std()) * (365 * 24) ** 0.5  # annualised for 1h
+            # Crypto trades 24/7, annualize assuming ~8760 hourly periods per year
+            _annual_factor = (365 * 24) ** 0.5
+            sharpe = (returns.mean() / returns.std()) * _annual_factor if len(returns) > 1 else 0.0
 
-        cummax = trades_df["profit_ratio"].cummax()
-        drawdown = (trades_df["profit_ratio"] - cummax).min()
+        cumulative = trades_df["profit_ratio"].cumsum()
+        cummax = cumulative.cummax()
+        drawdown = (cumulative - cummax).min()
 
         return {
             "total_trades": len(trades_df),
@@ -335,21 +338,27 @@ class BacktestEngine:
             return cmd
 
         logger.info("Downloading data: %s", " ".join(_build_cmd()))
-        result = subprocess.run(
-            _build_cmd(),
-            capture_output=True, text=True,
-            timeout=settings.BACKTEST_TIMEOUT
-        )
+        try:
+            result = subprocess.run(
+                _build_cmd(),
+                capture_output=True, text=True,
+                timeout=settings.BACKTEST_TIMEOUT
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"Data download timed out after {settings.BACKTEST_TIMEOUT}s")
 
         # Detect the prepend warning
         combined = (result.stdout or "") + (result.stderr or "")
         if "Use `--prepend`" in combined or "--prepend" in combined:
             logger.info("Local data exists but requested range is earlier — retrying with --prepend")
-            result = subprocess.run(
-                _build_cmd(prepend=True),
-                capture_output=True, text=True,
-                timeout=settings.BACKTEST_TIMEOUT
-            )
+            try:
+                result = subprocess.run(
+                    _build_cmd(prepend=True),
+                    capture_output=True, text=True,
+                    timeout=settings.BACKTEST_TIMEOUT
+                )
+            except subprocess.TimeoutExpired:
+                raise RuntimeError(f"Data download timed out after {settings.BACKTEST_TIMEOUT}s")
 
         if result.returncode != 0:
             raise RuntimeError(f"Data download failed:\n{result.stderr}")
@@ -380,7 +389,7 @@ class BacktestEngine:
 
         Uses DATA_SPLIT research window. Never touches holdout data.
         """
-        from datetime import datetime, timedelta
+        from datetime import datetime, timezone, timedelta
 
         # Use DATA_SPLIT's predefined research window and WFV splits
         splits = DATA_SPLIT.wfv_splits(n_splits=windows)
@@ -488,7 +497,7 @@ class BacktestEngine:
 
     def _render_strategy(self, params: Dict[str, Any]) -> str:
         import datetime
-        params["timestamp"] = datetime.datetime.utcnow().isoformat()
+        params["timestamp"] = datetime.datetime.now(timezone.utc).isoformat()
         # Nested substitution for indicator_params_block which may contain $fast_ma/$slow_ma
         if "indicator_params_block" in params and "$" in params.get("indicator_params_block", ""):
             params["indicator_params_block"] = string.Template(params["indicator_params_block"]).safe_substitute(**params)

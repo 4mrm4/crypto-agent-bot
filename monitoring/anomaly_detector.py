@@ -10,7 +10,7 @@ CircuitBreaker is a global halt switch shared with the RiskManagerAgent.
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Dict, List, Optional
 
 from state.circuit_breaker import CircuitBreakerState
@@ -82,8 +82,8 @@ class AnomalyDetector:
 
         first_value = recent[0].get("equity", 10000)
         last_value = recent[-1].get("equity", 10000)
-        time_span = (recent[-1].get("timestamp", datetime.utcnow()) -
-                     recent[0].get("timestamp", datetime.utcnow()))
+        time_span = (recent[-1].get("timestamp", datetime.now(timezone.utc)) -
+                     recent[0].get("timestamp", datetime.now(timezone.utc)))
 
         if time_span.total_seconds() < 600 and last_value < first_value * 0.98:
             drawdown_pct = (first_value - last_value) / first_value * 100
@@ -100,7 +100,7 @@ class AnomalyDetector:
             return
 
         positions = self._live_executor.get_open_positions()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         for pos in positions:
             entry_time_str = pos.get("entry_time", "")
@@ -119,7 +119,7 @@ class AnomalyDetector:
 
     async def _check_api_errors(self):
         """>3 API errors in 60 seconds."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         self._api_error_window = [t for t in self._api_error_window if (now - t).total_seconds() < 60]
 
         if len(self._api_error_window) > 3:
@@ -131,7 +131,7 @@ class AnomalyDetector:
 
     async def _check_signal_flood(self):
         """>10 signals in 60 seconds (likely bug)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         self._signal_window = [t for t in self._signal_window if (now - t).total_seconds() < 60]
 
         if len(self._signal_window) > 10:
@@ -143,16 +143,16 @@ class AnomalyDetector:
 
     async def _check_stale_price(self):
         """Last price timestamp >5 minutes old."""
-        if self._last_price_time and (datetime.utcnow() - self._last_price_time).total_seconds() > 300:
+        if self._last_price_time and (datetime.now(timezone.utc) - self._last_price_time).total_seconds() > 300:
             await self._alert(
                 "price_feed_stale", "warning",
                 {"last_update": self._last_price_time.isoformat(),
-                 "seconds_ago": int((datetime.utcnow() - self._last_price_time).total_seconds())},
+                 "seconds_ago": int((datetime.now(timezone.utc) - self._last_price_time).total_seconds())},
             )
 
     async def _check_exchange_disconnect(self):
         """WebSocket reconnect count >3 in 10 minutes."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         self._reconnect_window = [t for t in self._reconnect_window if (now - t).total_seconds() < 600]
 
         if len(self._reconnect_window) > 3:
@@ -179,8 +179,8 @@ class AnomalyDetector:
 
         # Binance down — check CoinCap as backup
         coincap_ok = False
-        from api.server import get_health_tracker
-        ht = get_health_tracker()
+        from data.api_health import APIHealthTracker
+        ht = APIHealthTracker()
         try:
             from data.coincap_fetcher import CoinCapFetcher
             cf = CoinCapFetcher(health_tracker=ht)
@@ -199,21 +199,21 @@ class AnomalyDetector:
 
     def record_api_error(self):
         """Called by external components when an API error occurs."""
-        self._api_error_window.append(datetime.utcnow())
+        self._api_error_window.append(datetime.now(timezone.utc))
         self._api_error_count += 1
 
     def record_signal(self):
         """Called by SignalScanner for each signal evaluated."""
-        self._signal_window.append(datetime.utcnow())
+        self._signal_window.append(datetime.now(timezone.utc))
 
     def record_price_update(self, price: float):
         """Called by MarketDataStream when a new price arrives."""
         self._last_price = price
-        self._last_price_time = datetime.utcnow()
+        self._last_price_time = datetime.now(timezone.utc)
 
     def record_reconnect(self):
         """Called on WebSocket reconnect."""
-        self._reconnect_window.append(datetime.utcnow())
+        self._reconnect_window.append(datetime.now(timezone.utc))
 
     async def _alert(self, anomaly_type: str, severity: str, details: dict):
         """Emit an anomaly alert."""
@@ -225,7 +225,7 @@ class AnomalyDetector:
                     "anomaly_type": anomaly_type,
                     "severity": severity,
                     "details": details,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 })
             except Exception:
                 pass

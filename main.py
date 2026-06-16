@@ -8,6 +8,7 @@ import argparse
 import asyncio
 import httpx
 import logging
+import os
 import signal
 import sys
 import webbrowser
@@ -138,7 +139,8 @@ def _run_ui():
     try:
         asyncio.run(server.serve())
     except KeyboardInterrupt:
-        console.print("\n[green]Server stopped.[/]")
+        console.print("\n[yellow]Force-stopping...[/yellow]")
+        os._exit(0)
 
 
 def _run_autonomous(ui: bool = False, start_scanner: bool = False, scanner_standby: bool = False):
@@ -212,9 +214,8 @@ def _run_autonomous(ui: bool = False, start_scanner: bool = False, scanner_stand
         else:
             asyncio.run(_run_headless())
     except KeyboardInterrupt:
-        console.print("\n[yellow]Shutdown requested...[/yellow]")
-        loop.shutdown()
-        console.print("[green]Autonomous loop stopped.[/green]")
+        console.print("\n[yellow]Force-stopping...[/yellow]")
+        os._exit(0)
 
 
 def _run_demo():
@@ -279,14 +280,15 @@ def _run_demo():
     try:
         asyncio.run(_run())
     except KeyboardInterrupt:
-        console.print("\n[green]Demo mode stopped.[/]")
+        console.print("\n[yellow]Force-stopping...[/yellow]")
+        os._exit(0)
 
 
 def _run_cli_command(cmd_list):
     """Parse and execute a workspace CLI command."""
     def _handle_sigint(sig, frame):
-        logger.info("Received SIGINT — requesting clean graph shutdown...")
-        request_shutdown()
+        logger.info("Received SIGINT — force-stopping...")
+        os._exit(0)
 
     signal.signal(signal.SIGINT, _handle_sigint)
 

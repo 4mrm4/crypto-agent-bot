@@ -12,7 +12,7 @@ import json
 import logging
 import pickle
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -113,7 +113,7 @@ class TradeQualityScorer:
         self._model.fit(X, y)
         self._feature_names = feature_names
         self._n_samples = len(y)
-        self._trained_at = datetime.utcnow().isoformat()
+        self._trained_at = datetime.now(timezone.utc).isoformat()
         self._trades_since_retrain = 0
 
         self._save_model()

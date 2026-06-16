@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
 
 import httpx
@@ -34,7 +34,7 @@ class SantimentSignal:
     dev_activity_30d: Optional[float] = None
     social_dominance_pct: Optional[float] = None
     daily_active_addresses: Optional[int] = None
-    fetched_at: datetime = field(default_factory=datetime.utcnow)
+    fetched_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     source: str = "santiment"
 
 
@@ -204,7 +204,7 @@ class SantimentFetcher:
         if not self._enabled or not self._api_key:
             return None
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         # Free tier only has data up to ~30 days ago — cap to stay in allowed range
         capped_to = now - timedelta(days=30)
         from_dt = (capped_to - timedelta(days=days)).isoformat() + "Z"
@@ -269,8 +269,8 @@ class SantimentFetcher:
 
     async def get_trending_assets(self) -> List[str]:
         """Fetch assets with surging social volume via allProjects ordered by social_volume_total DESC."""
-        from datetime import datetime, timedelta
-        now = datetime.utcnow()
+        from datetime import datetime, timezone, timedelta
+        now = datetime.now(timezone.utc)
         data = await self._query(TRENDING_QUERY, {
             "from": (now - timedelta(days=7)).isoformat() + "Z",
             "to": now.isoformat() + "Z",

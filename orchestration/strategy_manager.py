@@ -16,7 +16,7 @@ Auto-recovery:
 
 import logging
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -157,6 +157,10 @@ class StrategyManager:
         self._eval_history[strategy_id].append(1 if decay_score >= WARNING_THRESHOLD else 0)
         if len(self._eval_history[strategy_id]) > RECOVERY_CONSECUTIVE:
             self._eval_history[strategy_id].pop(0)
+        # Check recovery: if last N evals are good, clear critical state
+        if self._check_recovery(strategy_id, action):
+            self._critical_counts[strategy_id] = 0
+            logger.info("Strategy %s recovered — critical counter reset", strategy_id)
 
         # Emit events
         if action == "critical" or (action == "decaying" and decay_score < DECAYING_THRESHOLD):
@@ -265,11 +269,22 @@ class StrategyManager:
         levels = {"healthy": 0, "warning": 0, "decaying": 0, "critical": 0, "retired": 0, "unknown": 0}
         for strategy in self._deployed:
             sid = strategy.get("id", "")
-            # Get current action from history
             if sid in self._critical_counts and self._critical_counts[sid] >= MAX_CRITICAL_EVALS:
                 levels["retired"] += 1
-            else:
+                continue
+            history = self._eval_history.get(sid, [])
+            if not history:
                 levels["unknown"] += 1
+            else:
+                recent = sum(history[-RECOVERY_CONSECUTIVE:])
+                if recent == 0:
+                    levels["healthy"] += 1
+                elif recent <= 1:
+                    levels["warning"] += 1
+                elif recent <= 2:
+                    levels["decaying"] += 1
+                else:
+                    levels["critical"] += 1
         return {"total_deployed": len(self._deployed), **levels}
 
     async def retire_strategy(self, strategy_id: str, reason: str):
@@ -282,7 +297,7 @@ class StrategyManager:
                 metadata={
                     "strategy_id": strategy_id,
                     "status": "retired",
-                    "retired_at": datetime.utcnow().isoformat(),
+                    "retired_at": datetime.now(timezone.utc).isoformat(),
                     "reason": reason,
                 },
             )
@@ -301,7 +316,7 @@ class StrategyManager:
         try:
             meta = dict(metadata)
             meta["deployable"] = True
-            meta["promoted_at"] = datetime.utcnow().isoformat()
+            meta["promoted_at"] = datetime.now(timezone.utc).isoformat()
             self._vector_store.store_insight(
                 text=f"PROMOTED: {strategy_id} — approved for deployment",
                 metadata=meta,

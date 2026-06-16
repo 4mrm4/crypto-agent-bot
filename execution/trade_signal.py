@@ -1,7 +1,7 @@
 """TradeSignal dataclass — structured trade proposal from strategy evaluation."""
 
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -27,7 +27,7 @@ class TradeSignal:
     quality_multiplier: float = 1.0      # Applied to position size after Kelly sizing
     backtest_metrics: Optional[dict] = None  # Raw backtest metrics for ML scorer
     signal_id: str = ""                  # Auto-generated
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     executed_at: Optional[datetime] = None
     filled_price: Optional[float] = None
     status: str = "pending"              # pending | approved | executed | rejected | failed

@@ -70,8 +70,8 @@ class OnChainFetcher:
                 timeout=10,
             )
             data = r.json().get("market_data", {})
-            vol_24h = data.get("total_volume", {}).get("usd", 0)
-            market_cap = data.get("market_cap", {}).get("usd", 1)
+            vol_24h = data.get("total_volume", {}).get("usd") or 0
+            market_cap = data.get("market_cap", {}).get("usd") or 1
             price_change_24h = data.get("price_change_percentage_24h", 0)
 
             # High volume + price drop = distribution (selling into strength)

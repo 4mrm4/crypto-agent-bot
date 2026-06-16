@@ -1,7 +1,7 @@
 """Research iteration dataclass for the AutoResearch outer hypothesis loop."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from orchestration.evaluation import check_convergence
@@ -15,7 +15,7 @@ class ResearchGoal:
     motivation: str                      # Human-readable why this was chosen
     priority_score: float                # 0.0–1.0, higher = more urgent
     triggered_by: str                    # "decay" | "coverage_gap" | "regime_change" | "scheduled" | "exploration"
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass

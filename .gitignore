@@ -43,6 +43,7 @@ _test_*.txt
 *Tempcheck*
 *Tempws_out*
 searxng_test.json
+memory_dump.json
 
 # Runtime workspace artifacts
 workspace/audit_log.jsonl

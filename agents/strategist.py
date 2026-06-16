@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 from langchain_core.tools import Tool
 
 from agents.base import BaseAgent
-from orchestration.evaluation import evaluate_strategy_quality
+from agents.iteration_tracker import IterationRecord
 
 logger = logging.getLogger(__name__)
 
@@ -95,29 +95,6 @@ With these, the stoploss tightens to 1% once price reaches 2% profit.
 The 'next: ' prefix is how the system creates follow-up tasks.
 If you do not output this line, the strategy will never be backtested.
 """
-
-class IterationRecord:
-    """Tracks one backtest attempt in the optimization loop."""
-
-    def __init__(self, params: Dict[str, Any], metrics: Dict[str, Any]):
-        self.params = dict(params)
-        self.metrics = dict(metrics)
-        self.verdict: str = "unknown"
-        self.reason: str = ""
-
-    def evaluate(self) -> "IterationRecord":
-        """Assign keep/discard verdict via shared evaluation module."""
-        self.verdict, self.reason = evaluate_strategy_quality(self.metrics)
-        return self
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "params": self.params,
-            "metrics": self.metrics,
-            "verdict": self.verdict,
-            "reason": self.reason,
-        }
-
 
 class StrategistAgent(BaseAgent):
     """Specialised agent that designs strategy specifications."""
@@ -306,8 +283,10 @@ class StrategistAgent(BaseAgent):
 
         return [
             Tool(name="generate_strategy", func=generate_strategy,
-                 description="Create a strategy of any type. Args: JSON with strategy_type and type-specific params. "
-                             "Types: sma_crossover, macd_crossover, rsi_oversold, bollinger_bands, combined_sma_rsi."),
+                 description="Create a strategy. Pass JSON with strategy_type and type-specific params. "
+                             "Valid types: sma_crossover, macd_crossover, rsi_oversold, bollinger_bands, "
+                             "combined_sma_rsi, momentum, breakout, mean_reversion, volatility_squeeze, "
+                             "sentiment_driven, multi_timeframe, vwap_deviation, ema_ribbon, stoch_rsi, adx_filter."),
             Tool(name="suggest_next_params", func=suggest_next_params,
                  description="Analyse past generated strategies and recommend next parameters to try."),
             Tool(name="get_strategy_concepts", func=get_strategy_concepts,
