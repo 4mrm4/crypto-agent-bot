@@ -547,6 +547,11 @@ class AutonomousResearchLoop:
         except Exception as exc:
             logger.debug("Failed to read experiments.jsonl for coverage gaps: %s", exc)
 
+        # ── Ensure all regimes have a value (default 0.0) ──
+        for regime in regimes:
+            if regime not in gaps:
+                gaps[regime] = 0.0
+
         # ── Reset attempt tracking for well-covered regimes ──
         for regime, sharpe in list(gaps.items()):
             if sharpe >= 0.8:
