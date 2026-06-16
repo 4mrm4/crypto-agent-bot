@@ -558,10 +558,17 @@ class TestIntegrationWithLiveExecutor:
             reason="allowed",
         )
 
+        mock_fetcher = MagicMock()
+        mock_fetcher.fetch_ohlcv.return_value = pd.DataFrame({
+            "open": [50000]*10, "high": [50100]*10, "low": [49900]*10,
+            "close": [50050]*10, "volume": [100]*10,
+        })
+
         executor = LiveExecutor(
             exchange_id="binance",
             paper_mode=True,
             quality_scorer=mock_scorer,
+            fetcher=mock_fetcher,
         )
 
         signal = _make_signal(position_size_usdt=50.0)
