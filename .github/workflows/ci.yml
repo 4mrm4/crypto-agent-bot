@@ -27,6 +27,7 @@ jobs:
           # TA-Lib C library — not packaged for Ubuntu 24.04, build from source
           git clone --depth 1 https://github.com/ta-lib/ta-lib.git /tmp/ta-lib
           cd /tmp/ta-lib
+          chmod +x autogen.sh
           ./autogen.sh
           ./configure --prefix=/usr
           make -j"$(nproc)"
