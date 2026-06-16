@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 MODEL_PATH = Path("./workspace/quality_scorer.pkl")
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from execution.quality_scorer import (
